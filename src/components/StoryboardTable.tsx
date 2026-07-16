@@ -4,6 +4,7 @@ import {
   type FieldDefinition,
   type StoryboardProject,
 } from "../domain/storyboard";
+import { ImageCell } from "./ImageCell";
 
 type StoryboardTableProps = {
   project: StoryboardProject;
@@ -58,11 +59,25 @@ export function StoryboardTable({ project, onChange }: StoryboardTableProps) {
               <tr key={shot.id}>
                 {visibleFields.map((field) => (
                   <td
-                    className={field.id === "shotNumber" ? "sticky-shot-number" : undefined}
+                    className={
+                      field.id === "shotNumber"
+                        ? "sticky-shot-number"
+                        : field.type === "image"
+                          ? "image-table-cell"
+                          : undefined
+                    }
                     data-field-type={field.type}
                     key={field.id}
                   >
-                    {field.type === "image" ? null : (
+                    {field.type === "image" ? (
+                      <ImageCell
+                        label={`${field.label}-${shot.id}`}
+                        value={shot.values[field.id] ?? ""}
+                        onChange={(value) =>
+                          onChange(updateShotValue(project, shot.id, field.id, value))
+                        }
+                      />
+                    ) : (
                       <input
                         aria-label={`${field.label}-${shot.id}`}
                         type={inputTypeFor(field)}

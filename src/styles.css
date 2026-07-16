@@ -173,6 +173,75 @@ button:hover {
   background: transparent;
 }
 
+.storyboard-table td.image-table-cell {
+  height: 160px;
+}
+
+.image-cell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.image-cell__preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+.image-cell__input {
+  position: absolute;
+  width: 1px !important;
+  height: 1px;
+  min-height: 0 !important;
+  margin: -1px;
+  border: 0;
+  padding: 0 !important;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.image-cell__upload {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: #1f5a3d;
+  background: #f7faf7;
+  cursor: pointer;
+}
+
+.image-cell__upload:hover {
+  background: #eef5f0;
+}
+
+.image-cell__remove {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  padding: 0.35rem 0.55rem;
+  border-color: rgb(255 255 255 / 70%);
+  font-size: 0.72rem;
+  background: rgb(23 34 29 / 82%);
+}
+
+.image-cell__error {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  margin: 0;
+  padding: 0.35rem 0.5rem;
+  color: #8a241f;
+  background: #fff0ee;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
 .storyboard-table .sticky-shot-number {
   position: sticky;
   left: 0;
