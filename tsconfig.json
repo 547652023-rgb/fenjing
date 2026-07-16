@@ -13,7 +13,8 @@
     "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "types": ["vitest/globals", "@testing-library/jest-dom"],
+    "noEmit": true,
+    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"],
     "jsx": "react-jsx"
   },
   "include": ["src"]
