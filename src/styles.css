@@ -15,7 +15,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -30,6 +31,11 @@ button {
 
 button:hover {
   background: #184a32;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .workbench-shell {
@@ -256,4 +262,162 @@ button:hover {
 
 .storyboard-table tr:last-child td {
   border-bottom: 0;
+}
+
+.field-settings {
+  position: fixed;
+  inset: 1.5rem 0 auto;
+  width: min(720px, calc(100vw - 3rem));
+  max-height: calc(100vh - 3rem);
+  margin: auto;
+  border: 1px solid #d8e0da;
+  border-radius: 16px;
+  padding: 0;
+  color: #17221d;
+  background: #fff;
+  box-shadow: 0 24px 70px rgb(15 35 24 / 28%);
+  overflow: auto;
+}
+
+.field-settings::backdrop {
+  background: rgb(19 35 26 / 45%);
+}
+
+.field-settings__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid #dfe6df;
+  background: #fff;
+}
+
+.field-settings__header h2,
+.field-settings__header p {
+  margin: 0;
+}
+
+.field-settings__eyebrow {
+  margin-bottom: 0.25rem !important;
+  color: #638070;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.field-settings__close {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-color: transparent;
+  padding: 0;
+  color: #526158;
+  background: #eef3ef;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.field-settings__close:hover {
+  color: #fff;
+}
+
+.field-settings__form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.55fr) auto;
+  gap: 0.75rem;
+  align-items: end;
+  padding: 1.25rem;
+  border-bottom: 1px solid #dfe6df;
+  background: #f7faf7;
+}
+
+.field-settings__form label {
+  display: grid;
+  gap: 0.35rem;
+  color: #526158;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.field-settings__form input,
+.field-settings__form select {
+  width: 100%;
+  min-height: 2.7rem;
+  border: 1px solid #cdd8d0;
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  color: #17221d;
+  background: #fff;
+}
+
+.field-settings__form input:focus,
+.field-settings__form select:focus {
+  outline: 2px solid #69a881;
+  outline-offset: -2px;
+}
+
+.field-settings__error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #a12c26;
+  font-size: 0.8rem;
+}
+
+.field-settings__list {
+  display: grid;
+  padding: 0 1.25rem 1.25rem;
+}
+
+.field-settings__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px auto;
+  gap: 1rem;
+  align-items: center;
+  min-height: 3.75rem;
+  border-bottom: 1px solid #e6ebe7;
+}
+
+.field-settings__visibility {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.field-settings__visibility span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-settings__visibility input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #1f5a3d;
+}
+
+.field-settings__type {
+  color: #6b786f;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+}
+
+.field-settings__move {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.field-settings__move button {
+  padding: 0.4rem 0.65rem;
+  color: #1f5a3d;
+  background: #fff;
+  font-size: 0.75rem;
+}
+
+.field-settings__move button:hover:not(:disabled) {
+  color: #fff;
+  background: #1f5a3d;
 }
