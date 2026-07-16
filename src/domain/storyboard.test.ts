@@ -35,3 +35,28 @@ it("adds, hides and reorders a project field", () => {
     visible: false,
   });
 });
+
+it("derives a deterministic nonempty id from a Chinese field label", () => {
+  const withActor = addField(createProject(), { label: "演员", type: "person" });
+
+  expect(withActor.fields[withActor.fields.length - 1]).toMatchObject({
+    id: "演员",
+    label: "演员",
+  });
+});
+
+it("rejects custom image fields while retaining seeded image fields", () => {
+  const project = createProject();
+
+  expect(project.fields.filter((field) => field.type === "image").map((field) => field.id)).toEqual([
+    "frame",
+    "reference",
+  ]);
+  expect(() =>
+    addField(project, {
+      label: "额外画面",
+      // @ts-expect-error image fields are reserved for the seeded frame and reference fields
+      type: "image",
+    }),
+  ).toThrow("Custom image fields are not supported");
+});

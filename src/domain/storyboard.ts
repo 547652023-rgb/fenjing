@@ -15,6 +15,12 @@ export type FieldDefinition = {
   order: number;
 };
 
+export type CustomFieldType = Exclude<FieldType, "image">;
+
+export type AddFieldInput = Pick<FieldDefinition, "label"> & {
+  type: CustomFieldType;
+};
+
 export type Shot = { id: string; values: Record<string, string> };
 
 export type StoryboardProject = {
@@ -53,10 +59,11 @@ function copyFields(fields: FieldDefinition[]): FieldDefinition[] {
 
 function fieldIdFromLabel(label: string): string {
   return label
+    .normalize("NFKC")
     .trim()
     .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/^-+|-+$/g, "");
 }
 
@@ -75,8 +82,16 @@ export function createProject(): StoryboardProject {
 
 export function addField(
   project: StoryboardProject,
+  field: AddFieldInput,
+): StoryboardProject;
+export function addField(
+  project: StoryboardProject,
   field: Pick<FieldDefinition, "label" | "type">,
 ): StoryboardProject {
+  if (field.type === "image") {
+    throw new Error("Custom image fields are not supported");
+  }
+
   const id = fieldIdFromLabel(field.label);
   if (!id) {
     throw new Error("Field label must contain letters or numbers");
