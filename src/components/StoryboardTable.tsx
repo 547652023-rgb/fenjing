@@ -2,13 +2,14 @@ import {
   addShot,
   updateShotValue,
   type FieldDefinition,
+  type ProjectUpdate,
   type StoryboardProject,
 } from "../domain/storyboard";
 import { ImageCell } from "./ImageCell";
 
 type StoryboardTableProps = {
   project: StoryboardProject;
-  onChange: (project: StoryboardProject) => void;
+  onChange: (update: ProjectUpdate) => void;
 };
 
 function inputTypeFor(field: FieldDefinition): "date" | "number" | "text" {
@@ -74,7 +75,9 @@ export function StoryboardTable({ project, onChange }: StoryboardTableProps) {
                         label={`${field.label}-${shot.id}`}
                         value={shot.values[field.id] ?? ""}
                         onChange={(value) =>
-                          onChange(updateShotValue(project, shot.id, field.id, value))
+                          onChange((latestProject) =>
+                            updateShotValue(latestProject, shot.id, field.id, value),
+                          )
                         }
                       />
                     ) : (

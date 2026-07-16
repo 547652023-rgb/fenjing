@@ -2,19 +2,28 @@ import type { StoryboardProject } from "../domain/storyboard";
 
 const STORAGE_KEY = "fenjing.storyboard-project.v1";
 
-export function loadProject(): StoryboardProject | null {
-  const storedProject = localStorage.getItem(STORAGE_KEY);
-  if (storedProject === null) {
-    return null;
-  }
+export type SaveProjectResult =
+  | { ok: true }
+  | { ok: false; reason: "storage-unavailable" };
 
+export function loadProject(): StoryboardProject | null {
   try {
+    const storedProject = localStorage.getItem(STORAGE_KEY);
+    if (storedProject === null) {
+      return null;
+    }
     return JSON.parse(storedProject) as StoryboardProject;
   } catch {
     return null;
   }
 }
 
-export function saveProject(project: StoryboardProject): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+export function saveProject(project: StoryboardProject): SaveProjectResult {
+  const serializedProject = JSON.stringify(project);
+  try {
+    localStorage.setItem(STORAGE_KEY, serializedProject);
+    return { ok: true };
+  } catch {
+    return { ok: false, reason: "storage-unavailable" };
+  }
 }

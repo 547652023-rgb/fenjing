@@ -1,8 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FieldSettings } from "./components/FieldSettings";
 import { ProjectHeader } from "./components/ProjectHeader";
 import { StoryboardTable } from "./components/StoryboardTable";
-import { createProject, type StoryboardProject } from "./domain/storyboard";
+import {
+  createProject,
+  type ProjectUpdate,
+  type StoryboardProject,
+} from "./domain/storyboard";
 import { loadProject, saveProject } from "./storage/projectRepository";
 
 export function App() {
@@ -10,19 +14,33 @@ export function App() {
     loadProject() ?? createProject(),
   );
   const [showFieldSettings, setShowFieldSettings] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"saving" | "saved" | "error">(
+    "saving",
+  );
 
-  function updateProject(nextProject: StoryboardProject) {
-    setProject(nextProject);
-    saveProject(nextProject);
+  useEffect(() => {
+    const result = saveProject(project);
+    setSaveStatus(result.ok ? "saved" : "error");
+  }, [project]);
+
+  function updateProject(update: ProjectUpdate) {
+    setSaveStatus("saving");
+    setProject((currentProject) =>
+      typeof update === "function" ? update(currentProject) : update,
+    );
   }
 
   function updateTitle(title: string) {
-    updateProject({ ...project, title });
+    updateProject((currentProject) => ({ ...currentProject, title }));
   }
 
   return (
     <main className="workbench-shell">
-      <ProjectHeader title={project.title} onTitleChange={updateTitle} />
+      <ProjectHeader
+        title={project.title}
+        onTitleChange={updateTitle}
+        saveStatus={saveStatus}
+      />
       <div className="workbench-actions">
         <button onClick={() => setShowFieldSettings(true)} type="button">
           字段设置

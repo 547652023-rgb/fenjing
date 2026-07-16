@@ -83,6 +83,21 @@ it("rejects duplicate field names without changing the project", async () => {
   expect(onChange).not.toHaveBeenCalled();
 });
 
+it("shows validation for a punctuation-only field name without throwing", async () => {
+  const user = userEvent.setup();
+  const onChange = vi.fn();
+
+  render(
+    <FieldSettings project={createProject()} onChange={onChange} onClose={vi.fn()} />,
+  );
+
+  await user.type(screen.getByLabelText("字段名称"), "!!!");
+  await user.click(screen.getByRole("button", { name: "添加字段" }));
+
+  expect(screen.getByRole("alert")).toHaveTextContent("字段名称需包含文字或数字");
+  expect(onChange).not.toHaveBeenCalled();
+});
+
 it("closes from the dialog close button", async () => {
   const user = userEvent.setup();
   const onClose = vi.fn();

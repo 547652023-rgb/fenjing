@@ -69,7 +69,9 @@ it("wires seeded image fields to shot updates", async () => {
   const file = new File(["image"], "frame.png", { type: "image/png" });
   await user.upload(screen.getByLabelText("画面-1"), file);
 
-  expect(onChange).toHaveBeenCalledWith(
+  const imageUpdate = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0];
+  expect(imageUpdate).toEqual(expect.any(Function));
+  expect(imageUpdate(project)).toEqual(
     expect.objectContaining({
       shots: [
         expect.objectContaining({

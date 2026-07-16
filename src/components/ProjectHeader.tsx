@@ -1,9 +1,10 @@
 type ProjectHeaderProps = {
   title: string;
   onTitleChange: (title: string) => void;
+  saveStatus: "saving" | "saved" | "error";
 };
 
-export function ProjectHeader({ title, onTitleChange }: ProjectHeaderProps) {
+export function ProjectHeader({ title, onTitleChange, saveStatus }: ProjectHeaderProps) {
   return (
     <header className="project-header">
       <div>
@@ -19,7 +20,11 @@ export function ProjectHeader({ title, onTitleChange }: ProjectHeaderProps) {
         />
       </label>
       <p className="save-status" role="status">
-        已保存到本机
+        {saveStatus === "saved"
+          ? "已保存到本机"
+          : saveStatus === "saving"
+            ? "正在保存…"
+            : "保存失败，请释放本机存储空间后重试"}
       </p>
     </header>
   );

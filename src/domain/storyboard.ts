@@ -30,6 +30,10 @@ export type StoryboardProject = {
   shots: Shot[];
 };
 
+export type ProjectUpdate =
+  | StoryboardProject
+  | ((project: StoryboardProject) => StoryboardProject);
+
 const seededFields: Array<Pick<FieldDefinition, "id" | "label" | "type">> = [
   { id: "shotNumber", label: "镜号", type: "number" },
   { id: "frame", label: "画面", type: "image" },

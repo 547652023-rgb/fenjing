@@ -46,6 +46,13 @@ export function FieldSettings({ project, onChange, onClose }: FieldSettingsProps
       setFieldName("");
       setError("");
     } catch (addError) {
+      if (
+        addError instanceof Error &&
+        addError.message.includes("must contain letters or numbers")
+      ) {
+        setError("字段名称需包含文字或数字");
+        return;
+      }
       if (addError instanceof Error && addError.message.includes("already exists")) {
         setError("字段名称已存在");
         return;
