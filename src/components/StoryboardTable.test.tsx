@@ -109,7 +109,7 @@ it("keeps existing images when a file read fails", async () => {
   const onChange = vi.fn();
   const readSpy = vi
     .spyOn(FileReader.prototype, "readAsDataURL")
-    .mockImplementation(function () {
+    .mockImplementation(function (this: FileReader) {
       this.dispatchEvent(new Event("error"));
     });
 
@@ -166,16 +166,16 @@ it("wires seeded image fields to shot updates", async () => {
   await waitFor(() => expect(onChange).toHaveBeenCalled());
   const imageUpdate = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0];
   expect(imageUpdate).toEqual(expect.any(Function));
-  expect(imageUpdate(project)).toEqual(
-    expect.objectContaining({
-      shots: [
-        expect.objectContaining({
-          values: expect.objectContaining({
-            frame: expect.stringMatching(/^data:image\/png;base64,/),
-          }),
-        }),
-      ],
-    }),
-  );
+  const updatedProject = imageUpdate(project);
+  expect(JSON.parse(updatedProject.shots[0].values.frame)).toEqual([
+    expect.stringMatching(/^data:image\/png;base64,/),
+  ]);
   expect(screen.getByLabelText("参考-1")).toHaveAttribute("accept", "image/*");
+});
+
+it("allows five frame images while reference remains single image", () => {
+  render(<StoryboardTable project={createProject()} onChange={vi.fn()} />);
+
+  expect(screen.getByLabelText("画面-1")).toHaveAttribute("multiple");
+  expect(screen.getByLabelText("参考-1")).not.toHaveAttribute("multiple");
 });

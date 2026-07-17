@@ -21,6 +21,10 @@ function inputTypeFor(field: FieldDefinition): "date" | "number" | "text" {
 }
 
 function columnWidth(field: FieldDefinition): string {
+  if (field.id === "frame") {
+    return "44rem";
+  }
+
   const typeMinimum = field.type === "image" ? 18 : field.type === "number" ? 10 : 14;
   return `${Math.max(typeMinimum, field.label.length * 2 + 4)}rem`;
 }
@@ -73,6 +77,7 @@ export function StoryboardTable({ project, onChange }: StoryboardTableProps) {
                     {field.type === "image" ? (
                       <ImageCell
                         label={`${field.label}-${shot.id}`}
+                        maxImages={field.id === "frame" ? 5 : 1}
                         value={shot.values[field.id] ?? ""}
                         onChange={(value) =>
                           onChange((latestProject) =>

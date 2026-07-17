@@ -88,7 +88,11 @@ export function ImageCell({ value, label, maxImages = 1, onChange }: ImageCellPr
   }
 
   return (
-    <div className="image-cell">
+    <div
+      className={`image-cell ${
+        maxImages > 1 ? "image-cell--multiple" : "image-cell--single"
+      }`}
+    >
       {images.length > 0 ? (
         <div className="image-cell__previews">
           {images.map((image, index) => {
