@@ -1,7 +1,9 @@
+import type { SaveState } from "../domain/models";
+
 type ProjectHeaderProps = {
   title: string;
   onTitleChange: (title: string) => void;
-  saveStatus: "saving" | "saved" | "error";
+  saveStatus: SaveState;
 };
 
 export function ProjectHeader({ title, onTitleChange, saveStatus }: ProjectHeaderProps) {
@@ -21,10 +23,16 @@ export function ProjectHeader({ title, onTitleChange, saveStatus }: ProjectHeade
       </label>
       <p className="save-status" role="status">
         {saveStatus === "saved"
-          ? "已保存到本机"
+          ? "已在线保存"
           : saveStatus === "saving"
             ? "正在保存…"
-            : "保存失败，请释放本机存储空间后重试"}
+            : saveStatus === "offline"
+              ? "当前离线，修改尚未保存"
+              : saveStatus === "reconnecting"
+                ? "正在重新连接…"
+                : saveStatus === "conflict"
+                  ? "内容已被其他成员更新"
+                  : "保存失败，请检查网络后重试"}
       </p>
     </header>
   );

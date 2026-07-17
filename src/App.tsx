@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AuthGate } from "./auth/AuthGate";
 import type { StoryboardGateway } from "./data/gateway";
 import { ProjectDashboard } from "./projects/ProjectDashboard";
+import { ProjectWorkbench } from "./workbench/ProjectWorkbench";
 
 type AppProps = {
   gateway?: StoryboardGateway | null;
@@ -25,14 +26,12 @@ export function App({ gateway = null }: AppProps) {
     <AuthGate gateway={gateway}>
       {(user) => (
         currentProjectId ? (
-          <main className="centered-state">
-            <section>
-              <h1>项目正在加载</h1>
-              <button type="button" onClick={() => setCurrentProjectId(null)}>
-                返回项目
-              </button>
-            </section>
-          </main>
+          <ProjectWorkbench
+            gateway={gateway}
+            onBack={() => setCurrentProjectId(null)}
+            projectId={currentProjectId}
+            user={user}
+          />
         ) : (
           <ProjectDashboard
             gateway={gateway}

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import {
   addField,
   moveField,
+  setFieldOptions,
   toggleFieldVisibility,
   type CustomFieldType,
   type StoryboardProject,
@@ -26,6 +27,7 @@ export function FieldSettings({ project, onChange, onClose }: FieldSettingsProps
   const [fieldName, setFieldName] = useState("");
   const [fieldType, setFieldType] = useState<CustomFieldType>("text");
   const [error, setError] = useState("");
+  const [optionDrafts, setOptionDrafts] = useState<Record<string, string>>({});
   const orderedFields = [...project.fields].sort((left, right) => left.order - right.order);
 
   function handleAddField(event: FormEvent<HTMLFormElement>) {
@@ -140,6 +142,18 @@ export function FieldSettings({ project, onChange, onClose }: FieldSettingsProps
               <span>{`显示-${field.label}`}</span>
             </label>
             <span className="field-settings__type">{field.type}</span>
+            {field.type !== "image" &&
+            field.id !== "shotNumber" &&
+            field.type !== "singleSelect" ? (
+              <button
+                aria-label={`设置${field.label}下拉选项`}
+                className="field-settings__dropdown-toggle"
+                type="button"
+                onClick={() => onChange(setFieldOptions(project, field.id, []))}
+              >
+                设为下拉
+              </button>
+            ) : null}
             <div className="field-settings__move">
               <button
                 disabled={index === 0}
@@ -156,6 +170,97 @@ export function FieldSettings({ project, onChange, onClose }: FieldSettingsProps
                 下移
               </button>
             </div>
+            {field.type === "singleSelect" && field.id !== "shotSize" ? (
+              <div className="field-settings__options">
+                {(field.options ?? []).map((option, optionIndex) => (
+                  <div className="field-settings__option" key={`${field.id}-${optionIndex}`}>
+                    <input
+                      aria-label={`${field.label}选项${optionIndex + 1}`}
+                      value={option}
+                      onChange={(event) => {
+                        const nextOptions = [...(field.options ?? [])];
+                        nextOptions[optionIndex] = event.target.value;
+                        onChange(setFieldOptions(project, field.id, nextOptions));
+                      }}
+                    />
+                    <button
+                      aria-label={`上移${field.label}选项${option}`}
+                      disabled={optionIndex === 0}
+                      type="button"
+                      onClick={() => {
+                        const nextOptions = [...(field.options ?? [])];
+                        [nextOptions[optionIndex - 1], nextOptions[optionIndex]] = [
+                          nextOptions[optionIndex],
+                          nextOptions[optionIndex - 1],
+                        ];
+                        onChange(setFieldOptions(project, field.id, nextOptions));
+                      }}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      aria-label={`下移${field.label}选项${option}`}
+                      disabled={optionIndex === (field.options?.length ?? 0) - 1}
+                      type="button"
+                      onClick={() => {
+                        const nextOptions = [...(field.options ?? [])];
+                        [nextOptions[optionIndex], nextOptions[optionIndex + 1]] = [
+                          nextOptions[optionIndex + 1],
+                          nextOptions[optionIndex],
+                        ];
+                        onChange(setFieldOptions(project, field.id, nextOptions));
+                      }}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      aria-label={`删除${field.label}选项${option}`}
+                      type="button"
+                      onClick={() =>
+                        onChange(
+                          setFieldOptions(
+                            project,
+                            field.id,
+                            (field.options ?? []).filter((_, index) => index !== optionIndex),
+                          ),
+                        )
+                      }
+                    >
+                      删除
+                    </button>
+                  </div>
+                ))}
+                <div className="field-settings__option-add">
+                  <input
+                    aria-label={`新增${field.label}选项`}
+                    placeholder="输入新选项"
+                    value={optionDrafts[field.id] ?? ""}
+                    onChange={(event) =>
+                      setOptionDrafts((current) => ({
+                        ...current,
+                        [field.id]: event.target.value,
+                      }))
+                    }
+                  />
+                  <button
+                    aria-label={`添加${field.label}选项`}
+                    disabled={!optionDrafts[field.id]?.trim()}
+                    type="button"
+                    onClick={() => {
+                      onChange(
+                        setFieldOptions(project, field.id, [
+                          ...(field.options ?? []),
+                          optionDrafts[field.id] ?? "",
+                        ]),
+                      );
+                      setOptionDrafts((current) => ({ ...current, [field.id]: "" }));
+                    }}
+                  >
+                    添加选项
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         ))}
       </div>

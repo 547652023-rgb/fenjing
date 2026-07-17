@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { vi } from "vitest";
 import { createProject } from "../domain/storyboard";
 import { FieldSettings } from "./FieldSettings";
@@ -109,4 +110,21 @@ it("closes from the dialog close button", async () => {
   expect(screen.getByRole("dialog", { name: "字段设置" })).toBeVisible();
   await user.click(screen.getByRole("button", { name: "关闭字段设置" }));
   expect(onClose).toHaveBeenCalledOnce();
+});
+
+it("converts a text field to a configurable dropdown and adds an option", async () => {
+  const user = userEvent.setup();
+
+  function Harness() {
+    const [project, setProject] = useState(createProject);
+    return <FieldSettings project={project} onChange={setProject} onClose={vi.fn()} />;
+  }
+
+  render(<Harness />);
+  await user.click(screen.getByRole("button", { name: "设置备注下拉选项" }));
+  await user.type(screen.getByLabelText("新增备注选项"), "补拍");
+  await user.click(screen.getByRole("button", { name: "添加备注选项" }));
+
+  expect(screen.getByDisplayValue("补拍")).toBeVisible();
+  expect(screen.getByRole("button", { name: "删除备注选项补拍" })).toBeVisible();
 });

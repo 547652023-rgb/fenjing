@@ -312,6 +312,10 @@ button:disabled {
   align-items: center;
 }
 
+.workbench-actions--spread {
+  justify-content: space-between;
+}
+
 .workbench-actions button {
   color: #1f5a3d;
   background: #fff;
@@ -668,11 +672,50 @@ button:disabled {
 
 .field-settings__row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px auto;
+  grid-template-columns: minmax(0, 1fr) 100px auto auto;
   gap: 1rem;
   align-items: center;
   min-height: 3.75rem;
   border-bottom: 1px solid #e6ebe7;
+}
+
+.field-settings__dropdown-toggle {
+  padding: 0.4rem 0.65rem;
+  color: #1f5a3d;
+  background: #fff;
+  font-size: 0.75rem;
+}
+
+.field-settings__options {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 0.5rem;
+  padding: 0 0 0.85rem 1.75rem;
+}
+
+.field-settings__option,
+.field-settings__option-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 0.4rem;
+}
+
+.field-settings__option input,
+.field-settings__option-add input {
+  min-width: 0;
+  border: 1px solid #cdd8d0;
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+}
+
+.field-settings__option button,
+.field-settings__option-add button {
+  padding: 0.4rem 0.55rem;
+  font-size: 0.72rem;
+}
+
+.field-settings__option-add {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .field-settings__visibility {
