@@ -4,6 +4,8 @@ import { ProjectHeader } from "../components/ProjectHeader";
 import { StoryboardTable } from "../components/StoryboardTable";
 import type { StoryboardGateway } from "../data/gateway";
 import type { AuthUser, SaveState } from "../domain/models";
+import type { ProjectRole } from "../domain/models";
+import { MemberManager } from "../projects/MemberManager";
 import type {
   ProjectUpdate,
   StoryboardProject,
@@ -28,14 +30,22 @@ export function ProjectWorkbench({
 }: ProjectWorkbenchProps) {
   const [project, setProject] = useState<StoryboardProject | null>(null);
   const [showFieldSettings, setShowFieldSettings] = useState(false);
+  const [showMemberManager, setShowMemberManager] = useState(false);
+  const [role, setRole] = useState<ProjectRole>("editor");
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
   const [error, setError] = useState("");
   const versions = useRef(new Map<string, number>());
 
   const reload = useCallback(async () => {
     try {
-      const loaded = await gateway.loadProject(projectId);
+      const [loaded, summaries] = await Promise.all([
+        gateway.loadProject(projectId),
+        gateway.listProjects(),
+      ]);
       setProject(loaded);
+      setRole(
+        summaries.find((summary) => summary.id === projectId)?.role ?? "editor",
+      );
       loaded.shots.forEach((shot) => {
         if (!versions.current.has(shot.id)) {
           versions.current.set(shot.id, 1);
@@ -145,6 +155,11 @@ export function ProjectWorkbench({
           返回项目
         </button>
         <span>{user.email}</span>
+        {role === "owner" ? (
+          <button type="button" onClick={() => setShowMemberManager(true)}>
+            成员管理
+          </button>
+        ) : null}
         <button type="button" onClick={() => setShowFieldSettings(true)}>
           字段设置
         </button>
@@ -155,6 +170,13 @@ export function ProjectWorkbench({
           project={project}
           onChange={updateProject}
           onClose={() => setShowFieldSettings(false)}
+        />
+      ) : null}
+      {showMemberManager ? (
+        <MemberManager
+          gateway={gateway}
+          projectId={projectId}
+          onClose={() => setShowMemberManager(false)}
         />
       ) : null}
     </main>

@@ -57,3 +57,36 @@ it("persists a title edit and project-specific notes options", async () => {
     ]),
   });
 });
+
+it("shows member management only to the project owner", async () => {
+  const gateway = new FakeStoryboardGateway();
+  const editor = await gateway.signUp("editor@example.com", "password123");
+  await gateway.signOut();
+  await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("共同项目");
+  await gateway.inviteMember(project.id, editor.email);
+
+  const ownerView = render(
+    <ProjectWorkbench
+      gateway={gateway}
+      onBack={vi.fn()}
+      projectId={project.id}
+      user={{ id: "user-2", email: "owner@example.com" }}
+    />,
+  );
+  expect(await screen.findByRole("button", { name: "成员管理" })).toBeVisible();
+  ownerView.unmount();
+
+  await gateway.signOut();
+  await gateway.signIn("editor@example.com", "password123");
+  render(
+    <ProjectWorkbench
+      gateway={gateway}
+      onBack={vi.fn()}
+      projectId={project.id}
+      user={editor}
+    />,
+  );
+  await screen.findByDisplayValue("共同项目");
+  expect(screen.queryByRole("button", { name: "成员管理" })).not.toBeInTheDocument();
+});

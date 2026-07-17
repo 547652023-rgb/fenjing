@@ -760,3 +760,74 @@ button:disabled {
   color: #fff;
   background: #1f5a3d;
 }
+
+.member-manager {
+  position: fixed;
+  inset: 1.5rem 0 auto;
+  width: min(620px, calc(100vw - 3rem));
+  max-height: calc(100vh - 3rem);
+  margin: auto;
+  border: 1px solid #d8e0da;
+  border-radius: 16px;
+  padding: 1.25rem;
+  color: #17221d;
+  background: #fff;
+  box-shadow: 0 24px 70px rgb(15 35 24 / 28%);
+}
+
+.member-manager::backdrop {
+  background: rgb(19 35 26 / 45%);
+}
+
+.member-manager header,
+.member-manager form,
+.member-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.member-manager h2,
+.member-manager header p {
+  margin: 0;
+}
+
+.member-manager form {
+  margin: 1rem 0;
+}
+
+.member-manager form label {
+  display: grid;
+  flex: 1;
+  gap: 0.35rem;
+}
+
+.member-manager input {
+  border: 1px solid #cdd8d0;
+  border-radius: 8px;
+  padding: 0.65rem;
+}
+
+.member-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.member-list li {
+  border-top: 1px solid #e3e9e4;
+  padding-top: 0.75rem;
+}
+
+.member-list li div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.member-list li span {
+  color: #66736b;
+  font-size: 0.78rem;
+}
