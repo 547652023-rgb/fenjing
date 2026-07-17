@@ -548,6 +548,17 @@ button:disabled {
   text-align: center;
 }
 
+.image-cell__pending {
+  margin: 0;
+  color: #53665a;
+  font-size: 0.75rem;
+}
+
+.image-cell__retry {
+  padding: 0.3rem 0.55rem;
+  font-size: 0.75rem;
+}
+
 .storyboard-table .sticky-shot-number {
   position: sticky;
   left: 9.5rem;

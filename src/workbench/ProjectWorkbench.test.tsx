@@ -90,3 +90,43 @@ it("shows member management only to the project owner", async () => {
   await screen.findByDisplayValue("共同项目");
   expect(screen.queryByRole("button", { name: "成员管理" })).not.toBeInTheDocument();
 });
+
+it("uploads frame images through the online gateway and persists their metadata", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const uploaded = {
+    path: `${project.id}/1/frame/a.png`,
+    url: "blob:online-a",
+    name: "a.png",
+    position: 0,
+  };
+  vi.spyOn(gateway, "uploadImage").mockResolvedValue(uploaded);
+
+  render(
+    <ProjectWorkbench
+      gateway={gateway}
+      onBack={vi.fn()}
+      projectId={project.id}
+      user={owner}
+    />,
+  );
+
+  await userEvent.upload(
+    await screen.findByLabelText("画面-1"),
+    new File(["a"], "a.png", { type: "image/png" }),
+  );
+
+  expect(await screen.findByRole("img", { name: "画面-1-图片1" })).toHaveAttribute(
+    "src",
+    uploaded.url,
+  );
+  expect(gateway.uploadImage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      projectId: project.id,
+      shotId: "1",
+      fieldId: "frame",
+      position: 0,
+    }),
+  );
+  expect(JSON.parse((await gateway.loadProject(project.id)).shots[0].values.frame))
+    .toEqual([uploaded]);
+});

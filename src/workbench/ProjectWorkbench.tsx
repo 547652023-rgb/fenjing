@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FieldSettings } from "../components/FieldSettings";
 import { ProjectHeader } from "../components/ProjectHeader";
-import { StoryboardTable } from "../components/StoryboardTable";
+import {
+  StoryboardTable,
+  type StoryboardImageActions,
+} from "../components/StoryboardTable";
 import type { StoryboardGateway } from "../data/gateway";
-import type { AuthUser, SaveState } from "../domain/models";
+import type { AuthUser, RemoteImage, SaveState } from "../domain/models";
 import type { ProjectRole } from "../domain/models";
 import { MemberManager } from "../projects/MemberManager";
 import type {
@@ -127,6 +130,64 @@ export function ProjectWorkbench({
     });
   }
 
+  const imageActions: StoryboardImageActions = {
+    async upload(shotId, fieldId, currentImages, files) {
+      const remaining = Math.max(
+        0,
+        (fieldId === "frame" ? 5 : 1) - currentImages.length,
+      );
+      const accepted = files.slice(0, remaining);
+      const uploaded: RemoteImage[] = [];
+      for (const [index, file] of accepted.entries()) {
+        uploaded.push(
+          await gateway.uploadImage({
+            projectId,
+            shotId,
+            fieldId,
+            file,
+            position: currentImages.length + index,
+          }),
+        );
+      }
+      const nextImages = [...currentImages, ...uploaded];
+      updateProject((current) => ({
+        ...current,
+        shots: current.shots.map((shot) =>
+          shot.id === shotId
+            ? {
+                ...shot,
+                values: {
+                  ...shot.values,
+                  [fieldId]: JSON.stringify(nextImages),
+                },
+              }
+            : shot,
+        ),
+      }));
+      return uploaded;
+    },
+    async remove(shotId, fieldId, currentImages, image) {
+      await gateway.deleteImage(projectId, image.path);
+      const nextImages = currentImages
+        .filter((candidate) => candidate.path !== image.path)
+        .map((candidate, position) => ({ ...candidate, position }));
+      updateProject((current) => ({
+        ...current,
+        shots: current.shots.map((shot) =>
+          shot.id === shotId
+            ? {
+                ...shot,
+                values: {
+                  ...shot.values,
+                  [fieldId]: nextImages.length === 0 ? "" : JSON.stringify(nextImages),
+                },
+              }
+            : shot,
+        ),
+      }));
+    },
+  };
+
   if (error) {
     return (
       <main className="centered-state">
@@ -164,7 +225,11 @@ export function ProjectWorkbench({
           字段设置
         </button>
       </div>
-      <StoryboardTable project={project} onChange={updateProject} />
+      <StoryboardTable
+        imageActions={imageActions}
+        project={project}
+        onChange={updateProject}
+      />
       {showFieldSettings ? (
         <FieldSettings
           project={project}

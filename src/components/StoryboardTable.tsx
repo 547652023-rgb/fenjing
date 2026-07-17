@@ -10,11 +10,52 @@ import {
 } from "../domain/storyboard";
 import { ImageCell } from "./ImageCell";
 import { EditableSelect } from "../workbench/EditableSelect";
+import type { RemoteImage } from "../domain/models";
+
+export type StoryboardImageActions = {
+  upload: (
+    shotId: string,
+    fieldId: string,
+    currentImages: RemoteImage[],
+    files: File[],
+  ) => Promise<RemoteImage[]>;
+  remove: (
+    shotId: string,
+    fieldId: string,
+    currentImages: RemoteImage[],
+    image: RemoteImage,
+  ) => Promise<void>;
+};
 
 type StoryboardTableProps = {
   project: StoryboardProject;
   onChange: (update: ProjectUpdate) => void;
+  imageActions?: StoryboardImageActions;
 };
+
+export function parseRemoteImages(value: string): RemoteImage[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((image): image is RemoteImage =>
+      Boolean(
+        image &&
+          typeof image === "object" &&
+          "path" in image &&
+          typeof image.path === "string" &&
+          "url" in image &&
+          typeof image.url === "string" &&
+          "name" in image &&
+          typeof image.name === "string" &&
+          "position" in image &&
+          typeof image.position === "number",
+      ),
+    );
+  } catch {
+    return [];
+  }
+}
 
 function inputTypeFor(field: FieldDefinition): "date" | "number" | "text" {
   if (field.type === "date" || field.type === "number") {
@@ -33,7 +74,7 @@ function columnWidth(field: FieldDefinition): string {
   return `${Math.max(typeMinimum, field.label.length * 2 + 4)}rem`;
 }
 
-export function StoryboardTable({ project, onChange }: StoryboardTableProps) {
+export function StoryboardTable({ project, onChange, imageActions }: StoryboardTableProps) {
   const [draggedShotId, setDraggedShotId] = useState<string | null>(null);
   const visibleFields = project.fields
     .filter((field) => field.visible)
@@ -158,7 +199,29 @@ export function StoryboardTable({ project, onChange }: StoryboardTableProps) {
                     data-field-type={field.type}
                     key={field.id}
                   >
-                    {field.type === "image" ? (
+                    {field.type === "image" && imageActions ? (
+                      <ImageCell
+                        images={parseRemoteImages(shot.values[field.id] ?? "")}
+                        label={`${field.label}-${shot.id}`}
+                        maxImages={field.id === "frame" ? 5 : 1}
+                        onUpload={(files) =>
+                          imageActions.upload(
+                            shot.id,
+                            field.id,
+                            parseRemoteImages(shot.values[field.id] ?? ""),
+                            files,
+                          )
+                        }
+                        onRemove={(image) =>
+                          imageActions.remove(
+                            shot.id,
+                            field.id,
+                            parseRemoteImages(shot.values[field.id] ?? ""),
+                            image,
+                          )
+                        }
+                      />
+                    ) : field.type === "image" ? (
                       <ImageCell
                         label={`${field.label}-${shot.id}`}
                         maxImages={field.id === "frame" ? 5 : 1}

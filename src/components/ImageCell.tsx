@@ -1,11 +1,28 @@
-import { useState, type ChangeEvent } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
+import type { RemoteImage } from "../domain/models";
 
-type ImageCellProps = {
-  value: string;
+type SharedImageCellProps = {
   label: string;
   maxImages?: number;
-  onChange: (value: string) => void;
 };
+
+type LocalImageCellProps = SharedImageCellProps & {
+  value: string;
+  onChange: (value: string) => void;
+  images?: never;
+  onUpload?: never;
+  onRemove?: never;
+};
+
+type OnlineImageCellProps = SharedImageCellProps & {
+  images: RemoteImage[];
+  onUpload: (files: File[]) => Promise<RemoteImage[]>;
+  onRemove: (image: RemoteImage) => Promise<void>;
+  value?: never;
+  onChange?: never;
+};
+
+export type ImageCellProps = LocalImageCellProps | OnlineImageCellProps;
 
 function parseImageValues(value: string): string[] {
   if (!value) {
@@ -49,7 +66,12 @@ function readImage(file: File): Promise<string> {
   });
 }
 
-export function ImageCell({ value, label, maxImages = 1, onChange }: ImageCellProps) {
+function LocalImageCell({
+  value,
+  label,
+  maxImages = 1,
+  onChange,
+}: LocalImageCellProps) {
   const [error, setError] = useState("");
   const images = parseImageValues(value).slice(0, maxImages);
 
@@ -88,6 +110,125 @@ export function ImageCell({ value, label, maxImages = 1, onChange }: ImageCellPr
   }
 
   return (
+    <ImageCellLayout
+      error={error}
+      images={images.map((url, position) => ({
+        key: `${url.slice(0, 48)}-${position}`,
+        url,
+      }))}
+      label={label}
+      maxImages={maxImages}
+      onFileChange={handleFileChange}
+      onRemove={(index) => removeImage(index)}
+    />
+  );
+}
+
+function OnlineImageCell({
+  images,
+  label,
+  maxImages = 1,
+  onUpload,
+  onRemove,
+}: OnlineImageCellProps) {
+  const [visibleImages, setVisibleImages] = useState(() => images.slice(0, maxImages));
+  const [failedFiles, setFailedFiles] = useState<File[]>([]);
+  const [pendingNames, setPendingNames] = useState<string[]>([]);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setVisibleImages(images.slice(0, maxImages));
+  }, [images, maxImages]);
+
+  async function uploadFile(file: File) {
+    setPendingNames((current) => [...current, file.name]);
+    setError("");
+    try {
+      const uploaded = await onUpload([file]);
+      setVisibleImages((current) => [...current, ...uploaded].slice(0, maxImages));
+      setFailedFiles((current) => current.filter((candidate) => candidate !== file));
+    } catch {
+      setError("上传失败");
+      setFailedFiles((current) =>
+        current.includes(file) ? current : [...current, file],
+      );
+    } finally {
+      setPendingNames((current) => current.filter((name) => name !== file.name));
+    }
+  }
+
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const selected = Array.from(input.files ?? []);
+    input.value = "";
+    if (selected.length === 0) {
+      return;
+    }
+
+    if (selected.some((file) => !file.type.startsWith("image/"))) {
+      setError("请选择图片文件");
+      return;
+    }
+
+    const remaining = Math.max(0, maxImages - visibleImages.length - pendingNames.length);
+    const accepted = selected.slice(0, remaining);
+    if (accepted.length < selected.length) {
+      setError(`每行最多 ${maxImages} 张图片`);
+    }
+    await Promise.all(accepted.map(uploadFile));
+  }
+
+  async function removeImage(index: number) {
+    const image = visibleImages[index];
+    setError("");
+    try {
+      await onRemove(image);
+      setVisibleImages((current) => current.filter((candidate) => candidate !== image));
+    } catch {
+      setError("删除失败");
+    }
+  }
+
+  return (
+    <ImageCellLayout
+      error={error}
+      images={visibleImages.map((image) => ({ key: image.path, url: image.url }))}
+      label={label}
+      maxImages={maxImages}
+      onFileChange={handleFileChange}
+      onRemove={removeImage}
+      pendingNames={pendingNames}
+      retryFiles={failedFiles}
+      onRetry={uploadFile}
+    />
+  );
+}
+
+type ImageCellLayoutProps = {
+  error: string;
+  images: Array<{ key: string; url: string }>;
+  label: string;
+  maxImages: number;
+  onFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onRemove: (index: number) => void;
+  onRetry?: (file: File) => void;
+  pendingNames?: string[];
+  retryFiles?: File[];
+};
+
+function ImageCellLayout({
+  error,
+  images,
+  label,
+  maxImages,
+  onFileChange,
+  onRemove,
+  onRetry,
+  pendingNames = [],
+  retryFiles = [],
+}: ImageCellLayoutProps) {
+  const occupiedCount = images.length + pendingNames.length;
+  return (
     <div
       className={`image-cell ${
         maxImages > 1 ? "image-cell--multiple" : "image-cell--single"
@@ -98,13 +239,13 @@ export function ImageCell({ value, label, maxImages = 1, onChange }: ImageCellPr
           {images.map((image, index) => {
             const imageLabel = `${label}-图片${index + 1}`;
             return (
-              <div className="image-cell__item" key={`${image.slice(0, 48)}-${index}`}>
-                <img alt={imageLabel} className="image-cell__preview" src={image} />
+              <div className="image-cell__item" key={image.key}>
+                <img alt={imageLabel} className="image-cell__preview" src={image.url} />
                 <button
                   aria-label={`移除${imageLabel}`}
                   className="image-cell__remove"
                   type="button"
-                  onClick={() => removeImage(index)}
+                  onClick={() => onRemove(index)}
                 >
                   移除图片
                 </button>
@@ -114,7 +255,23 @@ export function ImageCell({ value, label, maxImages = 1, onChange }: ImageCellPr
         </div>
       ) : null}
 
-      {images.length < maxImages ? (
+      {pendingNames.map((name) => (
+        <p className="image-cell__pending" key={name}>正在上传 {name}</p>
+      ))}
+
+      {retryFiles.map((file) => (
+        <button
+          aria-label={`重试上传 ${file.name}`}
+          className="image-cell__retry"
+          key={`${file.name}-${file.lastModified}`}
+          type="button"
+          onClick={() => onRetry?.(file)}
+        >
+          重试上传 {file.name}
+        </button>
+      ))}
+
+      {occupiedCount < maxImages ? (
         <label className="image-cell__upload">
           <span>选择图片</span>
           <input
@@ -123,18 +280,25 @@ export function ImageCell({ value, label, maxImages = 1, onChange }: ImageCellPr
             className="image-cell__input"
             multiple={maxImages > 1}
             type="file"
-            onChange={handleFileChange}
+            onChange={onFileChange}
           />
         </label>
       ) : null}
 
       {maxImages > 1 ? (
         <span className="image-cell__count">
-          {images.length}/{maxImages}
+          {occupiedCount}/{maxImages}
         </span>
       ) : null}
 
       {error ? <p className="image-cell__error">{error}</p> : null}
     </div>
   );
+}
+
+export function ImageCell(props: ImageCellProps) {
+  if (props.images !== undefined) {
+    return <OnlineImageCell {...props} />;
+  }
+  return <LocalImageCell {...props} />;
 }
