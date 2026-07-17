@@ -51,6 +51,7 @@ export class FakeStoryboardGateway implements StoryboardGateway {
   private currentUser: AuthUser | null = null;
   private nextUserId = 1;
   private nextProjectId = 1;
+  private nextConflict: { projectId: string; shot: Shot } | null = null;
 
   async getSession(): Promise<AuthUser | null> {
     return this.currentUser ? { ...this.currentUser } : null;
@@ -151,6 +152,20 @@ export class FakeStoryboardGateway implements StoryboardGateway {
     expectedVersion: number,
   ): Promise<VersionedShot> {
     const project = this.requireProjectMember(projectId);
+    if (this.nextConflict?.projectId === projectId) {
+      const serverShot = this.nextConflict.shot;
+      this.nextConflict = null;
+      this.projects.set(projectId, {
+        ...project,
+        shots: project.shots.map((current) =>
+          current.id === serverShot.id
+            ? { ...serverShot, values: { ...serverShot.values } }
+            : current,
+        ),
+      });
+      this.versions.set(serverShot.id, (this.versions.get(serverShot.id) ?? 1) + 1);
+      throw new GatewayError("conflict");
+    }
     const version = this.versions.get(shot.id) ?? 1;
     if (version !== expectedVersion) {
       throw new GatewayError("conflict");
@@ -273,6 +288,13 @@ export class FakeStoryboardGateway implements StoryboardGateway {
 
   emit(projectId: string, event: ProjectEvent): void {
     this.projectListeners.get(projectId)?.forEach((listener) => listener(event));
+  }
+
+  failNextSaveWithConflict(projectId: string, serverShot: Shot): void {
+    this.nextConflict = {
+      projectId,
+      shot: { ...serverShot, values: { ...serverShot.values } },
+    };
   }
 
   private setCurrentUser(user: AuthUser): void {

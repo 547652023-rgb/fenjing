@@ -11,8 +11,11 @@ import type { ProjectRole } from "../domain/models";
 import { MemberManager } from "../projects/MemberManager";
 import type {
   ProjectUpdate,
+  Shot,
   StoryboardProject,
 } from "../domain/storyboard";
+import type { ProjectEvent } from "../domain/models";
+import { useProjectRealtime } from "./useProjectRealtime";
 
 type ProjectWorkbenchProps = {
   gateway: StoryboardGateway;
@@ -38,6 +41,10 @@ export function ProjectWorkbench({
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
   const [error, setError] = useState("");
   const versions = useRef(new Map<string, number>());
+  const serverProject = useRef<StoryboardProject | null>(null);
+  const projectRef = useRef<StoryboardProject | null>(null);
+  const dirtyFields = useRef(new Set<string>());
+  const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   const reload = useCallback(async () => {
     try {
@@ -46,6 +53,8 @@ export function ProjectWorkbench({
         gateway.listProjects(),
       ]);
       setProject(loaded);
+      projectRef.current = loaded;
+      serverProject.current = loaded;
       setRole(
         summaries.find((summary) => summary.id === projectId)?.role ?? "editor",
       );
@@ -62,9 +71,80 @@ export function ProjectWorkbench({
 
   useEffect(() => {
     void reload();
-    const unsubscribe = gateway.subscribeProject(projectId, () => void reload());
-    return unsubscribe;
-  }, [gateway, projectId, reload]);
+    return () => {
+      saveTimers.current.forEach(clearTimeout);
+      saveTimers.current.clear();
+    };
+  }, [reload]);
+
+  function replaceServerShot(server: StoryboardProject, shot: Shot) {
+    return {
+      ...server,
+      shots: server.shots.map((candidate) =>
+        candidate.id === shot.id ? shot : candidate,
+      ),
+    };
+  }
+
+  function handleProjectEvent(event: ProjectEvent) {
+    if (event.type === "project.changed" || event.type === "structure.changed") {
+      void reload();
+      return;
+    }
+    if (event.type === "shot.deleted") {
+      setProject((current) => {
+        if (!current) return current;
+        const next = {
+          ...current,
+          shots: current.shots.filter((shot) => shot.id !== event.shotId),
+        };
+        projectRef.current = next;
+        return next;
+      });
+      if (serverProject.current) {
+        serverProject.current = {
+          ...serverProject.current,
+          shots: serverProject.current.shots.filter(
+            (shot) => shot.id !== event.shotId,
+          ),
+        };
+      }
+      return;
+    }
+
+    versions.current.set(event.shot.shot.id, event.shot.version);
+    const previousServerShot = serverProject.current?.shots.find(
+      (shot) => shot.id === event.shot.shot.id,
+    );
+    setProject((current) => {
+      if (!current) return current;
+      const next = {
+        ...current,
+        shots: current.shots.map((shot) => {
+          if (shot.id !== event.shot.shot.id) return shot;
+          const values = { ...event.shot.shot.values };
+          if (previousServerShot) {
+            Object.keys(shot.values).forEach((fieldId) => {
+              if (dirtyFields.current.has(`${shot.id}:${fieldId}`)) {
+                values[fieldId] = shot.values[fieldId];
+              }
+            });
+          }
+          return { ...event.shot.shot, values };
+        }),
+      };
+      projectRef.current = next;
+      return next;
+    });
+    if (serverProject.current) {
+      serverProject.current = replaceServerShot(
+        serverProject.current,
+        event.shot.shot,
+      );
+    }
+  }
+
+  useProjectRealtime({ gateway, projectId, onEvent: handleProjectEvent });
 
   async function persistChange(
     previous: StoryboardProject,
@@ -107,6 +187,21 @@ export function ProjectWorkbench({
               versions.current.get(nextShot.id) ?? 1,
             );
             versions.current.set(nextShot.id, saved.version);
+            if (serverProject.current) {
+              serverProject.current = replaceServerShot(
+                serverProject.current,
+                saved.shot,
+              );
+            }
+            Object.keys(nextShot.values).forEach((fieldId) => {
+              const key = `${nextShot.id}:${fieldId}`;
+              if (
+                projectRef.current?.shots.find((shot) => shot.id === nextShot.id)
+                  ?.values[fieldId] === nextShot.values[fieldId]
+              ) {
+                dirtyFields.current.delete(key);
+              }
+            });
           }
         }
       }
@@ -121,11 +216,45 @@ export function ProjectWorkbench({
     }
   }
 
-  function updateProject(update: ProjectUpdate) {
+  function updateProject(update: ProjectUpdate, immediate = false) {
     setProject((current) => {
       if (!current) return current;
       const next = typeof update === "function" ? update(current) : update;
-      void persistChange(current, next);
+      projectRef.current = next;
+      const changedShots = next.shots.filter((nextShot) => {
+        const previousShot = current.shots.find((shot) => shot.id === nextShot.id);
+        return previousShot &&
+          JSON.stringify(previousShot.values) !== JSON.stringify(nextShot.values);
+      });
+      changedShots.forEach((nextShot) => {
+        const previousShot = current.shots.find((shot) => shot.id === nextShot.id)!;
+        Object.keys(nextShot.values).forEach((fieldId) => {
+          if (previousShot.values[fieldId] !== nextShot.values[fieldId]) {
+            dirtyFields.current.add(`${nextShot.id}:${fieldId}`);
+          }
+        });
+      });
+      const onlyCellValuesChanged =
+        changedShots.length > 0 &&
+        current.title === next.title &&
+        fieldSignature(current) === fieldSignature(next) &&
+        current.shots.map(({ id }) => id).join("|") ===
+          next.shots.map(({ id }) => id).join("|");
+      if (onlyCellValuesChanged && !immediate) {
+        changedShots.forEach((changedShot) => {
+          const currentTimer = saveTimers.current.get(changedShot.id);
+          if (currentTimer) clearTimeout(currentTimer);
+          const timer = setTimeout(() => {
+            saveTimers.current.delete(changedShot.id);
+            const latest = projectRef.current;
+            const server = serverProject.current;
+            if (latest && server) void persistChange(server, latest);
+          }, 400);
+          saveTimers.current.set(changedShot.id, timer);
+        });
+      } else {
+        void persistChange(current, next);
+      }
       return next;
     });
   }
@@ -163,7 +292,7 @@ export function ProjectWorkbench({
               }
             : shot,
         ),
-      }));
+      }), true);
       return uploaded;
     },
     async remove(shotId, fieldId, currentImages, image) {
@@ -184,7 +313,7 @@ export function ProjectWorkbench({
               }
             : shot,
         ),
-      }));
+      }), true);
     },
   };
 
