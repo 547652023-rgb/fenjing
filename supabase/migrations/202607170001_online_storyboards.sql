@@ -306,7 +306,7 @@ create policy profiles_read_project_members on public.profiles
 for select using (public.shares_project_with_user(id));
 
 create policy projects_read_members on public.projects
-for select using (public.is_project_member(id));
+for select using (owner_id = auth.uid() or public.is_project_member(id));
 create policy projects_create_self on public.projects
 for insert with check (owner_id = auth.uid());
 create policy projects_update_members on public.projects
