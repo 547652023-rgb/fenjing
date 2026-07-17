@@ -119,6 +119,28 @@ body {
   color: #66736b;
 }
 
+.local-import-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 1rem 1.2rem;
+  border: 1px solid #b8cbbb;
+  border-radius: 0.85rem;
+  background: #f3f8f3;
+}
+
+.local-import-prompt h2,
+.local-import-prompt p {
+  margin: 0;
+}
+
+.local-import-prompt div:last-child {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .project-section {
   margin-top: 1.5rem;
 }

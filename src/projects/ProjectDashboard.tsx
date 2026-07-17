@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { StoryboardGateway } from "../data/gateway";
 import type { AuthUser, ProjectSummary } from "../domain/models";
+import { LocalImportPrompt } from "../migration/LocalImportPrompt";
 
 type ProjectDashboardProps = {
   gateway: StoryboardGateway;
@@ -145,6 +146,8 @@ export function ProjectDashboard({
           <button type="button" onClick={onSignOut}>退出登录</button>
         </div>
       </header>
+
+      <LocalImportPrompt gateway={gateway} onImported={() => void refresh()} user={user} />
 
       <div className="dashboard-toolbar">
         <p>{loading ? "正在加载项目…" : `共 ${projects.length} 个项目`}</p>

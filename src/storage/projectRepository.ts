@@ -1,6 +1,6 @@
 import type { StoryboardProject } from "../domain/storyboard";
 
-const STORAGE_KEY = "fenjing.storyboard-project.v1";
+export const STORAGE_KEY = "fenjing.storyboard-project.v1";
 
 export type SaveProjectResult =
   | { ok: true }
