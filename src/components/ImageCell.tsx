@@ -69,7 +69,8 @@ export function ImageCell({ value, label, maxImages = 1, onChange }: ImageCellPr
     }
 
     const accepted = valid.slice(0, Math.max(0, maxImages - images.length));
-    setError("");
+    const exceededLimit = valid.length > accepted.length;
+    setError(exceededLimit ? `每行最多 ${maxImages} 张图片` : "");
 
     try {
       const loaded = await Promise.all(accepted.map(readImage));
@@ -121,6 +122,12 @@ export function ImageCell({ value, label, maxImages = 1, onChange }: ImageCellPr
             onChange={handleFileChange}
           />
         </label>
+      ) : null}
+
+      {maxImages > 1 ? (
+        <span className="image-cell__count">
+          {images.length}/{maxImages}
+        </span>
       ) : null}
 
       {error ? <p className="image-cell__error">{error}</p> : null}
