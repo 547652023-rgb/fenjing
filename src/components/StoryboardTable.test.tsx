@@ -1,7 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { vi } from "vitest";
-import { createProject } from "../domain/storyboard";
+import { addShot, createProject } from "../domain/storyboard";
 import { ImageCell } from "./ImageCell";
 import { StoryboardTable } from "./StoryboardTable";
 
@@ -178,4 +179,69 @@ it("allows five frame images while reference remains single image", () => {
 
   expect(screen.getByLabelText("画面-1")).toHaveAttribute("multiple");
   expect(screen.getByLabelText("参考-1")).not.toHaveAttribute("multiple");
+});
+
+function StoryboardHarness() {
+  const [project, setProject] = useState(() => addShot(addShot(createProject())));
+
+  return (
+    <>
+      <output data-testid="shot-order">{project.shots.map(({ id }) => id).join(",")}</output>
+      <StoryboardTable
+        project={project}
+        onChange={(update) =>
+          setProject((current) =>
+            typeof update === "function" ? update(current) : update,
+          )
+        }
+      />
+    </>
+  );
+}
+
+it("moves and deletes rows with accessible controls", async () => {
+  const user = userEvent.setup();
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  render(<StoryboardHarness />);
+
+  expect(screen.getByRole("button", { name: "上移镜头 1" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "下移镜头 3" })).toBeDisabled();
+
+  await user.click(screen.getByRole("button", { name: "上移镜头 3" }));
+  expect(screen.getByTestId("shot-order")).toHaveTextContent("1,3,2");
+
+  await user.click(screen.getByRole("button", { name: "删除镜头 3" }));
+  expect(window.confirm).toHaveBeenCalledWith("确定删除这个镜头吗？");
+  expect(screen.getByTestId("shot-order")).toHaveTextContent("1,2");
+  expect(screen.getAllByLabelText(/^镜号-/).map((input) => input.getAttribute("value"))).toEqual([
+    "1",
+    "2",
+  ]);
+});
+
+it("moves a dragged row to the dropped row position", () => {
+  render(<StoryboardHarness />);
+
+  const dragged = screen.getByRole("button", { name: "拖动镜头 3" });
+  fireEvent.dragStart(dragged);
+  fireEvent.dragOver(screen.getByRole("row", { name: /镜头 1/ }));
+  fireEvent.drop(screen.getByRole("row", { name: /镜头 1/ }));
+
+  expect(screen.getByTestId("shot-order")).toHaveTextContent("3,1,2");
+});
+
+it("renders shot size as the restricted six-option dropdown", () => {
+  render(<StoryboardTable project={createProject()} onChange={vi.fn()} />);
+
+  const shotSize = screen.getByRole("combobox", { name: "景别-1" });
+  expect(shotSize).toHaveAttribute("data-allow-custom", "false");
+  expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
+    "",
+    "大远景",
+    "远景",
+    "全景",
+    "中景",
+    "近景",
+    "特写",
+  ]);
 });

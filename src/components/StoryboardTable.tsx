@@ -1,11 +1,15 @@
+import { useState } from "react";
 import {
   addShot,
+  deleteShot,
+  moveShot,
   updateShotValue,
   type FieldDefinition,
   type ProjectUpdate,
   type StoryboardProject,
 } from "../domain/storyboard";
 import { ImageCell } from "./ImageCell";
+import { EditableSelect } from "../workbench/EditableSelect";
 
 type StoryboardTableProps = {
   project: StoryboardProject;
@@ -30,6 +34,7 @@ function columnWidth(field: FieldDefinition): string {
 }
 
 export function StoryboardTable({ project, onChange }: StoryboardTableProps) {
+  const [draggedShotId, setDraggedShotId] = useState<string | null>(null);
   const visibleFields = project.fields
     .filter((field) => field.visible)
     .sort((left, right) => left.order - right.order);
@@ -46,6 +51,9 @@ export function StoryboardTable({ project, onChange }: StoryboardTableProps) {
         <table className="storyboard-table">
           <thead>
             <tr>
+              <th className="sticky-shot-actions" scope="col">
+                操作
+              </th>
               {visibleFields.map((field) => (
                 <th
                   className={field.id === "shotNumber" ? "sticky-shot-number" : undefined}
@@ -60,8 +68,84 @@ export function StoryboardTable({ project, onChange }: StoryboardTableProps) {
             </tr>
           </thead>
           <tbody>
-            {project.shots.map((shot) => (
-              <tr key={shot.id}>
+            {project.shots.map((shot, shotIndex) => (
+              <tr
+                aria-label={`镜头 ${shot.id}`}
+                key={shot.id}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => {
+                  if (draggedShotId === null) {
+                    return;
+                  }
+                  onChange((latestProject) => {
+                    const targetIndex = latestProject.shots.findIndex(
+                      (latestShot) => latestShot.id === shot.id,
+                    );
+                    return moveShot(latestProject, draggedShotId, targetIndex);
+                  });
+                  setDraggedShotId(null);
+                }}
+              >
+                <td className="sticky-shot-actions shot-actions">
+                  <button
+                    aria-label={`拖动镜头 ${shot.id}`}
+                    className="shot-actions__drag"
+                    draggable
+                    title="拖动排序"
+                    type="button"
+                    onDragEnd={() => setDraggedShotId(null)}
+                    onDragStart={() => setDraggedShotId(shot.id)}
+                  >
+                    ⋮⋮
+                  </button>
+                  <button
+                    aria-label={`上移镜头 ${shot.id}`}
+                    disabled={shotIndex === 0}
+                    title="上移"
+                    type="button"
+                    onClick={() =>
+                      onChange((latestProject) => {
+                        const index = latestProject.shots.findIndex(
+                          (latestShot) => latestShot.id === shot.id,
+                        );
+                        return moveShot(latestProject, shot.id, index - 1);
+                      })
+                    }
+                  >
+                    ↑
+                  </button>
+                  <button
+                    aria-label={`下移镜头 ${shot.id}`}
+                    disabled={shotIndex === project.shots.length - 1}
+                    title="下移"
+                    type="button"
+                    onClick={() =>
+                      onChange((latestProject) => {
+                        const index = latestProject.shots.findIndex(
+                          (latestShot) => latestShot.id === shot.id,
+                        );
+                        return moveShot(latestProject, shot.id, index + 1);
+                      })
+                    }
+                  >
+                    ↓
+                  </button>
+                  <button
+                    aria-label={`删除镜头 ${shot.id}`}
+                    className="shot-actions__delete"
+                    title="删除"
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm("确定删除这个镜头吗？")) {
+                        onChange((latestProject) =>
+                          deleteShot(latestProject, shot.id),
+                        );
+                      }
+                    }}
+                  >
+                    ×
+                  </button>
+                </td>
                 {visibleFields.map((field) => (
                   <td
                     className={
@@ -82,6 +166,23 @@ export function StoryboardTable({ project, onChange }: StoryboardTableProps) {
                         onChange={(value) =>
                           onChange((latestProject) =>
                             updateShotValue(latestProject, shot.id, field.id, value),
+                          )
+                        }
+                      />
+                    ) : field.type === "singleSelect" ? (
+                      <EditableSelect
+                        allowCustomValue={field.allowCustomValue ?? true}
+                        label={`${field.label}-${shot.id}`}
+                        options={field.options ?? []}
+                        value={shot.values[field.id] ?? ""}
+                        onChange={(value) =>
+                          onChange((latestProject) =>
+                            updateShotValue(
+                              latestProject,
+                              shot.id,
+                              field.id,
+                              value,
+                            ),
                           )
                         }
                       />

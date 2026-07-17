@@ -94,7 +94,8 @@ button:disabled {
 }
 
 .project-title input:focus,
-.storyboard-table input:focus {
+.storyboard-table input:focus,
+.storyboard-table select:focus {
   outline: 2px solid #69a881;
   outline-offset: -2px;
 }
@@ -169,7 +170,8 @@ button:disabled {
   white-space: nowrap;
 }
 
-.storyboard-table input {
+.storyboard-table input,
+.storyboard-table select {
   display: block;
   width: 100%;
   min-height: 3.25rem;
@@ -177,6 +179,47 @@ button:disabled {
   padding: 0.65rem 0.75rem;
   color: inherit;
   background: transparent;
+}
+
+.storyboard-table select {
+  appearance: auto;
+}
+
+.storyboard-table .sticky-shot-actions {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  width: 9.5rem;
+  min-width: 9.5rem;
+  background: #f7faf7;
+  box-shadow: 1px 0 0 #ccd7cf;
+}
+
+.storyboard-table th.sticky-shot-actions {
+  z-index: 4;
+  background: #dfeae2;
+}
+
+.shot-actions {
+  padding: 0.4rem !important;
+  white-space: nowrap;
+}
+
+.shot-actions button {
+  min-width: 1.8rem;
+  margin: 0.1rem;
+  border-radius: 6px;
+  padding: 0.32rem 0.4rem;
+  font-size: 0.78rem;
+}
+
+.shot-actions__drag {
+  cursor: grab;
+}
+
+.shot-actions__delete {
+  border-color: #9a332c;
+  background: #9a332c;
 }
 
 .storyboard-table td.image-table-cell {
@@ -305,7 +348,7 @@ button:disabled {
 
 .storyboard-table .sticky-shot-number {
   position: sticky;
-  left: 0;
+  left: 9.5rem;
   z-index: 1;
   box-shadow: 1px 0 0 #ccd7cf;
 }
