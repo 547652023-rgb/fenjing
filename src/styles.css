@@ -107,6 +107,111 @@ body {
   gap: 1rem;
 }
 
+.dashboard-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 1.5rem 0;
+}
+
+.dashboard-toolbar p {
+  margin: 0;
+  color: #66736b;
+}
+
+.project-section {
+  margin-top: 1.5rem;
+}
+
+.project-section h2 {
+  font-size: 1.1rem;
+}
+
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 1rem;
+}
+
+.project-card {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid #d8e0da;
+  border-radius: 14px;
+  padding: 1.25rem;
+  background: #fff;
+}
+
+.project-card h3,
+.project-card p,
+.project-card dl,
+.project-card dd {
+  margin: 0;
+}
+
+.project-card__role {
+  color: #638070;
+  font-size: 0.76rem;
+}
+
+.project-card dl {
+  display: flex;
+  gap: 1.5rem;
+  color: #66736b;
+  font-size: 0.8rem;
+}
+
+.project-card dl div {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.project-card__actions,
+.project-inline-form {
+  display: flex;
+  align-items: end;
+  gap: 0.5rem;
+}
+
+.project-card__actions button {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.78rem;
+}
+
+.button-secondary {
+  color: #1f5a3d;
+  background: #fff;
+}
+
+.button-danger {
+  border-color: #9a332c;
+  background: #9a332c;
+}
+
+.project-inline-form {
+  margin-bottom: 1rem;
+  border: 1px solid #d8e0da;
+  border-radius: 12px;
+  padding: 1rem;
+  background: #fff;
+}
+
+.project-inline-form label {
+  display: grid;
+  flex: 1;
+  gap: 0.35rem;
+}
+
+.project-inline-form input {
+  border: 1px solid #cdd8d0;
+  border-radius: 8px;
+  padding: 0.65rem;
+}
+
+.empty-state {
+  color: #79867e;
+}
+
 button,
 input,
 select {

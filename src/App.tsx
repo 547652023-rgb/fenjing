@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { AuthGate } from "./auth/AuthGate";
 import type { StoryboardGateway } from "./data/gateway";
+import { ProjectDashboard } from "./projects/ProjectDashboard";
 
 type AppProps = {
   gateway?: StoryboardGateway | null;
 };
 
 export function App({ gateway = null }: AppProps) {
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   if (!gateway) {
     return (
       <main className="centered-state setup-state">
@@ -21,20 +24,23 @@ export function App({ gateway = null }: AppProps) {
   return (
     <AuthGate gateway={gateway}>
       {(user) => (
-        <main className="dashboard-shell">
-          <header className="dashboard-header">
-            <div>
-              <p className="project-header__eyebrow">Storyboard Workbench</p>
-              <h1>我的项目</h1>
-            </div>
-            <div className="dashboard-account">
-              <span>{user.email}</span>
-              <button type="button" onClick={() => void gateway.signOut()}>
-                退出登录
+        currentProjectId ? (
+          <main className="centered-state">
+            <section>
+              <h1>项目正在加载</h1>
+              <button type="button" onClick={() => setCurrentProjectId(null)}>
+                返回项目
               </button>
-            </div>
-          </header>
-        </main>
+            </section>
+          </main>
+        ) : (
+          <ProjectDashboard
+            gateway={gateway}
+            onOpenProject={setCurrentProjectId}
+            onSignOut={() => void gateway.signOut()}
+            user={user}
+          />
+        )
       )}
     </AuthGate>
   );
