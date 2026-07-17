@@ -26,7 +26,7 @@ export type GatewayErrorCode =
 export class GatewayError extends Error {
   constructor(
     public readonly code: GatewayErrorCode,
-    message = code,
+    message: string = code,
   ) {
     super(message);
     this.name = "GatewayError";

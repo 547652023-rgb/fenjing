@@ -5,6 +5,7 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@supabase/supabase-js": "latest",
     "@vitejs/plugin-react": "latest",
     "vite": "latest",
     "react": "18.3.1",

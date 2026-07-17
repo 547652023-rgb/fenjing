@@ -285,6 +285,26 @@ alter table public.shots enable row level security;
 create policy profiles_read_self on public.profiles
 for select using (id = auth.uid());
 
+create or replace function public.shares_project_with_user(p_user_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select p_user_id = auth.uid() or exists (
+    select 1
+    from public.project_members viewer
+    join public.project_members target
+      on target.project_id = viewer.project_id
+    where viewer.user_id = auth.uid()
+      and target.user_id = p_user_id
+  );
+$$;
+
+create policy profiles_read_project_members on public.profiles
+for select using (public.shares_project_with_user(id));
+
 create policy projects_read_members on public.projects
 for select using (public.is_project_member(id));
 create policy projects_create_self on public.projects
