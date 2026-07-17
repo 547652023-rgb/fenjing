@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { createProject } from "../domain/storyboard";
@@ -31,7 +31,9 @@ it("reads an uploaded image as a data URL", async () => {
   const file = new File(["image"], "frame.png", { type: "image/png" });
   await user.upload(screen.getByLabelText("画面-1"), file);
 
-  expect(onChange).toHaveBeenCalledWith(expect.stringMatching(/^data:image\/png;base64,/));
+  await waitFor(() =>
+    expect(onChange).toHaveBeenCalledWith(expect.stringMatching(/^data:image\/png;base64,/)),
+  );
 });
 
 it("previews and removes an image data URL", async () => {
@@ -69,6 +71,7 @@ it("wires seeded image fields to shot updates", async () => {
   const file = new File(["image"], "frame.png", { type: "image/png" });
   await user.upload(screen.getByLabelText("画面-1"), file);
 
+  await waitFor(() => expect(onChange).toHaveBeenCalled());
   const imageUpdate = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0];
   expect(imageUpdate).toEqual(expect.any(Function));
   expect(imageUpdate(project)).toEqual(
