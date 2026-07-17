@@ -13,6 +13,8 @@ export type FieldDefinition = {
   type: FieldType;
   visible: boolean;
   order: number;
+  options?: string[];
+  allowCustomValue?: boolean;
 };
 
 export type CustomFieldType = Exclude<FieldType, "image">;
@@ -34,11 +36,31 @@ export type ProjectUpdate =
   | StoryboardProject
   | ((project: StoryboardProject) => StoryboardProject);
 
-const seededFields: Array<Pick<FieldDefinition, "id" | "label" | "type">> = [
+export const SHOT_SIZE_OPTIONS = [
+  "大远景",
+  "远景",
+  "全景",
+  "中景",
+  "近景",
+  "特写",
+] as const;
+
+const seededFields: Array<
+  Pick<
+    FieldDefinition,
+    "id" | "label" | "type" | "options" | "allowCustomValue"
+  >
+> = [
   { id: "shotNumber", label: "镜号", type: "number" },
   { id: "frame", label: "画面", type: "image" },
   { id: "reference", label: "参考", type: "image" },
-  { id: "shotSize", label: "景别", type: "text" },
+  {
+    id: "shotSize",
+    label: "景别",
+    type: "singleSelect",
+    options: [...SHOT_SIZE_OPTIONS],
+    allowCustomValue: false,
+  },
   { id: "durationSeconds", label: "时长（秒）", type: "number" },
   { id: "content", label: "内容", type: "text" },
   { id: "notes", label: "备注", type: "text" },
@@ -58,7 +80,10 @@ export const DEFAULT_FIELDS: FieldDefinition[] = seededFields.map((field, order)
 }));
 
 function copyFields(fields: FieldDefinition[]): FieldDefinition[] {
-  return fields.map((field) => ({ ...field }));
+  return fields.map((field) => ({
+    ...field,
+    options: field.options ? [...field.options] : undefined,
+  }));
 }
 
 function fieldIdFromLabel(label: string): string {
@@ -145,13 +170,94 @@ export function moveField(
 }
 
 export function addShot(project: StoryboardProject): StoryboardProject {
-  const nextNumber = project.shots.length + 1;
+  const nextId =
+    Math.max(
+      0,
+      ...project.shots.map(({ id }) => {
+        const numericId = Number(id);
+        return Number.isSafeInteger(numericId) ? numericId : 0;
+      }),
+    ) + 1;
   return {
     ...project,
-    shots: [
+    shots: normalizeShotNumbers([
       ...project.shots.map((shot) => ({ ...shot, values: { ...shot.values } })),
-      { id: String(nextNumber), values: { shotNumber: String(nextNumber) } },
-    ],
+      { id: String(nextId), values: {} },
+    ]),
+  };
+}
+
+export function normalizeShotNumbers(shots: Shot[]): Shot[] {
+  return shots.map((shot, index) => ({
+    ...shot,
+    values: { ...shot.values, shotNumber: String(index + 1) },
+  }));
+}
+
+export function moveShot(
+  project: StoryboardProject,
+  shotId: string,
+  targetIndex: number,
+): StoryboardProject {
+  const shots = project.shots.map((shot) => ({
+    ...shot,
+    values: { ...shot.values },
+  }));
+  const sourceIndex = shots.findIndex((shot) => shot.id === shotId);
+  if (sourceIndex === -1) {
+    return { ...project, shots };
+  }
+
+  const [shot] = shots.splice(sourceIndex, 1);
+  const destination = Math.max(0, Math.min(targetIndex, shots.length));
+  shots.splice(destination, 0, shot);
+
+  return { ...project, shots: normalizeShotNumbers(shots) };
+}
+
+export function deleteShot(
+  project: StoryboardProject,
+  shotId: string,
+): StoryboardProject {
+  return {
+    ...project,
+    shots: normalizeShotNumbers(
+      project.shots
+        .filter((shot) => shot.id !== shotId)
+        .map((shot) => ({ ...shot, values: { ...shot.values } })),
+    ),
+  };
+}
+
+export function setFieldOptions(
+  project: StoryboardProject,
+  fieldId: string,
+  options: string[],
+): StoryboardProject {
+  const normalizedOptions = [
+    ...new Set(options.map((option) => option.trim()).filter(Boolean)),
+  ];
+
+  return {
+    ...project,
+    fields: project.fields.map((field) => {
+      if (field.id !== fieldId || field.type === "image") {
+        return {
+          ...field,
+          options: field.options ? [...field.options] : undefined,
+        };
+      }
+
+      return {
+        ...field,
+        type: "singleSelect",
+        options:
+          fieldId === "shotSize"
+            ? [...SHOT_SIZE_OPTIONS]
+            : normalizedOptions,
+        allowCustomValue: fieldId !== "shotSize",
+      };
+    }),
   };
 }
 
@@ -161,6 +267,14 @@ export function updateShotValue(
   fieldId: string,
   value: string,
 ): StoryboardProject {
+  if (
+    fieldId === "shotSize" &&
+    value !== "" &&
+    !SHOT_SIZE_OPTIONS.includes(value as (typeof SHOT_SIZE_OPTIONS)[number])
+  ) {
+    return project;
+  }
+
   return {
     ...project,
     shots: project.shots.map((shot) =>

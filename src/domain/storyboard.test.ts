@@ -1,8 +1,13 @@
 import {
   DEFAULT_FIELDS,
+  SHOT_SIZE_OPTIONS,
   addField,
+  addShot,
   createProject,
+  deleteShot,
   moveField,
+  moveShot,
+  setFieldOptions,
   toggleFieldVisibility,
 } from "./storyboard";
 
@@ -59,4 +64,62 @@ it("rejects custom image fields while retaining seeded image fields", () => {
       type: "image",
     }),
   ).toThrow("Custom image fields are not supported");
+});
+
+it("seeds the six restricted shot-size options", () => {
+  const field = createProject().fields.find(({ id }) => id === "shotSize");
+
+  expect(SHOT_SIZE_OPTIONS).toEqual([
+    "大远景",
+    "远景",
+    "全景",
+    "中景",
+    "近景",
+    "特写",
+  ]);
+  expect(field).toMatchObject({
+    type: "singleSelect",
+    options: [...SHOT_SIZE_OPTIONS],
+    allowCustomValue: false,
+  });
+});
+
+it("moves, deletes, and continuously renumbers shots", () => {
+  const project = addShot(addShot(createProject()));
+
+  const moved = moveShot(project, "3", 0);
+  expect(moved.shots.map(({ id }) => id)).toEqual(["3", "1", "2"]);
+  expect(moved.shots.map(({ values }) => values.shotNumber)).toEqual([
+    "1",
+    "2",
+    "3",
+  ]);
+
+  const deleted = deleteShot(moved, "1");
+  expect(deleted.shots.map(({ id }) => id)).toEqual(["3", "2"]);
+  expect(deleted.shots.map(({ values }) => values.shotNumber)).toEqual([
+    "1",
+    "2",
+  ]);
+});
+
+it("uses a collision-free local shot id after deleting an earlier row", () => {
+  const project = deleteShot(addShot(addShot(createProject())), "2");
+
+  expect(addShot(project).shots.map(({ id }) => id)).toEqual(["1", "3", "4"]);
+});
+
+it("stores project-specific dropdown options while allowing custom values", () => {
+  const project = setFieldOptions(createProject(), "notes", [
+    " 补拍 ",
+    "待定",
+    "补拍",
+    "",
+  ]);
+
+  expect(project.fields.find(({ id }) => id === "notes")).toMatchObject({
+    type: "singleSelect",
+    options: ["补拍", "待定"],
+    allowCustomValue: true,
+  });
 });
