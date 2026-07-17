@@ -51,14 +51,14 @@ it("applies a delayed image read to the latest edited project and persists that 
 
   await waitFor(() => expect(screen.getByLabelText("项目名称")).toHaveValue("最终版本"));
   await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("已保存到本机"));
-  expect(loadProject()).toMatchObject({
-    title: "最终版本",
-    shots: [
-      expect.objectContaining({
-        values: expect.objectContaining({ frame: "data:image/png;base64,aW1hZ2U=" }),
-      }),
-    ],
-  });
+  const savedProject = loadProject();
+  if (!savedProject) {
+    throw new Error("Expected the project to be saved");
+  }
+  expect(savedProject.title).toBe("最终版本");
+  expect(JSON.parse(savedProject.shots[0].values.frame)).toEqual([
+    "data:image/png;base64,aW1hZ2U=",
+  ]);
 });
 
 it("reports a storage failure instead of claiming the project was saved", async () => {
