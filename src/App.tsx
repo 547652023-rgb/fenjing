@@ -1,59 +1,41 @@
-import { useEffect, useState } from "react";
-import { FieldSettings } from "./components/FieldSettings";
-import { ProjectHeader } from "./components/ProjectHeader";
-import { StoryboardTable } from "./components/StoryboardTable";
-import {
-  createProject,
-  type ProjectUpdate,
-  type StoryboardProject,
-} from "./domain/storyboard";
-import { loadProject, saveProject } from "./storage/projectRepository";
+import { AuthGate } from "./auth/AuthGate";
+import type { StoryboardGateway } from "./data/gateway";
 
-export function App() {
-  const [project, setProject] = useState<StoryboardProject>(() =>
-    loadProject() ?? createProject(),
-  );
-  const [showFieldSettings, setShowFieldSettings] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<"saving" | "saved" | "error">(
-    "saving",
-  );
+type AppProps = {
+  gateway?: StoryboardGateway | null;
+};
 
-  useEffect(() => {
-    const result = saveProject(project);
-    setSaveStatus(result.ok ? "saved" : "error");
-  }, [project]);
-
-  function updateProject(update: ProjectUpdate) {
-    setSaveStatus("saving");
-    setProject((currentProject) =>
-      typeof update === "function" ? update(currentProject) : update,
+export function App({ gateway = null }: AppProps) {
+  if (!gateway) {
+    return (
+      <main className="centered-state setup-state">
+        <section>
+          <h1>需要配置在线服务</h1>
+          <p>请先配置 Supabase 项目地址和客户端公开密钥。</p>
+          <p>配置完成后即可使用账号登录、多项目和实时协作。</p>
+        </section>
+      </main>
     );
   }
 
-  function updateTitle(title: string) {
-    updateProject((currentProject) => ({ ...currentProject, title }));
-  }
-
   return (
-    <main className="workbench-shell">
-      <ProjectHeader
-        title={project.title}
-        onTitleChange={updateTitle}
-        saveStatus={saveStatus}
-      />
-      <div className="workbench-actions">
-        <button onClick={() => setShowFieldSettings(true)} type="button">
-          字段设置
-        </button>
-      </div>
-      <StoryboardTable project={project} onChange={updateProject} />
-      {showFieldSettings ? (
-        <FieldSettings
-          onChange={updateProject}
-          onClose={() => setShowFieldSettings(false)}
-          project={project}
-        />
-      ) : null}
-    </main>
+    <AuthGate gateway={gateway}>
+      {(user) => (
+        <main className="dashboard-shell">
+          <header className="dashboard-header">
+            <div>
+              <p className="project-header__eyebrow">Storyboard Workbench</p>
+              <h1>我的项目</h1>
+            </div>
+            <div className="dashboard-account">
+              <span>{user.email}</span>
+              <button type="button" onClick={() => void gateway.signOut()}>
+                退出登录
+              </button>
+            </div>
+          </header>
+        </main>
+      )}
+    </AuthGate>
   );
 }
