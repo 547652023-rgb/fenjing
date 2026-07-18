@@ -1,0 +1,57 @@
+import type { RemoteImage } from "../domain/models";
+import type { FieldDefinition, StoryboardProject } from "../domain/storyboard";
+import { parseRemoteImages } from "../components/StoryboardTable";
+
+export type ExportCell = {
+  fieldId: string;
+  fieldType: FieldDefinition["type"];
+  text: string;
+  images: RemoteImage[];
+};
+
+export type ExportRow = { shotId: string; cells: ExportCell[] };
+export type ExportModel = {
+  title: string;
+  fields: FieldDefinition[];
+  rows: ExportRow[];
+};
+
+export function buildExportModel(project: StoryboardProject): ExportModel {
+  const fields = project.fields
+    .filter((field) => field.visible)
+    .sort((left, right) => left.order - right.order)
+    .map((field) => ({ ...field, options: field.options ? [...field.options] : undefined }));
+  return {
+    title: project.title,
+    fields,
+    rows: project.shots.map((shot) => ({
+      shotId: shot.id,
+      cells: fields.map((field) => {
+        const value = shot.values[field.id] ?? "";
+        const maxImages = field.id === "frame" ? 5 : 1;
+        return {
+          fieldId: field.id,
+          fieldType: field.type,
+          text: field.type === "image" ? "" : value,
+          images: field.type === "image" ? parseRemoteImages(value).slice(0, maxImages) : [],
+        };
+      }),
+    })),
+  };
+}
+
+export function exportFilename(
+  project: Pick<StoryboardProject, "title">,
+  extension: "xlsx" | "pdf",
+  date = new Date(),
+): string {
+  const safeTitle = project.title.normalize("NFKC").trim()
+    .replace(/[\\\\/:*?"<>|]+/g, "-").replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || "未命名项目";
+  const localDate = [
+    String(date.getFullYear()).padStart(4, "0"),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+  return `${safeTitle}-分镜表-${localDate}.${extension}`;
+}
