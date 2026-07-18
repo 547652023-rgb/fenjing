@@ -29,6 +29,23 @@ it("loads the selected project and returns to the dashboard", async () => {
   expect(onBack).toHaveBeenCalledOnce();
 });
 
+it("shows export actions after the selected project loads", async () => {
+  const { gateway, owner, project } = await setupProject();
+  render(
+    <ProjectWorkbench
+      gateway={gateway}
+      onBack={vi.fn()}
+      projectId={project.id}
+      user={owner}
+    />,
+  );
+
+  await screen.findByDisplayValue("广告片");
+
+  expect(screen.getByRole("button", { name: "导出 Excel" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "导出 PDF" })).toBeVisible();
+});
+
 it("persists a title edit and project-specific notes options", async () => {
   const { gateway, owner, project } = await setupProject();
   const user = userEvent.setup();

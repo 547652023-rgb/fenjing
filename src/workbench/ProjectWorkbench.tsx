@@ -8,6 +8,7 @@ import {
 import type { StoryboardGateway } from "../data/gateway";
 import type { AuthUser, RemoteImage, SaveState } from "../domain/models";
 import type { ProjectRole } from "../domain/models";
+import { ExportActions } from "../export/ExportActions";
 import { MemberManager } from "../projects/MemberManager";
 import type {
   ProjectUpdate,
@@ -353,6 +354,7 @@ export function ProjectWorkbench({
         <button type="button" onClick={() => setShowFieldSettings(true)}>
           字段设置
         </button>
+        <ExportActions project={project} />
       </div>
       <StoryboardTable
         imageActions={imageActions}
