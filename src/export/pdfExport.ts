@@ -3,6 +3,7 @@ import { downloadBlob } from "./download";
 import {
   buildExportModel,
   exportFilename,
+  type ExportOptions,
   type ExportModel,
   type ExportRow,
 } from "./storyboardExport";
@@ -51,7 +52,7 @@ export type PdfRenderDependencies = {
   loadImage?: (url: string) => Promise<CanvasImageSource>;
 };
 
-export type PdfRenderer = (model: ExportModel) => Promise<PdfPageImage[]>;
+export type PdfRenderer = (model: ExportModel, options?: ExportOptions) => Promise<PdfPageImage[]>;
 
 function minimumRowHeight(fields: FieldDefinition[]): number {
   return fields.some((field) => field.type === "image")
@@ -290,6 +291,7 @@ function canvasJpeg(canvas: HTMLCanvasElement): Promise<Uint8Array> {
 export async function renderPdfPages(
   model: ExportModel,
   dependencies: PdfRenderDependencies = {},
+  options: ExportOptions = {},
 ): Promise<PdfPageImage[]> {
   const createCanvas = dependencies.createCanvas ?? createBrowserCanvas;
   const loadImage = dependencies.loadImage ?? loadRemoteImage;
@@ -313,6 +315,17 @@ export async function renderPdfPages(
     context.textAlign = "left";
     context.textBaseline = "middle";
     context.fillText(layout.title, PAGE_MARGIN, PAGE_MARGIN + TITLE_HEIGHT / 2);
+
+    if (options.logo) {
+      try {
+        const logo = await loadImage(options.logo.url);
+        const logoWidth = 118;
+        const logoHeight = 36;
+        context.drawImage(logo, layout.width - PAGE_MARGIN - logoWidth, PAGE_MARGIN + 7, logoWidth, logoHeight);
+      } catch {
+        // A failed temporary logo must not prevent storyboard export.
+      }
+    }
 
     if (pageIndex === 0) {
       context.font = `14px ${FONT_FAMILY}`;
@@ -466,9 +479,10 @@ export function encodePdfPages(pages: PdfPageImage[]): Uint8Array {
 
 export async function exportStoryboardPdf(
   project: StoryboardProject,
-  render: PdfRenderer = renderPdfPages,
+  options: ExportOptions = {},
+  render: PdfRenderer = (model, exportOptions) => renderPdfPages(model, {}, exportOptions),
 ): Promise<void> {
-  const pages = await render(buildExportModel(project));
+  const pages = await render(buildExportModel(project), options);
   downloadBlob(
     new Blob([new Uint8Array(encodePdfPages(pages))], { type: "application/pdf" }),
     exportFilename(project, "pdf"),

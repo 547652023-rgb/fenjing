@@ -242,3 +242,19 @@ it("encodes forbidden controls and preserves literal SpreadsheetML escape tokens
   expect(sheet).toContain("列_x0001__x005F_x0001_");
   expect(sheet).toContain("值_x000B__x005F_x0001_");
 });
+
+it("adds a temporary logo to every printed Excel page header", async () => {
+  const files = await buildXlsxPackage(
+    model,
+    async () => ({ bytes: validPngBytes(), extension: "png" }),
+    undefined,
+    {},
+    { logo: { name: "logo.png", url: "blob:logo", type: "image/png" } },
+  );
+
+  const sheet = new TextDecoder().decode(files.get("xl/worksheets/sheet1.xml"));
+  expect(sheet).toContain("&amp;R&amp;G");
+  expect(sheet).toContain("legacyDrawingHF");
+  expect(files.has("xl/drawings/vmlDrawing1.vml")).toBe(true);
+  expect(files.has("xl/media/logo.png")).toBe(true);
+});

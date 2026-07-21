@@ -218,3 +218,25 @@ it("renders one titled header page for an empty project", async () => {
   ]);
   expect(pages[0].jpeg).toEqual(jpeg);
 });
+
+it("draws the temporary export logo on every PDF page", async () => {
+  const drawImage = vi.fn();
+  const context = {
+    fillStyle: "", strokeStyle: "", lineWidth: 1, font: "", textAlign: "start", textBaseline: "alphabetic",
+    fillRect: vi.fn(), strokeRect: vi.fn(), fillText: vi.fn(), drawImage,
+    measureText: (text: string) => ({ width: text.length * 8 }),
+  };
+  const jpeg = Uint8Array.from([255, 216, 255, 217]);
+  const createCanvas = vi.fn(() => ({
+    getContext: () => context,
+    toBlob: (callback: BlobCallback) => callback(new Blob([jpeg], { type: "image/jpeg" })),
+  }) as unknown as HTMLCanvasElement);
+  const loadImage = vi.fn(async (_url: string) => ({} as CanvasImageSource));
+
+  const pages = await renderPdfPages(buildExportModel(createPdfProject()), { createCanvas, loadImage }, {
+    logo: { name: "logo.png", url: "blob:logo", type: "image/png" },
+  });
+
+  expect(pages.length).toBeGreaterThan(1);
+  expect(loadImage.mock.calls.filter(([url]) => url === "blob:logo")).toHaveLength(pages.length);
+});

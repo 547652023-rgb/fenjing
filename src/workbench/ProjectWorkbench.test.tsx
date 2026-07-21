@@ -42,8 +42,7 @@ it("shows export actions after the selected project loads", async () => {
 
   await screen.findByDisplayValue("广告片");
 
-  expect(screen.getByRole("button", { name: "导出 Excel" })).toBeVisible();
-  expect(screen.getByRole("button", { name: "导出 PDF" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "导出文件" })).toBeVisible();
 });
 
 it("persists a title edit and project-specific notes options", async () => {

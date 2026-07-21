@@ -14,7 +14,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-it("shows both export actions and disables them while an Excel export runs", async () => {
+it("opens export settings and passes a temporary logo to the selected exporter", async () => {
   const project = createProject();
   const pending = deferred<void>();
   const exportExcel = vi.fn(() => pending.promise);
@@ -29,20 +29,30 @@ it("shows both export actions and disables them while an Excel export runs", asy
     />,
   );
 
-  expect(screen.getByRole("button", { name: "导出 Excel" })).toBeVisible();
-  expect(screen.getByRole("button", { name: "导出 PDF" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "导出文件" })).toBeVisible();
+
+  await user.click(screen.getByRole("button", { name: "导出文件" }));
+
+  expect(screen.getByText(`项目名称：${project.title}`)).toBeVisible();
+  expect(screen.getByText("画幅比例：16:9")).toBeVisible();
+  expect(screen.getByText("镜头总数：1")).toBeVisible();
+  const logo = new File(["logo"], "logo.png", { type: "image/png" });
+  await user.upload(screen.getByLabelText("本次导出 Logo"), logo);
+  expect(screen.getByText("logo.png")).toBeVisible();
 
   await user.click(screen.getByRole("button", { name: "导出 Excel" }));
 
-  expect(exportExcel).toHaveBeenCalledWith(project);
+  expect(exportExcel).toHaveBeenCalledWith(project, expect.objectContaining({
+    logo: expect.objectContaining({ name: "logo.png", url: expect.any(String) }),
+  }));
   expect(screen.getByRole("button", { name: "正在导出 Excel…" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "导出 PDF" })).toBeDisabled();
 
   pending.resolve();
-  expect(await screen.findByRole("button", { name: "导出 Excel" })).toBeEnabled();
+  expect(await screen.findByRole("button", { name: "导出文件" })).toBeEnabled();
 });
 
-it("announces an export error and enables both actions for retry", async () => {
+it("keeps settings open after an export error and clears the temporary logo when closed", async () => {
   const project = createProject();
   const pending = deferred<void>();
   const user = userEvent.setup();
@@ -55,10 +65,16 @@ it("announces an export error and enables both actions for retry", async () => {
     />,
   );
 
+  await user.click(screen.getByRole("button", { name: "导出文件" }));
+  const logo = new File(["logo"], "logo.png", { type: "image/png" });
+  await user.upload(screen.getByLabelText("本次导出 Logo"), logo);
   await user.click(screen.getByRole("button", { name: "导出 Excel" }));
   pending.reject(new Error("download failed"));
 
   expect(await screen.findByRole("alert")).toHaveTextContent("导出失败，请稍后重试");
   expect(screen.getByRole("button", { name: "导出 Excel" })).toBeEnabled();
   expect(screen.getByRole("button", { name: "导出 PDF" })).toBeEnabled();
+  await user.click(screen.getByRole("button", { name: "取消" }));
+  await user.click(screen.getByRole("button", { name: "导出文件" }));
+  expect(screen.queryByText("logo.png")).not.toBeInTheDocument();
 });

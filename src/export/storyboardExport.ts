@@ -18,6 +18,14 @@ export type ExportModel = {
   rows: ExportRow[];
 };
 
+export type ExportLogo = {
+  name: string;
+  url: string;
+  type: "image/png" | "image/jpeg" | "image/webp";
+};
+
+export type ExportOptions = { logo?: ExportLogo };
+
 export function buildExportModel(project: StoryboardProject): ExportModel {
   const fields = project.fields
     .filter((field) => field.visible)

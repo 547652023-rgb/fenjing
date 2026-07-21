@@ -3,6 +3,7 @@ import { downloadBlob } from "./download";
 import {
   buildExportModel,
   exportFilename,
+  type ExportOptions,
   type ExportModel,
 } from "./storyboardExport";
 import { createZip } from "./zip";
@@ -165,7 +166,7 @@ async function createFailurePlaceholderImage(): Promise<LoadedImage> {
 
 function contentTypesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="gif" ContentType="image/gif"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`;
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="gif" ContentType="image/gif"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`;
 }
 
 function rootRelationshipsXml(): string {
@@ -188,7 +189,7 @@ function stylesXml(): string {
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF70AD47"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
 }
 
-function worksheetXml(model: ExportModel, failedCells: Set<string>): string {
+function worksheetXml(model: ExportModel, failedCells: Set<string>, hasLogo: boolean): string {
   const lastColumn = columnName(Math.max(0, model.fields.length - 1));
   const metadataRows = 3;
   const lastRow = Math.max(metadataRows + 1, model.rows.length + metadataRows + 1);
@@ -218,12 +219,20 @@ function worksheetXml(model: ExportModel, failedCells: Set<string>): string {
   }).join("");
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:${lastColumn}${lastRow}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A5" sqref="A5"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>${columns}</cols><sheetData>${metadata}<row r="4">${header}</row>${rows}</sheetData><drawing r:id="rId1"/></worksheet>`;
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:${lastColumn}${lastRow}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A5" sqref="A5"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>${columns}</cols><sheetData>${metadata}<row r="4">${header}</row>${rows}</sheetData><pageMargins left="0.3" right="0.3" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup orientation="landscape"/><drawing r:id="rId1"/>${hasLogo ? '<headerFooter><oddHeader>&amp;R&amp;G</oddHeader></headerFooter><legacyDrawingHF r:id="rId2"/>' : ""}</worksheet>`;
 }
 
-function worksheetRelationshipsXml(): string {
+function worksheetRelationshipsXml(hasLogo: boolean): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>`;
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>${hasLogo ? '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/>' : ""}</Relationships>`;
+}
+
+function headerLogoVml(): string {
+  return `<?xml version="1.0" encoding="UTF-8"?><xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="1"/></o:shapelayout><v:shapetype id="_x0000_t75" coordsize="21600,21600" o:spt="75" path="m@4@5l@4@11@9@11@9@5xe"><v:stroke joinstyle="miter"/><v:formulas><v:f eqn="if lineDrawn pixelLineWidth 0"/><v:f eqn="sum @0 1 0"/><v:f eqn="sum 0 0 @1"/><v:f eqn="prod @2 1 2"/><v:f eqn="prod @3 21600 pixelWidth"/><v:f eqn="prod @3 21600 pixelHeight"/><v:f eqn="sum @0 0 1"/><v:f eqn="prod @6 1 2"/><v:f eqn="prod @7 21600 pixelWidth"/><v:f eqn="sum @8 21600 0"/><v:f eqn="prod @7 21600 pixelHeight"/><v:f eqn="sum @10 21600 0"/></v:formulas><v:path o:extrusionok="f" gradientshapeok="t" o:connecttype="rect"/><o:lock v:ext="edit" aspectratio="t"/></v:shapetype><v:shape id="RH" o:spid="_x0000_s1025" type="#_x0000_t75" style="position:absolute;margin-left:0;margin-top:0;width:120pt;height:36pt;z-index:1" filled="f" stroked="f"><v:imagedata o:relid="rId1" o:title="Logo"/><o:lock v:ext="edit" rotation="t"/></v:shape></xml>`;
+}
+
+function headerLogoRelationshipsXml(logo: EmbeddedImage): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${logo.mediaName}"/></Relationships>`;
 }
 
 function drawingXml(anchors: CellAnchor[]): string {
@@ -252,11 +261,17 @@ export async function buildXlsxPackage(
   loadImage: ((url: string) => Promise<LoadedImage>) | undefined = undefined,
   createFailurePlaceholder: () => Promise<LoadedImage> = createFailurePlaceholderImage,
   imageDependencies: XlsxImageLoadDependencies = {},
+  options: ExportOptions = {},
 ): Promise<Map<string, Uint8Array>> {
   const images: EmbeddedImage[] = [];
   const anchors: CellAnchor[] = [];
   const failedCells = new Set<string>();
   const imageLoader = loadImage ?? ((url: string) => loadRemoteImage(url, imageDependencies));
+  let logo: EmbeddedImage | undefined;
+  if (options.logo) {
+    const loaded = await imageLoader(options.logo.url);
+    logo = { ...loaded, relationshipId: "rId1", mediaName: `logo.${loaded.extension}` };
+  }
 
   for (const [rowIndex, row] of model.rows.entries()) {
     for (const [columnIndex, field] of model.fields.entries()) {
@@ -292,18 +307,23 @@ export async function buildXlsxPackage(
   files.set("xl/workbook.xml", encoder.encode(workbookXml()));
   files.set("xl/_rels/workbook.xml.rels", encoder.encode(workbookRelationshipsXml()));
   files.set("xl/styles.xml", encoder.encode(stylesXml()));
-  files.set("xl/worksheets/sheet1.xml", encoder.encode(worksheetXml(model, failedCells)));
-  files.set("xl/worksheets/_rels/sheet1.xml.rels", encoder.encode(worksheetRelationshipsXml()));
+  files.set("xl/worksheets/sheet1.xml", encoder.encode(worksheetXml(model, failedCells, Boolean(logo))));
+  files.set("xl/worksheets/_rels/sheet1.xml.rels", encoder.encode(worksheetRelationshipsXml(Boolean(logo))));
   files.set("xl/drawings/drawing1.xml", encoder.encode(drawingXml(anchors)));
   files.set("xl/drawings/_rels/drawing1.xml.rels", encoder.encode(drawingRelationshipsXml(images)));
   for (const image of images) {
     files.set(`xl/media/${image.mediaName}`, image.bytes);
   }
+  if (logo) {
+    files.set(`xl/media/${logo.mediaName}`, logo.bytes);
+    files.set("xl/drawings/vmlDrawing1.vml", encoder.encode(headerLogoVml()));
+    files.set("xl/drawings/_rels/vmlDrawing1.vml.rels", encoder.encode(headerLogoRelationshipsXml(logo)));
+  }
   return files;
 }
 
-export async function exportStoryboardExcel(project: StoryboardProject): Promise<void> {
-  const files = await buildXlsxPackage(buildExportModel(project));
+export async function exportStoryboardExcel(project: StoryboardProject, options: ExportOptions = {}): Promise<void> {
+  const files = await buildXlsxPackage(buildExportModel(project), undefined, createFailurePlaceholderImage, {}, options);
   const bytes = createZip([...files].map(([name, data]) => ({ name, data })));
   downloadBlob(
     new Blob([new Uint8Array(bytes)], {
