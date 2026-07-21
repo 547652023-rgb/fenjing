@@ -51,4 +51,53 @@ describe("template snapshots", () => {
       { id: "builtin:promotion", name: "宣传片" },
     ]);
   });
+
+  it("keeps every level of built-in template data immutable", () => {
+    const template = BUILT_IN_TEMPLATES[0];
+    const fieldWithOptions = template.snapshot.fields.find((field) => field.options);
+
+    if (false) {
+      // @ts-expect-error Built-in template collection is readonly.
+      BUILT_IN_TEMPLATES.push(template);
+      // @ts-expect-error Built-in template metadata is readonly.
+      template.name = "已修改";
+      // @ts-expect-error Built-in snapshots are readonly.
+      template.snapshot.title = "已修改";
+      // @ts-expect-error Built-in field arrays are readonly.
+      template.snapshot.fields.push(template.snapshot.fields[0]);
+      // @ts-expect-error Built-in fields are readonly.
+      template.snapshot.fields[0].label = "已修改";
+      // @ts-expect-error Built-in field options are readonly.
+      fieldWithOptions!.options!.push("全景");
+      // @ts-expect-error Built-in shot arrays are readonly.
+      template.snapshot.shots.push(template.snapshot.shots[0]);
+      // @ts-expect-error Built-in shots are readonly.
+      template.snapshot.shots[0].values.shotNumber = "99";
+    }
+
+    expect(Object.isFrozen(BUILT_IN_TEMPLATES)).toBe(true);
+    expect(Object.isFrozen(template)).toBe(true);
+    expect(Object.isFrozen(template.snapshot)).toBe(true);
+    expect(Object.isFrozen(template.snapshot.fields)).toBe(true);
+    expect(Object.isFrozen(template.snapshot.fields[0])).toBe(true);
+    expect(Object.isFrozen(fieldWithOptions?.options)).toBe(true);
+    expect(Object.isFrozen(template.snapshot.shots)).toBe(true);
+    expect(Object.isFrozen(template.snapshot.shots[0])).toBe(true);
+    expect(Object.isFrozen(template.snapshot.shots[0].values)).toBe(true);
+
+    const mutableTemplate = template as unknown as {
+      snapshot: { fields: { label: string }[]; shots: { values: Record<string, string> }[] };
+    };
+    const originalLabel = template.snapshot.fields[0].label;
+    const originalShotNumber = template.snapshot.shots[0].values.shotNumber;
+
+    expect(() => {
+      mutableTemplate.snapshot.fields[0].label = "已修改";
+    }).toThrow(TypeError);
+    expect(() => {
+      mutableTemplate.snapshot.shots[0].values.shotNumber = "99";
+    }).toThrow(TypeError);
+    expect(template.snapshot.fields[0].label).toBe(originalLabel);
+    expect(template.snapshot.shots[0].values.shotNumber).toBe(originalShotNumber);
+  });
 });

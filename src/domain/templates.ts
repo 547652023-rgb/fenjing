@@ -3,14 +3,38 @@ import { DEFAULT_FIELDS, type FieldDefinition, type Shot, type StoryboardProject
 
 export type { StoryboardTemplate, TemplateSnapshot } from "./models";
 
-function cloneFields(fields: FieldDefinition[]): FieldDefinition[] {
+export type DeepReadonly<T> = T extends (...args: never[]) => unknown
+  ? T
+  : T extends readonly (infer Item)[]
+    ? readonly DeepReadonly<Item>[]
+    : T extends object
+      ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
+      : T;
+
+type ReadonlyTemplateSnapshot = DeepReadonly<TemplateSnapshot>;
+
+function deepFreeze<T>(value: T): DeepReadonly<T> {
+  if (value && typeof value === "object") {
+    for (const nestedValue of Object.values(value)) {
+      deepFreeze(nestedValue);
+    }
+    Object.freeze(value);
+  }
+
+  return value as DeepReadonly<T>;
+}
+
+function cloneFields(fields: readonly DeepReadonly<FieldDefinition>[]): FieldDefinition[] {
   return fields.map((field) => ({
     ...field,
     options: field.options ? [...field.options] : undefined,
   }));
 }
 
-function cloneShotsWithoutImages(shots: Shot[], imageFieldIds: Set<string>): Shot[] {
+function cloneShotsWithoutImages(
+  shots: readonly DeepReadonly<Shot>[],
+  imageFieldIds: Set<string>,
+): Shot[] {
   return shots.map((shot) => ({
     ...shot,
     values: Object.fromEntries(
@@ -19,7 +43,7 @@ function cloneShotsWithoutImages(shots: Shot[], imageFieldIds: Set<string>): Sho
   }));
 }
 
-function snapshot(title: string, fields: FieldDefinition[]): TemplateSnapshot {
+function snapshot(title: string, fields: readonly DeepReadonly<FieldDefinition>[]): TemplateSnapshot {
   return {
     title,
     aspectRatio: "16:9",
@@ -28,7 +52,7 @@ function snapshot(title: string, fields: FieldDefinition[]): TemplateSnapshot {
   };
 }
 
-export const BUILT_IN_TEMPLATES: StoryboardTemplate[] = [
+export const BUILT_IN_TEMPLATES: readonly DeepReadonly<StoryboardTemplate>[] = deepFreeze([
   {
     id: "builtin:professional",
     name: "专业",
@@ -53,7 +77,7 @@ export const BUILT_IN_TEMPLATES: StoryboardTemplate[] = [
     updatedAt: "2026-07-21T00:00:00.000Z",
     snapshot: snapshot("宣传片分镜", DEFAULT_FIELDS),
   },
-];
+]);
 
 export function projectToTemplateSnapshot(project: StoryboardProject): TemplateSnapshot {
   const fields = cloneFields(project.fields);
@@ -70,7 +94,7 @@ export function projectToTemplateSnapshot(project: StoryboardProject): TemplateS
 }
 
 export function templateToProject(
-  template: TemplateSnapshot,
+  template: ReadonlyTemplateSnapshot,
   id: string,
   title: string,
 ): StoryboardProject {
