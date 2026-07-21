@@ -34,6 +34,8 @@ export type PdfLayout = {
   width: number;
   height: number;
   title: string;
+  aspectRatio: string;
+  shotCount: number;
   fields: FieldDefinition[];
   pages: PdfLayoutPage[];
 };
@@ -54,6 +56,18 @@ export type PdfRenderer = (model: ExportModel) => Promise<PdfPageImage[]>;
 function minimumRowHeight(fields: FieldDefinition[]): number {
   return fields.some((field) => field.type === "image")
     ? IMAGE_ROW_HEIGHT
+    : TEXT_ROW_HEIGHT;
+}
+
+function imageRowHeight(row: ExportRow, fields: FieldDefinition[]): number {
+  const imageCount = Math.max(
+    1,
+    ...row.cells
+      .filter((cell) => cell.fieldType === "image")
+      .map((cell) => Math.max(1, cell.images.length)),
+  );
+  return fields.some((field) => field.type === "image")
+    ? IMAGE_ROW_HEIGHT * imageCount
     : TEXT_ROW_HEIGHT;
 }
 
@@ -128,7 +142,7 @@ export function buildPdfLayout(
       );
     });
     const maximumLineCount = Math.max(0, ...allCellLines.map((lines) => lines.length));
-    const fullHeight = Math.max(baseHeight, textHeight(maximumLineCount));
+    const fullHeight = Math.max(baseHeight, imageRowHeight(row, model.fields), textHeight(maximumLineCount));
 
     if (fullHeight <= BODY_HEIGHT) {
       if (page.rows.length > 0 && usedHeight + fullHeight > BODY_HEIGHT) finishPage();
@@ -177,6 +191,8 @@ export function buildPdfLayout(
     width: PAGE_WIDTH,
     height: PAGE_HEIGHT,
     title: model.title,
+    aspectRatio: model.aspectRatio,
+    shotCount: model.shotCount,
     fields: model.fields,
     pages,
   };
@@ -231,19 +247,19 @@ async function drawImageCell(
       return { image: null };
     }
   }));
-  const slotWidth = width / images.length;
+  const slotHeight = height / images.length;
 
   loaded.forEach(({ image }, index) => {
-    const slotX = x + slotWidth * index;
+    const slotY = y + slotHeight * index;
     if (image) {
-      context.drawImage(image, slotX, y, slotWidth, height);
+      context.drawImage(image, x, slotY, width, slotHeight);
       return;
     }
     context.fillStyle = "#b91c1c";
     context.font = `13px ${FONT_FAMILY}`;
     context.textAlign = "center";
     context.textBaseline = "middle";
-    context.fillText("图片加载失败", slotX + slotWidth / 2, y + height / 2);
+    context.fillText("图片加载失败", x + width / 2, slotY + slotHeight / 2);
   });
 }
 
@@ -298,7 +314,17 @@ export async function renderPdfPages(
     context.textBaseline = "middle";
     context.fillText(layout.title, PAGE_MARGIN, PAGE_MARGIN + TITLE_HEIGHT / 2);
 
-    let y = PAGE_MARGIN + TITLE_HEIGHT;
+    if (pageIndex === 0) {
+      context.font = `14px ${FONT_FAMILY}`;
+      context.textAlign = "left";
+      context.fillText(
+        `画幅比例：${layout.aspectRatio}    镜头总数：${layout.shotCount}`,
+        PAGE_MARGIN,
+        PAGE_MARGIN + TITLE_HEIGHT + 16,
+      );
+    }
+
+    let y = PAGE_MARGIN + TITLE_HEIGHT + (pageIndex === 0 ? 28 : 0);
     let x = PAGE_MARGIN;
     layout.fields.forEach((field, index) => {
       const width = widths[index];

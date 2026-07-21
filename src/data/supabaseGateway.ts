@@ -20,6 +20,7 @@ import {
   type GatewayErrorCode,
   type StoryboardGateway,
 } from "./gateway";
+import { DEFAULT_ASPECT_RATIO } from "../domain/storyboard";
 
 export type SupabaseClientLike = any;
 
@@ -204,7 +205,7 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
 
   async loadProject(projectId: string): Promise<StoryboardProject> {
     const [projectResult, fieldsResult, optionsResult, shotsResult] = await Promise.all([
-      this.client.from("projects").select("id,title").eq("id", projectId).single(),
+      this.client.from("projects").select("id,title,aspect_ratio").eq("id", projectId).single(),
       this.client.from("fields").select("id,field_key,label,field_type,visible,position,allow_custom_value").eq("project_id", projectId).order("position"),
       this.client.from("field_options").select("field_id,value,position").order("position"),
       this.client.from("shots").select("id,values,version,position").eq("project_id", projectId).order("position"),
@@ -237,6 +238,7 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
     return {
       id: projectRow.id,
       title: projectRow.title,
+      aspectRatio: projectRow.aspect_ratio || DEFAULT_ASPECT_RATIO,
       fields: fieldRows.map((row) => ({
         id: row.field_key,
         label: row.label,
@@ -254,8 +256,12 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
   }
 
   async saveProjectMeta(projectId: string, patch: ProjectMetaPatch): Promise<void> {
-    if (patch.title !== undefined) {
-      await this.renameProject(projectId, patch.title);
+    const projectPatch: Record<string, string> = {};
+    if (patch.title !== undefined) projectPatch.title = patch.title;
+    if (patch.aspectRatio !== undefined) projectPatch.aspect_ratio = patch.aspectRatio;
+    if (Object.keys(projectPatch).length > 0) {
+      const result = await this.client.from("projects").update(projectPatch).eq("id", projectId);
+      if (result.error) throw mapSupabaseError(result.error);
     }
     if (!patch.fields) return;
     const removeFields = await this.client.from("fields").delete().eq("project_id", projectId);
@@ -429,7 +435,11 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
 
   async importLocalProject(project: StoryboardProject): Promise<ProjectSummary> {
     const summary = await this.createProject(project.title);
-    await this.saveProjectMeta(summary.id, { title: project.title, fields: project.fields });
+    await this.saveProjectMeta(summary.id, {
+      title: project.title,
+      aspectRatio: project.aspectRatio || DEFAULT_ASPECT_RATIO,
+      fields: project.fields,
+    });
     const online = await this.loadProject(summary.id);
     if (project.shots[0] && online.shots[0]) {
       await this.saveShot(summary.id, { ...online.shots[0], values: project.shots[0].values }, 1);

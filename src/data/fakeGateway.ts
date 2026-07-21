@@ -139,6 +139,7 @@ export class FakeStoryboardGateway implements StoryboardGateway {
     this.projects.set(projectId, {
       ...project,
       title: patch.title ?? project.title,
+      aspectRatio: patch.aspectRatio ?? project.aspectRatio,
       fields: patch.fields
         ? patch.fields.map((field) => ({ ...field }))
         : project.fields,

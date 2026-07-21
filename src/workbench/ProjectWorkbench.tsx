@@ -10,6 +10,7 @@ import type { AuthUser, RemoteImage, SaveState } from "../domain/models";
 import type { ProjectRole } from "../domain/models";
 import { ExportActions } from "../export/ExportActions";
 import { MemberManager } from "../projects/MemberManager";
+import { ProjectSettings } from "./ProjectSettings";
 import type {
   ProjectUpdate,
   Shot,
@@ -37,6 +38,7 @@ export function ProjectWorkbench({
 }: ProjectWorkbenchProps) {
   const [project, setProject] = useState<StoryboardProject | null>(null);
   const [showFieldSettings, setShowFieldSettings] = useState(false);
+  const [showProjectSettings, setShowProjectSettings] = useState(false);
   const [showMemberManager, setShowMemberManager] = useState(false);
   const [role, setRole] = useState<ProjectRole>("editor");
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
@@ -155,10 +157,12 @@ export function ProjectWorkbench({
     try {
       if (
         previous.title !== next.title ||
+        previous.aspectRatio !== next.aspectRatio ||
         fieldSignature(previous) !== fieldSignature(next)
       ) {
         await gateway.saveProjectMeta(projectId, {
           title: next.title,
+          aspectRatio: next.aspectRatio,
           fields: next.fields,
         });
       }
@@ -354,6 +358,9 @@ export function ProjectWorkbench({
         <button type="button" onClick={() => setShowFieldSettings(true)}>
           字段设置
         </button>
+        <button type="button" onClick={() => setShowProjectSettings(true)}>
+          项目设置
+        </button>
         <ExportActions project={project} />
       </div>
       <StoryboardTable
@@ -366,6 +373,13 @@ export function ProjectWorkbench({
           project={project}
           onChange={updateProject}
           onClose={() => setShowFieldSettings(false)}
+        />
+      ) : null}
+      {showProjectSettings ? (
+        <ProjectSettings
+          project={project}
+          onChange={updateProject}
+          onClose={() => setShowProjectSettings(false)}
         />
       ) : null}
       {showMemberManager ? (

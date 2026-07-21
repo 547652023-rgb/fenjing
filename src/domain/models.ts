@@ -37,6 +37,7 @@ export type RemoteImage = {
 
 export type ProjectMetaPatch = {
   title?: string;
+  aspectRatio?: string;
   fields?: FieldDefinition[];
 };
 

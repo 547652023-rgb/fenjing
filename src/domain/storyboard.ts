@@ -28,6 +28,7 @@ export type Shot = { id: string; values: Record<string, string> };
 export type StoryboardProject = {
   id: string;
   title: string;
+  aspectRatio?: string;
   fields: FieldDefinition[];
   shots: Shot[];
 };
@@ -44,6 +45,15 @@ export const SHOT_SIZE_OPTIONS = [
   "近景",
   "特写",
 ] as const;
+
+export const DEFAULT_ASPECT_RATIO = "16:9";
+export const ASPECT_RATIO_OPTIONS = ["16:9", "9:16", "4:3", "1:1", "2.35:1"] as const;
+
+export function normalizeAspectRatio(value: string): string {
+  const normalized = value.trim().normalize("NFKC");
+  if (!normalized) throw new Error("Aspect ratio is required");
+  return normalized;
+}
 
 const seededFields: Array<
   Pick<
@@ -104,6 +114,7 @@ export function createProject(): StoryboardProject {
   return {
     id: "storyboard-project",
     title: "未命名项目",
+    aspectRatio: DEFAULT_ASPECT_RATIO,
     fields: copyFields(DEFAULT_FIELDS),
     shots: [{ id: "1", values: { shotNumber: "1" } }],
   };

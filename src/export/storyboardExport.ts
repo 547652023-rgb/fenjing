@@ -12,6 +12,8 @@ export type ExportCell = {
 export type ExportRow = { shotId: string; cells: ExportCell[] };
 export type ExportModel = {
   title: string;
+  aspectRatio: string;
+  shotCount: number;
   fields: FieldDefinition[];
   rows: ExportRow[];
 };
@@ -23,6 +25,8 @@ export function buildExportModel(project: StoryboardProject): ExportModel {
     .map((field) => ({ ...field, options: field.options ? [...field.options] : undefined }));
   return {
     title: project.title,
+    aspectRatio: project.aspectRatio || "16:9",
+    shotCount: project.shots.length,
     fields,
     rows: project.shots.map((shot) => ({
       shotId: shot.id,
