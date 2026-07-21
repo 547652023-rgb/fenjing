@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { vi } from "vitest";
 import type { ProjectSummary, StoryboardTemplate } from "../domain/models";
 import { createProject } from "../domain/storyboard";
@@ -51,6 +52,26 @@ function renderLibrary(overrides: Partial<React.ComponentProps<typeof TemplateLi
   return props;
 }
 
+function TemplateLibraryLauncher() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>打开模板库</button>
+      {open ? (
+        <TemplateLibrary
+          projects={projects}
+          templates={[...BUILT_IN_TEMPLATES, customTemplate]}
+          onClose={() => setOpen(false)}
+          onCreate={vi.fn()}
+          onDelete={vi.fn()}
+          onUpdate={vi.fn()}
+        />
+      ) : null}
+    </>
+  );
+}
+
 it("selects blank, built-in, and shared templates", async () => {
   const user = userEvent.setup();
   const onSelect = vi.fn();
@@ -61,12 +82,65 @@ it("selects blank, built-in, and shared templates", async () => {
     />,
   );
 
-  expect(screen.getByRole("radio", { name: "空白项目" })).toBeChecked();
-  await user.click(screen.getByRole("radio", { name: "专业" }));
+  expect(screen.getByRole("radio", { name: /空白项目.*使用默认分镜字段/ })).toBeChecked();
+  await user.click(screen.getByRole("radio", { name: /专业.*内置模板/ }));
   expect(onSelect).toHaveBeenLastCalledWith("builtin:professional");
-  await user.click(screen.getByRole("radio", { name: "团队模板" }));
+  await user.click(screen.getByRole("radio", { name: /团队模板.*共享模板/ }));
   expect(onSelect).toHaveBeenLastCalledWith("template-1");
-  expect(screen.getByRole("radio", { name: "团队模板" })).toBeChecked();
+  expect(screen.getByRole("radio", { name: /团队模板.*共享模板/ })).toBeChecked();
+});
+
+it("gives built-in and shared templates with the same name distinct accessible labels", () => {
+  render(
+    <TemplatePicker
+      templates={[
+        BUILT_IN_TEMPLATES[0],
+        { ...customTemplate, name: BUILT_IN_TEMPLATES[0].name },
+      ]}
+      onSelect={vi.fn()}
+    />,
+  );
+
+  expect(screen.getByRole("radio", { name: /专业.*内置模板/ })).toBeVisible();
+  expect(screen.getByRole("radio", { name: /专业.*共享模板/ })).toBeVisible();
+});
+
+it("opens with native modal semantics so background controls are inactive", () => {
+  const originalShowModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, "showModal");
+  const showModal = vi.fn(function (this: HTMLDialogElement) {
+    this.setAttribute("open", "");
+  });
+  Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
+    configurable: true,
+    value: showModal,
+  });
+
+  try {
+    renderLibrary();
+
+    expect(showModal).toHaveBeenCalledOnce();
+    expect(screen.getByRole("dialog", { name: "模板库" })).toHaveAttribute("aria-modal", "true");
+  } finally {
+    if (originalShowModal) {
+      Object.defineProperty(HTMLDialogElement.prototype, "showModal", originalShowModal);
+    } else {
+      Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
+    }
+  }
+});
+
+it("focuses the close control and restores launcher focus when cancelled with Escape", async () => {
+  const user = userEvent.setup();
+  render(<TemplateLibraryLauncher />);
+
+  const launcher = screen.getByRole("button", { name: "打开模板库" });
+  await user.click(launcher);
+  expect(screen.getByRole("button", { name: "关闭模板库" })).toHaveFocus();
+
+  await user.keyboard("{Escape}");
+
+  expect(screen.queryByRole("dialog", { name: "模板库" })).not.toBeInTheDocument();
+  expect(launcher).toHaveFocus();
 });
 
 it("creates shared templates only from projects visible to the member", async () => {

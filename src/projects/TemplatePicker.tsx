@@ -32,7 +32,7 @@ export function TemplatePicker({ templates, value, onSelect }: TemplatePickerPro
             onChange={() => select("blank")}
           />
           <span>空白项目</span>
-          <small aria-hidden="true">使用默认分镜字段</small>
+          <small>使用默认分镜字段</small>
         </label>
         {templates.map((template) => (
           <label className="template-option" key={template.id}>
@@ -44,7 +44,7 @@ export function TemplatePicker({ templates, value, onSelect }: TemplatePickerPro
               onChange={() => select(template.id)}
             />
             <span>{template.name}</span>
-            <small aria-hidden="true">{template.builtIn ? "内置模板" : "共享模板"}</small>
+            <small>{template.builtIn ? "内置模板" : "共享模板"}</small>
           </label>
         ))}
       </div>

@@ -21,7 +21,7 @@ it("selects a template while creating a project", async () => {
   );
 
   await user.click(screen.getByRole("button", { name: "新建项目" }));
-  await user.click(await screen.findByRole("radio", { name: "宣传片" }));
+  await user.click(await screen.findByRole("radio", { name: /宣传片.*内置模板/ }));
   await user.click(screen.getByRole("button", { name: "创建" }));
 
   expect(createProject).toHaveBeenCalledWith("项目", BUILT_IN_TEMPLATES[2].snapshot);

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { ProjectSummary, StoryboardTemplate } from "../domain/models";
 import type { DeepReadonly } from "../domain/templates";
 
@@ -24,6 +24,11 @@ export function TemplateLibrary({
   onDelete,
   onClose,
 }: TemplateLibraryProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(
+    document.activeElement instanceof HTMLElement ? document.activeElement : null,
+  );
   const [name, setName] = useState("");
   const [sourceProjectId, setSourceProjectId] = useState(projects[0]?.id ?? "");
   const [editing, setEditing] = useState<EditingTemplate | null>(null);
@@ -35,6 +40,29 @@ export function TemplateLibrary({
       setSourceProjectId(projects[0]?.id ?? "");
     }
   }, [projects, sourceProjectId]);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    if (!dialog.open) {
+      if (typeof dialog.showModal === "function") {
+        dialog.showModal();
+      } else {
+        dialog.setAttribute("open", "");
+      }
+    }
+    closeButtonRef.current?.focus();
+
+    return () => {
+      if (dialog.open && typeof dialog.close === "function") dialog.close();
+      if (returnFocusRef.current?.isConnected) returnFocusRef.current.focus();
+    };
+  }, []);
+
+  function close() {
+    onClose();
+  }
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -99,13 +127,28 @@ export function TemplateLibrary({
   const custom = templates.filter((template) => !template.builtIn);
 
   return (
-    <dialog aria-labelledby="template-library-title" className="template-library" open>
+    <dialog
+      ref={dialogRef}
+      aria-labelledby="template-library-title"
+      aria-modal="true"
+      className="template-library"
+      onCancel={(event) => {
+        event.preventDefault();
+        close();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          close();
+        }
+      }}
+    >
       <header>
         <div>
           <p className="project-header__eyebrow">共享资源</p>
           <h2 id="template-library-title">模板库</h2>
         </div>
-        <button aria-label="关闭模板库" type="button" onClick={onClose}>×</button>
+        <button ref={closeButtonRef} aria-label="关闭模板库" type="button" onClick={close}>×</button>
       </header>
 
       <form className="template-library__form" onSubmit={create}>
