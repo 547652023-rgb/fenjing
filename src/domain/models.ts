@@ -1,4 +1,4 @@
-import type { FieldDefinition, Shot } from "./storyboard";
+import type { FieldDefinition, Shot, StoryboardProject } from "./storyboard";
 
 export type AuthUser = {
   id: string;
@@ -47,6 +47,20 @@ export type UploadImageInput = {
   fieldId: string;
   file: File;
   position: number;
+};
+
+export type TemplateSnapshot = Pick<
+  StoryboardProject,
+  "title" | "aspectRatio" | "fields" | "shots"
+>;
+
+export type StoryboardTemplate = {
+  id: string;
+  name: string;
+  sourceProjectId?: string;
+  builtIn: boolean;
+  snapshot: TemplateSnapshot;
+  updatedAt: string;
 };
 
 export type SaveState =
