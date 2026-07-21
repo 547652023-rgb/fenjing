@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { StoryboardGateway } from "../data/gateway";
-import type { AuthUser, ProjectSummary } from "../domain/models";
+import type { AuthUser, ProjectSummary, StoryboardTemplate } from "../domain/models";
+import { projectToTemplateSnapshot } from "../domain/templates";
 import { LocalImportPrompt } from "../migration/LocalImportPrompt";
+import { TemplateLibrary } from "./TemplateLibrary";
+import { TemplatePicker, type TemplateSelection } from "./TemplatePicker";
 
 type ProjectDashboardProps = {
   gateway: StoryboardGateway;
@@ -66,19 +69,27 @@ export function ProjectDashboard({
   onSignOut,
 }: ProjectDashboardProps) {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [templates, setTemplates] = useState<StoryboardTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateSelection>("blank");
   const [renaming, setRenaming] = useState<ProjectSummary | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
 
   const refresh = useCallback(async () => {
     try {
-      setProjects(await gateway.listProjects());
+      const [nextProjects, nextTemplates] = await Promise.all([
+        gateway.listProjects(),
+        gateway.listTemplates(),
+      ]);
+      setProjects(nextProjects);
+      setTemplates(nextTemplates);
       setError("");
     } catch {
-      setError("项目加载失败，请检查网络后重试");
+      setError("项目或模板加载失败，请检查网络后重试");
     } finally {
       setLoading(false);
     }
@@ -90,13 +101,20 @@ export function ProjectDashboard({
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!newTitle.trim()) {
-      setError("请输入项目名称");
+    const title = newTitle.trim() || "项目";
+    const template = templates.find(({ id }) => id === selectedTemplate);
+    if (selectedTemplate !== "blank" && !template) {
+      setError("所选模板不可用，请重新选择");
       return;
     }
     try {
-      await gateway.createProject(newTitle);
+      if (template) {
+        await gateway.createProject(title, template.snapshot);
+      } else {
+        await gateway.createProject(title);
+      }
       setNewTitle("");
+      setSelectedTemplate("blank");
       setShowCreate(false);
       await refresh();
     } catch {
@@ -131,6 +149,40 @@ export function ProjectDashboard({
     }
   }
 
+  async function createTemplate(sourceProjectId: string, name: string) {
+    const sourceProject = await gateway.loadProject(sourceProjectId);
+    await gateway.createTemplate(
+      sourceProjectId,
+      name,
+      projectToTemplateSnapshot(sourceProject),
+    );
+    setTemplates(await gateway.listTemplates());
+  }
+
+  async function updateTemplate(templateId: string, name: string) {
+    const template = templates.find(({ id }) => id === templateId);
+    if (!template || template.builtIn || !template.sourceProjectId) {
+      throw new Error("template_not_editable");
+    }
+    const sourceProject = await gateway.loadProject(template.sourceProjectId);
+    await gateway.updateTemplate(
+      templateId,
+      name,
+      projectToTemplateSnapshot(sourceProject),
+    );
+    setTemplates(await gateway.listTemplates());
+  }
+
+  async function deleteTemplate(templateId: string) {
+    const template = templates.find(({ id }) => id === templateId);
+    if (!template || template.builtIn) {
+      throw new Error("template_not_editable");
+    }
+    await gateway.deleteTemplate(templateId);
+    setTemplates(await gateway.listTemplates());
+    if (selectedTemplate === templateId) setSelectedTemplate("blank");
+  }
+
   const owned = projects.filter((project) => project.role === "owner");
   const invited = projects.filter((project) => project.role === "editor");
 
@@ -151,7 +203,16 @@ export function ProjectDashboard({
 
       <div className="dashboard-toolbar">
         <p>{loading ? "正在加载项目…" : `共 ${projects.length} 个项目`}</p>
-        <button type="button" onClick={() => setShowCreate(true)}>新建项目</button>
+        <div className="dashboard-toolbar__actions">
+          <button
+            className="button-secondary"
+            type="button"
+            onClick={() => setShowTemplateLibrary(true)}
+          >
+            模板库
+          </button>
+          <button type="button" onClick={() => setShowCreate(true)}>新建项目</button>
+        </div>
       </div>
       {error ? <p className="form-error" role="alert">{error}</p> : null}
 
@@ -166,11 +227,37 @@ export function ProjectDashboard({
               onChange={(event) => setNewTitle(event.target.value)}
             />
           </label>
-          <button type="submit">创建</button>
-          <button className="button-secondary" type="button" onClick={() => setShowCreate(false)}>
-            取消
-          </button>
+          <TemplatePicker
+            templates={templates}
+            value={selectedTemplate}
+            onSelect={setSelectedTemplate}
+          />
+          <div className="project-inline-form__actions">
+            <button type="submit">创建</button>
+            <button
+              className="button-secondary"
+              type="button"
+              onClick={() => {
+                setShowCreate(false);
+                setNewTitle("");
+                setSelectedTemplate("blank");
+              }}
+            >
+              取消
+            </button>
+          </div>
         </form>
+      ) : null}
+
+      {showTemplateLibrary ? (
+        <TemplateLibrary
+          projects={projects}
+          templates={templates}
+          onClose={() => setShowTemplateLibrary(false)}
+          onCreate={createTemplate}
+          onDelete={deleteTemplate}
+          onUpdate={updateTemplate}
+        />
       ) : null}
 
       {renaming ? (

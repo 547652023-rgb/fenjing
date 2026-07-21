@@ -119,6 +119,12 @@ body {
   color: #66736b;
 }
 
+.dashboard-toolbar__actions,
+.project-inline-form__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .local-import-prompt {
   display: flex;
   align-items: center;
@@ -211,6 +217,9 @@ body {
 }
 
 .project-inline-form {
+  display: grid;
+  align-items: stretch;
+  gap: 1rem;
   margin-bottom: 1rem;
   border: 1px solid #d8e0da;
   border-radius: 12px;
@@ -220,7 +229,6 @@ body {
 
 .project-inline-form label {
   display: grid;
-  flex: 1;
   gap: 0.35rem;
 }
 
@@ -228,6 +236,60 @@ body {
   border: 1px solid #cdd8d0;
   border-radius: 8px;
   padding: 0.65rem;
+}
+
+.project-inline-form__actions {
+  justify-content: flex-end;
+}
+
+.template-picker {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.template-picker legend {
+  margin-bottom: 0.5rem;
+  color: #526158;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.template-picker__options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.65rem;
+}
+
+.template-option {
+  display: grid !important;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.15rem 0.5rem !important;
+  border: 1px solid #d8e0da;
+  border-radius: 10px;
+  padding: 0.75rem;
+  cursor: pointer;
+}
+
+.template-option:has(input:checked) {
+  border-color: #1f5a3d;
+  background: #f0f7f2;
+}
+
+.template-option input {
+  grid-row: 1 / span 2;
+  width: auto;
+  margin: 0;
+}
+
+.template-option span {
+  font-weight: 700;
+}
+
+.template-option small {
+  color: #66736b;
 }
 
 .empty-state {
@@ -897,5 +959,109 @@ button:disabled {
 
 .member-list li span {
   color: #66736b;
+  font-size: 0.78rem;
+}
+
+.template-library {
+  position: fixed;
+  inset: 1.5rem 0 auto;
+  width: min(760px, calc(100vw - 3rem));
+  max-height: calc(100vh - 3rem);
+  margin: auto;
+  border: 1px solid #d8e0da;
+  border-radius: 16px;
+  padding: 1.25rem;
+  color: #17221d;
+  background: #fff;
+  box-shadow: 0 24px 70px rgb(15 35 24 / 28%);
+  overflow: auto;
+}
+
+.template-library::backdrop {
+  background: rgb(19 35 26 / 45%);
+}
+
+.template-library header,
+.template-library__form,
+.template-library__list li,
+.template-library__edit,
+.template-library__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.template-library header,
+.template-library__list li {
+  justify-content: space-between;
+}
+
+.template-library h2,
+.template-library header p {
+  margin: 0;
+}
+
+.template-library h3 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.template-library__form {
+  align-items: end;
+  margin-top: 1rem;
+  border-radius: 12px;
+  padding: 1rem;
+  background: #f5f8f5;
+}
+
+.template-library__form label,
+.template-library__edit label {
+  display: grid;
+  flex: 1;
+  gap: 0.35rem;
+}
+
+.template-library__form input,
+.template-library__form select,
+.template-library__edit input {
+  min-width: 0;
+  border: 1px solid #cdd8d0;
+  border-radius: 8px;
+  padding: 0.65rem;
+  background: #fff;
+}
+
+.template-library__list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.template-library__list li {
+  min-height: 3.5rem;
+  border: 1px solid #e3e9e4;
+  border-radius: 10px;
+  padding: 0.75rem;
+}
+
+.template-library__list li > div:first-child {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.template-library__list li span {
+  color: #66736b;
+  font-size: 0.78rem;
+}
+
+.template-library__edit {
+  width: 100%;
+}
+
+.template-library__actions button,
+.template-library__edit button {
+  padding: 0.5rem 0.75rem;
   font-size: 0.78rem;
 }
