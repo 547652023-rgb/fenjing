@@ -97,3 +97,24 @@ it("creates a project from a template snapshot without sharing mutable state", a
     ],
   });
 });
+
+it("removes image values from caller-supplied template snapshots during project creation", async () => {
+  const gateway = new FakeStoryboardGateway();
+  await gateway.signUp("owner@example.com", "password123");
+  const snapshot = {
+    title: "带图片的模板",
+    aspectRatio: "16:9",
+    fields: [
+      { id: "frame", label: "画面", type: "image" as const, visible: true, order: 0 },
+      { id: "content", label: "内容", type: "text" as const, visible: true, order: 1 },
+    ],
+    shots: [{ id: "template-shot", values: { frame: "image-data", content: "保留" } }],
+  };
+
+  const summary = await gateway.createProject("新广告", snapshot);
+
+  await expect(gateway.loadProject(summary.id)).resolves.toMatchObject({
+    shots: [{ values: { content: "保留" } }],
+  });
+  expect((await gateway.loadProject(summary.id)).shots[0].values.frame).toBeUndefined();
+});

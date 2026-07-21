@@ -201,11 +201,14 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
     template?: TemplateSnapshot,
   ): Promise<ProjectSummary> {
     const user = await this.requireUser();
+    const templateProject = template
+      ? templateToProject(template, "template-snapshot", title.trim())
+      : undefined;
     const projectInsert = {
       title: title.trim(),
       owner_id: user.id,
-      ...(template
-        ? { aspect_ratio: template.aspectRatio || DEFAULT_ASPECT_RATIO }
+      ...(templateProject
+        ? { aspect_ratio: templateProject.aspectRatio || DEFAULT_ASPECT_RATIO }
         : {}),
     };
     const rows = requireData<any[]>(
@@ -216,13 +219,13 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
     );
     const row = rows[0];
     if (!row) throw new GatewayError("not_found");
-    if (template) {
-      await this.replaceFields(row.id, template.fields);
+    if (templateProject) {
+      await this.replaceFields(row.id, templateProject.fields);
       const removeShots = await this.client.from("shots").delete().eq("project_id", row.id);
       if (removeShots.error) throw mapSupabaseError(removeShots.error);
-      if (template.shots.length > 0) {
+      if (templateProject.shots.length > 0) {
         const insertShots = await this.client.from("shots").insert(
-          template.shots.map((shot, position) => ({
+          templateProject.shots.map((shot, position) => ({
             project_id: row.id,
             position,
             values: { ...shot.values },

@@ -125,10 +125,13 @@ export class FakeStoryboardGateway implements StoryboardGateway {
   ): Promise<ProjectSummary> {
     const user = this.requireUser();
     const id = `project-${this.nextProjectId++}`;
-    const project = template
+    const templateProject = template
+      ? templateToProject(template, id, title.trim())
+      : undefined;
+    const project = templateProject
       ? {
-          ...templateToProject(template, id, title.trim()),
-          shots: template.shots.map((shot, index) => ({
+          ...templateProject,
+          shots: templateProject.shots.map((shot, index) => ({
             ...shot,
             id: `${id}-shot-${index + 1}`,
             values: { ...shot.values },

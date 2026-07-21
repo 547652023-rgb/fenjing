@@ -203,4 +203,69 @@ describe("SupabaseStoryboardGateway", () => {
       { project_id: "project-1", position: 1, values: snapshot.shots[1].values },
     ]);
   });
+
+  it("removes image values from caller-supplied template snapshots before inserting shots", async () => {
+    const snapshot = {
+      title: "带图片的模板",
+      aspectRatio: "16:9",
+      fields: [
+        { id: "frame", label: "画面", type: "image" as const, visible: true, order: 0 },
+        { id: "content", label: "内容", type: "text" as const, visible: true, order: 1 },
+      ],
+      shots: [{ id: "template-shot", values: { frame: "image-data", content: "保留" } }],
+    };
+    const projectSelect = vi.fn().mockResolvedValue({
+      data: [{
+        id: "project-1",
+        title: "新项目",
+        owner_id: "user-1",
+        updated_at: "2026-07-21T01:00:00.000Z",
+      }],
+      error: null,
+    });
+    const projectInsert = vi.fn(() => ({ select: projectSelect }));
+    const deleteFieldsEq = vi.fn().mockResolvedValue({ data: null, error: null });
+    const insertFieldsSelect = vi.fn().mockResolvedValue({
+      data: [
+        { id: "field-1", field_key: "frame" },
+        { id: "field-2", field_key: "content" },
+      ],
+      error: null,
+    });
+    const insertFields = vi.fn(() => ({ select: insertFieldsSelect }));
+    const deleteShotsEq = vi.fn().mockResolvedValue({ data: null, error: null });
+    const insertShots = vi.fn().mockResolvedValue({ data: null, error: null });
+    const client = {
+      auth: {
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: { user: { id: "user-1", email: "owner@example.com" } } },
+          error: null,
+        }),
+      },
+      from: vi.fn((table: string) => {
+        if (table === "projects") return { insert: projectInsert };
+        if (table === "fields") {
+          return {
+            delete: vi.fn(() => ({ eq: deleteFieldsEq })),
+            insert: insertFields,
+          };
+        }
+        if (table === "field_options") return { insert: vi.fn().mockResolvedValue({ data: null, error: null }) };
+        if (table === "shots") {
+          return {
+            delete: vi.fn(() => ({ eq: deleteShotsEq })),
+            insert: insertShots,
+          };
+        }
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    };
+    const gateway = createSupabaseGateway(client);
+
+    await gateway.createProject("新项目", snapshot);
+
+    expect(insertShots).toHaveBeenCalledWith([
+      { project_id: "project-1", position: 0, values: { content: "保留" } },
+    ]);
+  });
 });
