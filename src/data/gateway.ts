@@ -6,6 +6,8 @@ import type {
   ProjectMetaPatch,
   ProjectSummary,
   RemoteImage,
+  StoryboardTemplate,
+  TemplateSnapshot,
   Unsubscribe,
   UploadImageInput,
   VersionedShot,
@@ -40,7 +42,19 @@ export interface StoryboardGateway {
   signIn(email: string, password: string): Promise<AuthUser>;
   signOut(): Promise<void>;
   listProjects(): Promise<ProjectSummary[]>;
-  createProject(title: string): Promise<ProjectSummary>;
+  createProject(title: string, template?: TemplateSnapshot): Promise<ProjectSummary>;
+  listTemplates(): Promise<StoryboardTemplate[]>;
+  createTemplate(
+    sourceProjectId: string,
+    name: string,
+    snapshot: TemplateSnapshot,
+  ): Promise<StoryboardTemplate>;
+  updateTemplate(
+    templateId: string,
+    name: string,
+    snapshot: TemplateSnapshot,
+  ): Promise<void>;
+  deleteTemplate(templateId: string): Promise<void>;
   renameProject(projectId: string, title: string): Promise<void>;
   deleteProject(projectId: string): Promise<void>;
   loadProject(projectId: string): Promise<StoryboardProject>;

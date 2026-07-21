@@ -15,10 +15,17 @@ import type {
   ProjectRole,
   ProjectSummary,
   RemoteImage,
+  StoryboardTemplate,
+  TemplateSnapshot,
   Unsubscribe,
   UploadImageInput,
   VersionedShot,
 } from "../domain/models";
+import {
+  BUILT_IN_TEMPLATES,
+  templateToProject,
+  type DeepReadonly,
+} from "../domain/templates";
 import { GatewayError, type StoryboardGateway } from "./gateway";
 
 type StoredUser = AuthUser & { password: string };
@@ -37,11 +44,24 @@ function cloneProject(project: StoryboardProject): StoryboardProject {
   };
 }
 
+function cloneSnapshot(snapshot: DeepReadonly<TemplateSnapshot>): TemplateSnapshot {
+  const project = templateToProject(snapshot, "template-snapshot", snapshot.title);
+  const { id: _id, ...cloned } = project;
+  return cloned;
+}
+
+function cloneTemplate(
+  template: DeepReadonly<StoryboardTemplate>,
+): StoryboardTemplate {
+  return { ...template, snapshot: cloneSnapshot(template.snapshot) };
+}
+
 export class FakeStoryboardGateway implements StoryboardGateway {
   private readonly users = new Map<string, StoredUser>();
   private readonly projects = new Map<string, StoryboardProject>();
   private readonly owners = new Map<string, string>();
   private readonly memberships = new Map<string, Map<string, ProjectRole>>();
+  private readonly templates = new Map<string, StoryboardTemplate>();
   private readonly versions = new Map<string, number>();
   private readonly authListeners = new Set<(user: AuthUser | null) => void>();
   private readonly projectListeners = new Map<
@@ -51,6 +71,7 @@ export class FakeStoryboardGateway implements StoryboardGateway {
   private currentUser: AuthUser | null = null;
   private nextUserId = 1;
   private nextProjectId = 1;
+  private nextTemplateId = 1;
   private nextConflict: { projectId: string; shot: Shot } | null = null;
 
   async getSession(): Promise<AuthUser | null> {
@@ -98,15 +119,77 @@ export class FakeStoryboardGateway implements StoryboardGateway {
       .map((projectId) => this.summaryFor(projectId));
   }
 
-  async createProject(title: string): Promise<ProjectSummary> {
+  async createProject(
+    title: string,
+    template?: TemplateSnapshot,
+  ): Promise<ProjectSummary> {
     const user = this.requireUser();
     const id = `project-${this.nextProjectId++}`;
-    const project = { ...createLocalProject(), id, title: title.trim() };
+    const project = template
+      ? {
+          ...templateToProject(template, id, title.trim()),
+          shots: template.shots.map((shot, index) => ({
+            ...shot,
+            id: `${id}-shot-${index + 1}`,
+            values: { ...shot.values },
+          })),
+        }
+      : { ...createLocalProject(), id, title: title.trim() };
     this.projects.set(id, project);
     this.owners.set(id, user.id);
     this.memberships.set(id, new Map([[user.id, "owner"]]));
     project.shots.forEach((shot) => this.versions.set(shot.id, 1));
     return this.summaryFor(id);
+  }
+
+  async listTemplates(): Promise<StoryboardTemplate[]> {
+    const user = this.requireUser();
+    const builtIns = BUILT_IN_TEMPLATES.map(cloneTemplate);
+    const custom = [...this.templates.values()]
+      .filter((template) =>
+        this.memberships.get(template.sourceProjectId!)?.has(user.id),
+      )
+      .map(cloneTemplate);
+    return [...builtIns, ...custom];
+  }
+
+  async createTemplate(
+    sourceProjectId: string,
+    name: string,
+    snapshot: TemplateSnapshot,
+  ): Promise<StoryboardTemplate> {
+    this.requireProjectMember(sourceProjectId);
+    const template: StoryboardTemplate = {
+      id: `template-${this.nextTemplateId++}`,
+      sourceProjectId,
+      name: name.trim(),
+      snapshot: cloneSnapshot(snapshot),
+      builtIn: false,
+      updatedAt: new Date().toISOString(),
+    };
+    this.templates.set(template.id, template);
+    return cloneTemplate(template);
+  }
+
+  async updateTemplate(
+    templateId: string,
+    name: string,
+    snapshot: TemplateSnapshot,
+  ): Promise<void> {
+    const template = this.requireTemplate(templateId);
+    this.requireProjectMember(template.sourceProjectId!);
+    this.templates.set(templateId, {
+      ...template,
+      name: name.trim(),
+      snapshot: cloneSnapshot(snapshot),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  async deleteTemplate(templateId: string): Promise<void> {
+    const template = this.requireTemplate(templateId);
+    this.requireProjectMember(template.sourceProjectId!);
+    this.templates.delete(templateId);
   }
 
   async renameProject(projectId: string, title: string): Promise<void> {
@@ -124,6 +207,9 @@ export class FakeStoryboardGateway implements StoryboardGateway {
     this.projects.delete(projectId);
     this.owners.delete(projectId);
     this.memberships.delete(projectId);
+    for (const [templateId, template] of this.templates) {
+      if (template.sourceProjectId === projectId) this.templates.delete(templateId);
+    }
     this.emit(projectId, { type: "project.changed" });
   }
 
@@ -338,6 +424,12 @@ export class FakeStoryboardGateway implements StoryboardGateway {
     if (this.owners.get(projectId) !== user.id) {
       throw new GatewayError("forbidden");
     }
+  }
+
+  private requireTemplate(templateId: string): StoryboardTemplate {
+    const template = this.templates.get(templateId);
+    if (!template) throw new GatewayError("not_found");
+    return template;
   }
 
   private summaryFor(projectId: string): ProjectSummary {

@@ -11,6 +11,8 @@ import type {
   ProjectMetaPatch,
   ProjectSummary,
   RemoteImage,
+  StoryboardTemplate,
+  TemplateSnapshot,
   Unsubscribe,
   UploadImageInput,
   VersionedShot,
@@ -21,6 +23,11 @@ import {
   type StoryboardGateway,
 } from "./gateway";
 import { DEFAULT_ASPECT_RATIO } from "../domain/storyboard";
+import {
+  BUILT_IN_TEMPLATES,
+  templateToProject,
+  type DeepReadonly,
+} from "../domain/templates";
 
 export type SupabaseClientLike = any;
 
@@ -76,6 +83,23 @@ function rowToShot(row: any): Shot {
 
 function rowToVersionedShot(row: any): VersionedShot {
   return { shot: rowToShot(row), version: row.version ?? 1 };
+}
+
+function cloneSnapshot(snapshot: DeepReadonly<TemplateSnapshot>): TemplateSnapshot {
+  const project = templateToProject(snapshot, "template-snapshot", snapshot.title);
+  const { id: _id, ...cloned } = project;
+  return cloned;
+}
+
+function rowToTemplate(row: any): StoryboardTemplate {
+  return {
+    id: row.id,
+    sourceProjectId: row.source_project_id,
+    name: row.name,
+    snapshot: cloneSnapshot(row.snapshot),
+    builtIn: false,
+    updatedAt: row.updated_at,
+  };
 }
 
 function sanitizeFileName(name: string): string {
@@ -172,16 +196,41 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
     }));
   }
 
-  async createProject(title: string): Promise<ProjectSummary> {
+  async createProject(
+    title: string,
+    template?: TemplateSnapshot,
+  ): Promise<ProjectSummary> {
     const user = await this.requireUser();
+    const projectInsert = {
+      title: title.trim(),
+      owner_id: user.id,
+      ...(template
+        ? { aspect_ratio: template.aspectRatio || DEFAULT_ASPECT_RATIO }
+        : {}),
+    };
     const rows = requireData<any[]>(
       await this.client
         .from("projects")
-        .insert({ title: title.trim(), owner_id: user.id })
+        .insert(projectInsert)
         .select("id,title,owner_id,updated_at"),
     );
     const row = rows[0];
     if (!row) throw new GatewayError("not_found");
+    if (template) {
+      await this.replaceFields(row.id, template.fields);
+      const removeShots = await this.client.from("shots").delete().eq("project_id", row.id);
+      if (removeShots.error) throw mapSupabaseError(removeShots.error);
+      if (template.shots.length > 0) {
+        const insertShots = await this.client.from("shots").insert(
+          template.shots.map((shot, position) => ({
+            project_id: row.id,
+            position,
+            values: { ...shot.values },
+          })),
+        );
+        if (insertShots.error) throw mapSupabaseError(insertShots.error);
+      }
+    }
     return {
       id: row.id,
       title: row.title,
@@ -191,6 +240,57 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
       memberCount: 1,
       updatedAt: row.updated_at,
     };
+  }
+
+  async listTemplates(): Promise<StoryboardTemplate[]> {
+    const rows = requireData<any[]>(
+      await this.client
+        .from("project_templates")
+        .select("id,source_project_id,name,snapshot,updated_at")
+        .order("updated_at", { ascending: false }),
+    );
+    return [
+      ...BUILT_IN_TEMPLATES.map((template) =>
+        ({ ...template, snapshot: cloneSnapshot(template.snapshot) }),
+      ),
+      ...rows.map(rowToTemplate),
+    ];
+  }
+
+  async createTemplate(
+    sourceProjectId: string,
+    name: string,
+    snapshot: TemplateSnapshot,
+  ): Promise<StoryboardTemplate> {
+    const rows = requireData<any[]>(
+      await this.client
+        .from("project_templates")
+        .insert({
+          source_project_id: sourceProjectId,
+          name: name.trim(),
+          snapshot: cloneSnapshot(snapshot),
+        })
+        .select("id,source_project_id,name,snapshot,updated_at"),
+    );
+    if (!rows[0]) throw new GatewayError("not_found");
+    return rowToTemplate(rows[0]);
+  }
+
+  async updateTemplate(
+    templateId: string,
+    name: string,
+    snapshot: TemplateSnapshot,
+  ): Promise<void> {
+    const result = await this.client
+      .from("project_templates")
+      .update({ name: name.trim(), snapshot: cloneSnapshot(snapshot) })
+      .eq("id", templateId);
+    if (result.error) throw mapSupabaseError(result.error);
+  }
+
+  async deleteTemplate(templateId: string): Promise<void> {
+    const result = await this.client.from("project_templates").delete().eq("id", templateId);
+    if (result.error) throw mapSupabaseError(result.error);
   }
 
   async renameProject(projectId: string, title: string): Promise<void> {
@@ -264,13 +364,20 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
       if (result.error) throw mapSupabaseError(result.error);
     }
     if (!patch.fields) return;
+    await this.replaceFields(projectId, patch.fields);
+  }
+
+  private async replaceFields(
+    projectId: string,
+    fields: FieldDefinition[],
+  ): Promise<void> {
     const removeFields = await this.client.from("fields").delete().eq("project_id", projectId);
     if (removeFields.error) throw mapSupabaseError(removeFields.error);
     const rows = requireData<any[]>(
       await this.client
         .from("fields")
         .insert(
-          patch.fields.map((field) => ({
+          fields.map((field) => ({
             project_id: projectId,
             field_key: field.id,
             label: field.label,
@@ -282,7 +389,7 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
         )
         .select("id,field_key"),
     );
-    const options = patch.fields.flatMap((field) => {
+    const options = fields.flatMap((field) => {
       const fieldId = rows.find((row) => row.field_key === field.id)?.id;
       if (!fieldId) return [];
       return (field.options ?? []).map((value, position) => ({
