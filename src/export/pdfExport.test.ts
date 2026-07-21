@@ -132,6 +132,8 @@ it("renders every line of a long text cell across variable-height pages", async 
   );
   const model = {
     title: "长内容测试",
+    aspectRatio: "16:9",
+    shotCount: 1,
     fields: [
       { id: "content", label: "内容", type: "text" as const, visible: true, order: 0 },
     ],
