@@ -15,6 +15,8 @@ afterEach(() => {
 
 const model: ExportModel = {
   title: "测试 & 项目",
+  aspectRatio: "16:9",
+  shotCount: 1,
   fields: [
     { id: "shotNumber", label: "镜号", type: "number", visible: true, order: 0 },
     { id: "content", label: "内容", type: "text", visible: true, order: 1 },
@@ -47,7 +49,10 @@ it("builds a workbook with inline text and embedded images", async () => {
   const sheet = new TextDecoder().decode(files.get("xl/worksheets/sheet1.xml"));
   expect(sheet).toContain("镜号");
   expect(sheet).toContain("开场");
-  expect(sheet).toContain('ht="100"');
+  expect(sheet).toContain("项目名称：测试 &amp; 项目");
+  expect(sheet).toContain("画幅比例：16:9");
+  expect(sheet).toContain("镜头总数：1");
+  expect(sheet).toContain('ht="160"');
   expect(files.has("xl/media/image1.png")).toBe(true);
   expect(files.has("xl/media/image2.png")).toBe(true);
   expect(new TextDecoder().decode(files.get("xl/drawings/drawing1.xml")))
@@ -105,10 +110,10 @@ it("keeps mixed image slots stable and embeds a visible placeholder for each fai
 
   const drawing = new TextDecoder().decode(files.get("xl/drawings/drawing1.xml"));
   const startOffsets = [...drawing.matchAll(
-    /<xdr:from><xdr:col>2<\/xdr:col><xdr:colOff>(\d+)<\/xdr:colOff>/g,
+    /<xdr:from><xdr:col>2<\/xdr:col><xdr:colOff>0<\/xdr:colOff><xdr:row>4<\/xdr:row><xdr:rowOff>(\d+)<\/xdr:rowOff>/g,
   )].map((match) => Number(match[1]));
 
-  expect(startOffsets).toEqual([0, 727075, 1454150]);
+  expect(startOffsets).toEqual([0, 423333, 846666]);
   expect(files.get("xl/media/image1.png")).toEqual(new TextEncoder().encode("FIRST"));
   expect(files.get("xl/media/image2.png")).toEqual(placeholderBytes);
   expect(files.get("xl/media/image3.png")).toEqual(new TextEncoder().encode("THIRD"));
@@ -215,6 +220,8 @@ it("draws the default Chinese failure tile into a valid PNG media slot", async (
 it("encodes forbidden controls and preserves literal SpreadsheetML escape tokens", async () => {
   const files = await buildXlsxPackage({
     title: "编码测试",
+    aspectRatio: "16:9",
+    shotCount: 1,
     fields: [
       { id: "text", label: "列\u0001_x0001_", type: "text", visible: true, order: 0 },
     ],

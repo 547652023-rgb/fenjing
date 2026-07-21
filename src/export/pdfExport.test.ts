@@ -209,6 +209,7 @@ it("renders one titled header page for an empty project", async () => {
   expect(pages).toHaveLength(1);
   expect(fillText.mock.calls.map(([text]) => text)).toEqual([
     "测试分镜",
+    "画幅比例：16:9    镜头总数：0",
     "镜号",
     "画面",
     "内容",
