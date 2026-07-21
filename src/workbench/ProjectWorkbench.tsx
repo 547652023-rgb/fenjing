@@ -18,6 +18,8 @@ import type {
 } from "../domain/storyboard";
 import type { ProjectEvent } from "../domain/models";
 import { useProjectRealtime } from "./useProjectRealtime";
+import { SaveTemplateDialog } from "./SaveTemplateDialog";
+import type { TemplateSnapshot } from "../domain/models";
 
 type ProjectWorkbenchProps = {
   gateway: StoryboardGateway;
@@ -40,6 +42,8 @@ export function ProjectWorkbench({
   const [showFieldSettings, setShowFieldSettings] = useState(false);
   const [showProjectSettings, setShowProjectSettings] = useState(false);
   const [showMemberManager, setShowMemberManager] = useState(false);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateMessage, setTemplateMessage] = useState("");
   const [role, setRole] = useState<ProjectRole>("editor");
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
   const [error, setError] = useState("");
@@ -264,6 +268,13 @@ export function ProjectWorkbench({
     });
   }
 
+  async function saveTemplate(name: string, snapshot: TemplateSnapshot) {
+    setTemplateMessage("");
+    await gateway.createTemplate(projectId, name, snapshot);
+    setShowSaveTemplate(false);
+    setTemplateMessage(`模板“${name}”已保存`);
+  }
+
   const imageActions: StoryboardImageActions = {
     async upload(shotId, fieldId, currentImages, files) {
       const remaining = Math.max(
@@ -361,8 +372,26 @@ export function ProjectWorkbench({
         <button type="button" onClick={() => setShowProjectSettings(true)}>
           项目设置
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            setTemplateMessage("");
+            setShowSaveTemplate(true);
+          }}
+        >
+          保存为模板
+        </button>
         <ExportActions project={project} />
       </div>
+      {templateMessage ? (
+        <p
+          aria-label="模板保存状态"
+          className="save-status"
+          role="status"
+        >
+          {templateMessage}
+        </p>
+      ) : null}
       <StoryboardTable
         imageActions={imageActions}
         project={project}
@@ -387,6 +416,13 @@ export function ProjectWorkbench({
           gateway={gateway}
           projectId={projectId}
           onClose={() => setShowMemberManager(false)}
+        />
+      ) : null}
+      {showSaveTemplate ? (
+        <SaveTemplateDialog
+          project={project}
+          onClose={() => setShowSaveTemplate(false)}
+          onSave={saveTemplate}
         />
       ) : null}
     </main>

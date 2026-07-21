@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { FakeStoryboardGateway } from "../data/fakeGateway";
@@ -43,6 +43,79 @@ it("shows export actions after the selected project loads", async () => {
   await screen.findByDisplayValue("广告片");
 
   expect(screen.getByRole("button", { name: "导出文件" })).toBeVisible();
+});
+
+it("saves the current project as a template without altering the project", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const loaded = await gateway.loadProject(project.id);
+  await gateway.saveShot(
+    project.id,
+    {
+      ...loaded.shots[0],
+      values: {
+        ...loaded.shots[0].values,
+        frame: JSON.stringify([{ path: `${project.id}/1/frame.png` }]),
+      },
+    },
+    1,
+  );
+  const projectBeforeSaving = await gateway.loadProject(project.id);
+  const createTemplate = vi.spyOn(gateway, "createTemplate");
+  const user = userEvent.setup();
+  render(
+    <ProjectWorkbench
+      gateway={gateway}
+      onBack={vi.fn()}
+      projectId={project.id}
+      user={owner}
+    />,
+  );
+
+  await screen.findByDisplayValue("广告片");
+  await user.click(screen.getByRole("button", { name: "保存为模板" }));
+  await user.type(screen.getByLabelText("模板名称"), "拍摄模板");
+  await user.click(screen.getByRole("button", { name: "保存模板" }));
+
+  expect(createTemplate).toHaveBeenCalledWith(
+    project.id,
+    "拍摄模板",
+    expect.objectContaining({
+      shots: [
+        expect.objectContaining({
+          values: expect.not.objectContaining({ frame: expect.anything() }),
+        }),
+      ],
+    }),
+  );
+  expect(await screen.findByRole("status", { name: "模板保存状态" })).toHaveTextContent(
+    "模板“拍摄模板”已保存",
+  );
+  expect(await gateway.loadProject(project.id)).toEqual(projectBeforeSaving);
+});
+
+it("shows an error when saving the current project as a template fails", async () => {
+  const { gateway, owner, project } = await setupProject();
+  vi.spyOn(gateway, "createTemplate").mockRejectedValue(new Error("network"));
+  const user = userEvent.setup();
+  render(
+    <ProjectWorkbench
+      gateway={gateway}
+      onBack={vi.fn()}
+      projectId={project.id}
+      user={owner}
+    />,
+  );
+
+  await screen.findByDisplayValue("广告片");
+  await user.click(screen.getByRole("button", { name: "保存为模板" }));
+  await user.type(screen.getByLabelText("模板名称"), "拍摄模板");
+  await user.click(screen.getByRole("button", { name: "保存模板" }));
+
+  const dialog = screen.getByRole("dialog", { name: "保存为模板" });
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+    "模板保存失败，请稍后重试",
+  );
+  expect(dialog).toBeVisible();
 });
 
 it("persists a title edit and project-specific notes options", async () => {
