@@ -1,6 +1,8 @@
 alter table public.projects
   add column icon text check (char_length(icon) <= 16),
-  add column deleted_at timestamptz;
+  add column deleted_at timestamptz,
+  add column purge_started_at timestamptz
+    check (purge_started_at is null or deleted_at is not null);
 
 create index projects_deleted_at_idx
   on public.projects(deleted_at)
@@ -78,8 +80,8 @@ with check (deleted_at is null and public.is_project_member(id));
 
 create policy projects_update_owner on public.projects
 for update
-using (public.is_project_owner(id))
-with check (owner_id = auth.uid());
+using (purge_started_at is null and public.is_project_owner(id))
+with check (purge_started_at is null and owner_id = auth.uid());
 
 -- Keep ownership immutable through direct table updates. RLS then safely makes
 -- deleted_at transitions owner-only without an editor claiming ownership in
@@ -139,29 +141,54 @@ for all to authenticated
 using (user_id = auth.uid())
 with check (user_id = auth.uid());
 
-create or replace function public.purge_deleted_projects()
-returns bigint
+create or replace function public.claim_deleted_projects_for_purge(p_limit integer default 100)
+returns table(project_id uuid)
 language plpgsql
 security definer
 set search_path = ''
 as $$
-declare
-  purged_count bigint;
 begin
-  delete from storage.objects object
-  using public.projects project
-  where project.deleted_at < now() - interval '30 days'
-    and object.bucket_id = 'storyboard-images'
-    and object.name like project.id::text || '/%';
-
-  delete from public.projects
-  where deleted_at < now() - interval '30 days';
-
-  get diagnostics purged_count = row_count;
-  return purged_count;
+  return query
+  with candidates as (
+    select project.id
+    from public.projects project
+    where project.deleted_at < now() - interval '30 days'
+      and (
+        project.purge_started_at is null
+        or project.purge_started_at < now() - interval '15 minutes'
+      )
+    order by project.deleted_at, project.id
+    for update skip locked
+    limit greatest(1, least(coalesce(p_limit, 100), 500))
+  )
+  update public.projects project
+  set purge_started_at = now()
+  from candidates
+  where project.id = candidates.id
+  returning project.id;
 end;
 $$;
 
-revoke all on function public.purge_deleted_projects() from public;
-revoke all on function public.purge_deleted_projects() from anon, authenticated;
-grant execute on function public.purge_deleted_projects() to service_role;
+create or replace function public.finalize_deleted_project_purge(p_project_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  delete from public.projects
+  where id = p_project_id
+    and deleted_at < now() - interval '30 days'
+    and purge_started_at is not null;
+
+  return found;
+end;
+$$;
+
+revoke all on function public.claim_deleted_projects_for_purge(integer) from public;
+revoke all on function public.claim_deleted_projects_for_purge(integer) from anon, authenticated;
+grant execute on function public.claim_deleted_projects_for_purge(integer) to service_role;
+
+revoke all on function public.finalize_deleted_project_purge(uuid) from public;
+revoke all on function public.finalize_deleted_project_purge(uuid) from anon, authenticated;
+grant execute on function public.finalize_deleted_project_purge(uuid) to service_role;
