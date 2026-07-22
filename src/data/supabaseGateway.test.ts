@@ -8,6 +8,59 @@ import {
 } from "./supabaseGateway";
 
 describe("SupabaseStoryboardGateway", () => {
+  it("maps project home metadata from Supabase rows", async () => {
+    const projectOrder = vi.fn().mockResolvedValue({
+      data: [{
+        id: "project-1",
+        title: "广告片",
+        owner_id: "user-1",
+        icon: "🎬",
+        created_at: "2026-07-20T01:00:00.000Z",
+        updated_at: "2026-07-21T01:00:00.000Z",
+        deleted_at: null,
+        shots: [{ count: 3 }],
+      }],
+      error: null,
+    });
+    const membershipIn = vi.fn().mockResolvedValue({
+      data: [{ project_id: "project-1", user_id: "user-1", role: "owner" }],
+      error: null,
+    });
+    const profileIn = vi.fn().mockResolvedValue({
+      data: [{ id: "user-1", email: "owner@example.com" }],
+      error: null,
+    });
+    const client = {
+      auth: {
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: { user: { id: "user-1", email: "owner@example.com" } } },
+          error: null,
+        }),
+      },
+      from: vi.fn((table: string) => {
+        if (table === "projects") {
+          return { select: vi.fn(() => ({ order: projectOrder })) };
+        }
+        if (table === "project_members") {
+          return { select: vi.fn(() => ({ in: membershipIn })) };
+        }
+        if (table === "profiles") {
+          return { select: vi.fn(() => ({ in: profileIn })) };
+        }
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    };
+    const gateway = createSupabaseGateway(client);
+
+    const projects = await gateway.listProjects();
+
+    expect(projects[0]).toMatchObject({
+      icon: "🎬",
+      shotCount: 3,
+      createdAt: expect.any(String),
+    });
+  });
+
   it("maps an empty versioned update to a conflict", async () => {
     const chain: Record<string, unknown> = {};
     chain.update = vi.fn(() => chain);

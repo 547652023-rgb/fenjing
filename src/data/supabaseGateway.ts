@@ -172,7 +172,10 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
   async listProjects(): Promise<ProjectSummary[]> {
     const user = await this.requireUser();
     const projectRows = requireData<any[]>(
-      await this.client.from("projects").select("id,title,owner_id,updated_at").order("updated_at", { ascending: false }),
+      await this.client
+        .from("projects")
+        .select("id,title,owner_id,icon,created_at,updated_at,deleted_at,shots(count)")
+        .order("updated_at", { ascending: false }),
     );
     if (projectRows.length === 0) return [];
     const projectIds = projectRows.map((row) => row.id);
@@ -186,13 +189,17 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
     return projectRows.map((row) => ({
       id: row.id,
       title: row.title,
+      icon: row.icon ?? null,
       ownerId: row.owner_id,
       ownerEmail: profiles.find((profile) => profile.id === row.owner_id)?.email ?? "",
       role: memberships.find(
         (membership) => membership.project_id === row.id && membership.user_id === user.id,
       )?.role ?? "editor",
       memberCount: memberships.filter((membership) => membership.project_id === row.id).length,
+      shotCount: row.shots?.[0]?.count ?? 0,
+      createdAt: row.created_at,
       updatedAt: row.updated_at,
+      deletedAt: row.deleted_at ?? null,
     }));
   }
 
@@ -215,7 +222,7 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
       await this.client
         .from("projects")
         .insert(projectInsert)
-        .select("id,title,owner_id,updated_at"),
+        .select("id,title,owner_id,icon,created_at,updated_at,deleted_at,shots(count)"),
     );
     const row = rows[0];
     if (!row) throw new GatewayError("not_found");
@@ -237,11 +244,17 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
     return {
       id: row.id,
       title: row.title,
+      icon: row.icon ?? null,
       ownerId: row.owner_id,
       ownerEmail: user.email,
       role: "owner",
       memberCount: 1,
+      shotCount: templateProject
+        ? templateProject.shots.length
+        : row.shots?.[0]?.count ?? 1,
+      createdAt: row.created_at,
       updatedAt: row.updated_at,
+      deletedAt: row.deleted_at ?? null,
     };
   }
 

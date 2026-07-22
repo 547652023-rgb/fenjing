@@ -10,11 +10,25 @@ export type ProjectRole = "owner" | "editor";
 export type ProjectSummary = {
   id: string;
   title: string;
+  icon: string | null;
   ownerId: string;
   ownerEmail: string;
   role: ProjectRole;
   memberCount: number;
+  shotCount: number;
+  createdAt: string;
   updatedAt: string;
+  deletedAt: string | null;
+};
+
+export type ProjectFolder = {
+  id: string;
+  name: string;
+  updatedAt: string;
+};
+
+export type ProjectHomeSettings = {
+  sortBy: "updated" | "created" | "name";
 };
 
 export type ProjectMember = {
