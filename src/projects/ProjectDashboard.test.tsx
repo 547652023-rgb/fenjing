@@ -1,9 +1,82 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { FakeStoryboardGateway } from "../data/fakeGateway";
 import { BUILT_IN_TEMPLATES } from "../domain/templates";
 import { ProjectDashboard } from "./ProjectDashboard";
+
+const handlers = {
+  onOpenProject: vi.fn(),
+  onSignOut: vi.fn(),
+};
+
+it("filters projects by a personal folder and searches by title", async () => {
+  const gateway = new FakeStoryboardGateway();
+  const owner = await gateway.signUp("owner@example.com", "password123");
+  const summer = await gateway.createProject("夏季广告");
+  const brand = await gateway.createProject("品牌片");
+  const folder = await gateway.createFolder("广告");
+  await gateway.setProjectFolder(summer.id, folder.id);
+  await gateway.setProjectFolder(brand.id, folder.id);
+  const user = userEvent.setup();
+
+  render(<ProjectDashboard gateway={gateway} user={owner} {...handlers} />);
+
+  await user.click(await screen.findByRole("button", { name: "广告" }));
+  await user.type(screen.getByLabelText("搜索项目"), "夏季");
+
+  expect(screen.getByRole("heading", { name: "夏季广告" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "品牌片" })).not.toBeInTheDocument();
+});
+
+it("sorts projects by title and saves the personal preference", async () => {
+  const gateway = new FakeStoryboardGateway();
+  const owner = await gateway.signUp("owner@example.com", "password123");
+  await gateway.createProject("Z 项目");
+  await gateway.createProject("A 项目");
+  const saveHomeSettings = vi.spyOn(gateway, "saveHomeSettings");
+  const user = userEvent.setup();
+
+  render(<ProjectDashboard gateway={gateway} user={owner} {...handlers} />);
+
+  await screen.findByRole("heading", { name: "Z 项目" });
+  await user.selectOptions(screen.getByLabelText("项目排序"), "name");
+
+  const titles = screen
+    .getAllByRole("article")
+    .map((card) => within(card).getByRole("heading", { level: 3 }).textContent);
+  expect(titles).toEqual(["A 项目", "Z 项目"]);
+  expect(saveHomeSettings).toHaveBeenCalledWith({ sortBy: "name" });
+});
+
+it("assigns an owned project to a personal folder and edits one Emoji", async () => {
+  const gateway = new FakeStoryboardGateway();
+  const owner = await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("品牌片");
+  const folder = await gateway.createFolder("广告");
+  const setProjectFolder = vi.spyOn(gateway, "setProjectFolder");
+  const setProjectIcon = vi.spyOn(gateway, "setProjectIcon");
+  const user = userEvent.setup();
+
+  render(<ProjectDashboard gateway={gateway} user={owner} {...handlers} />);
+
+  const card = await screen.findByRole("article", { name: "品牌片" });
+  expect(within(card).getByText("16:9")).toBeVisible();
+  expect(within(card).getByText("1 个镜头")).toBeVisible();
+  expect(within(card).getByText("所有者")).toBeVisible();
+
+  await user.selectOptions(
+    within(card).getByLabelText("将品牌片移到文件夹"),
+    folder.id,
+  );
+  expect(setProjectFolder).toHaveBeenCalledWith(project.id, folder.id);
+
+  const iconInput = within(card).getByLabelText("设置品牌片图标");
+  await user.type(iconInput, "🎬🎨");
+  await user.tab();
+  expect(iconInput).toHaveValue("🎬");
+  expect(setProjectIcon).toHaveBeenCalledWith(project.id, "🎬");
+});
 
 it("selects a template while creating a project", async () => {
   const gateway = new FakeStoryboardGateway();
@@ -84,4 +157,6 @@ it("shows invited projects without owner-only actions", async () => {
   expect(screen.getByRole("button", { name: "进入共同项目" })).toBeVisible();
   expect(screen.queryByRole("button", { name: "重命名共同项目" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "删除共同项目" })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("将共同项目移到文件夹")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("设置共同项目图标")).not.toBeInTheDocument();
 });
