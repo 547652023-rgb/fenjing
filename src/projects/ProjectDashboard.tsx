@@ -37,7 +37,9 @@ type ProjectCardProps = {
   folderId: string | undefined;
   onOpen: () => void;
   onRename: () => void;
-  onDelete: () => void;
+  onMoveToTrash: () => void;
+  onRestore: () => void;
+  onRequestPermanentDelete: () => void;
   onAssignFolder: (folderId: string | null) => void;
   onSetIcon: (icon: string | null) => void;
 };
@@ -85,13 +87,16 @@ function ProjectCard({
   folderId,
   onOpen,
   onRename,
-  onDelete,
+  onMoveToTrash,
+  onRestore,
+  onRequestPermanentDelete,
   onAssignFolder,
   onSetIcon,
 }: ProjectCardProps) {
   const titleId = `project-card-title-${project.id}`;
   const isOwner = project.role === "owner";
   const isTrashed = project.deletedAt !== null;
+  const permanentDeletePending = project.permanentDeleteRequestedAt !== null;
 
   return (
     <article
@@ -160,18 +165,47 @@ function ProjectCard({
                 重命名
               </button>
               <button
-                aria-label={`删除${project.title}`}
+                aria-label={`移入回收站${project.title}`}
                 className="button-danger"
                 type="button"
-                onClick={onDelete}
+                onClick={onMoveToTrash}
               >
-                删除
+                移入回收站
               </button>
             </>
           ) : null}
         </div>
       ) : (
-        <p className="project-card__trashed-note">项目已在回收站</p>
+        <>
+          <p
+            className={`project-card__trashed-note${
+              permanentDeletePending ? " project-card__trashed-note--pending" : ""
+            }`}
+          >
+            {permanentDeletePending
+              ? "彻底删除请求处理中，期间无法恢复"
+              : "项目将在回收站保留 30 天，之后由系统自动彻底删除"}
+          </p>
+          {isOwner && !permanentDeletePending ? (
+            <div className="project-card__actions">
+              <button
+                aria-label={`恢复${project.title}`}
+                type="button"
+                onClick={onRestore}
+              >
+                恢复项目
+              </button>
+              <button
+                aria-label={`彻底删除${project.title}`}
+                className="button-danger"
+                type="button"
+                onClick={onRequestPermanentDelete}
+              >
+                彻底删除
+              </button>
+            </div>
+          ) : null}
+        </>
       )}
     </article>
   );
@@ -276,15 +310,37 @@ export function ProjectDashboard({
     }
   }
 
-  async function remove(project: ProjectSummary) {
-    if (!window.confirm(`确定删除项目“${project.title}”吗？此操作无法撤销。`)) {
+  async function moveToTrash(project: ProjectSummary) {
+    try {
+      await gateway.moveProjectToTrash(project.id);
+      await refresh();
+    } catch {
+      setError("项目移入回收站失败，请稍后重试");
+    }
+  }
+
+  async function restore(project: ProjectSummary) {
+    try {
+      await gateway.restoreProject(project.id);
+      await refresh();
+    } catch {
+      setError("项目恢复失败，请稍后重试");
+    }
+  }
+
+  async function requestPermanentDelete(project: ProjectSummary) {
+    if (
+      !window.confirm(
+        `确定申请彻底删除项目“${project.title}”吗？请求提交后将由系统安全处理，期间无法恢复。`,
+      )
+    ) {
       return;
     }
     try {
-      await gateway.deleteProject(project.id);
+      await gateway.permanentlyDeleteProject(project.id);
       await refresh();
     } catch {
-      setError("项目删除失败，请稍后重试");
+      setError("彻底删除请求提交失败，请稍后重试");
     }
   }
 
@@ -448,12 +504,14 @@ export function ProjectDashboard({
         key={project.id}
         project={project}
         onAssignFolder={(folderId) => void assignFolder(project.id, folderId)}
-        onDelete={() => void remove(project)}
+        onMoveToTrash={() => void moveToTrash(project)}
         onOpen={() => onOpenProject(project.id)}
         onRename={() => {
           setRenaming(project);
           setRenameTitle(project.title);
         }}
+        onRequestPermanentDelete={() => void requestPermanentDelete(project)}
+        onRestore={() => void restore(project)}
         onSetIcon={(icon) => void setIcon(project.id, icon)}
       />
     ));

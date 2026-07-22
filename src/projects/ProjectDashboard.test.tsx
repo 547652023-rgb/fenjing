@@ -100,12 +100,14 @@ it("selects a template while creating a project", async () => {
   expect(createProject).toHaveBeenCalledWith("项目", BUILT_IN_TEMPLATES[2].snapshot);
 });
 
-it("creates, renames, opens, and deletes an owned project", async () => {
+it("creates, renames, opens, and moves an owned project to trash", async () => {
   const gateway = new FakeStoryboardGateway();
   const owner = await gateway.signUp("owner@example.com", "password123");
   const onOpenProject = vi.fn();
+  const moveProjectToTrash = vi.spyOn(gateway, "moveProjectToTrash");
+  const permanentlyDeleteProject = vi.spyOn(gateway, "permanentlyDeleteProject");
+  const deleteProject = vi.spyOn(gateway, "deleteProject");
   const user = userEvent.setup();
-  vi.spyOn(window, "confirm").mockReturnValue(true);
   render(
     <ProjectDashboard
       gateway={gateway}
@@ -129,9 +131,62 @@ it("creates, renames, opens, and deletes an owned project", async () => {
   await user.click(screen.getByRole("button", { name: "保存项目名称" }));
   expect(await screen.findByRole("button", { name: "进入新品发布片" })).toBeVisible();
 
-  await user.click(screen.getByRole("button", { name: "删除新品发布片" }));
-  expect(window.confirm).toHaveBeenCalledWith("确定删除项目“新品发布片”吗？此操作无法撤销。");
+  await user.click(screen.getByRole("button", { name: "移入回收站新品发布片" }));
+  expect(moveProjectToTrash).toHaveBeenCalledWith("project-1");
+  expect(permanentlyDeleteProject).not.toHaveBeenCalled();
+  expect(deleteProject).not.toHaveBeenCalled();
   expect(screen.queryByRole("button", { name: "进入新品发布片" })).not.toBeInTheDocument();
+});
+
+it("restores an owner project from trash and explains the 30-day retention", async () => {
+  const gateway = new FakeStoryboardGateway();
+  const owner = await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("品牌片");
+  await gateway.moveProjectToTrash(project.id);
+  const restoreProject = vi.spyOn(gateway, "restoreProject");
+  const user = userEvent.setup();
+
+  render(<ProjectDashboard gateway={gateway} user={owner} {...handlers} />);
+
+  await user.click(await screen.findByRole("button", { name: "回收站" }));
+  const card = await screen.findByRole("article", { name: "品牌片" });
+  expect(within(card).getByText(/保留 30 天/)).toBeVisible();
+
+  await user.click(within(card).getByRole("button", { name: "恢复品牌片" }));
+  expect(restoreProject).toHaveBeenCalledWith(project.id);
+  expect(screen.queryByRole("article", { name: "品牌片" })).not.toBeInTheDocument();
+});
+
+it("confirms a permanent-delete request and shows its pending state", async () => {
+  const gateway = new FakeStoryboardGateway();
+  const owner = await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("品牌片");
+  await gateway.moveProjectToTrash(project.id);
+  const permanentlyDeleteProject = vi.spyOn(gateway, "permanentlyDeleteProject");
+  const confirm = vi
+    .spyOn(window, "confirm")
+    .mockReturnValueOnce(false)
+    .mockReturnValueOnce(true);
+  const user = userEvent.setup();
+
+  render(<ProjectDashboard gateway={gateway} user={owner} {...handlers} />);
+
+  await user.click(await screen.findByRole("button", { name: "回收站" }));
+  const permanentDeleteButton = await screen.findByRole("button", {
+    name: "彻底删除品牌片",
+  });
+  await user.click(permanentDeleteButton);
+  expect(permanentlyDeleteProject).not.toHaveBeenCalled();
+
+  await user.click(permanentDeleteButton);
+
+  expect(confirm).toHaveBeenCalledWith(
+    "确定申请彻底删除项目“品牌片”吗？请求提交后将由系统安全处理，期间无法恢复。",
+  );
+  expect(permanentlyDeleteProject).toHaveBeenCalledWith(project.id);
+  expect(await screen.findByText("彻底删除请求处理中，期间无法恢复")).toBeVisible();
+  expect(screen.queryByRole("button", { name: "恢复品牌片" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "彻底删除品牌片" })).not.toBeInTheDocument();
 });
 
 it("shows invited projects without owner-only actions", async () => {
@@ -156,7 +211,9 @@ it("shows invited projects without owner-only actions", async () => {
   expect(await screen.findByRole("heading", { name: "受邀项目" })).toBeVisible();
   expect(screen.getByRole("button", { name: "进入共同项目" })).toBeVisible();
   expect(screen.queryByRole("button", { name: "重命名共同项目" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "删除共同项目" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "移入回收站共同项目" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "恢复共同项目" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "彻底删除共同项目" })).not.toBeInTheDocument();
   expect(screen.queryByLabelText("将共同项目移到文件夹")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("设置共同项目图标")).not.toBeInTheDocument();
 });

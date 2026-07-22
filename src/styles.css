@@ -290,6 +290,12 @@ body {
   font-size: 0.78rem;
 }
 
+.project-card__trashed-note--pending {
+  color: #71413c;
+  background: #f8eae8;
+  font-weight: 700;
+}
+
 .project-card__actions,
 .project-inline-form {
   display: flex;

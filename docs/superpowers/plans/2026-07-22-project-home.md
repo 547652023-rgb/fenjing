@@ -4,7 +4,7 @@
 
 **Goal:** 把项目首页升级为个人文件夹式管理界面，同时保留项目协作、Emoji、搜索排序和 30 天回收站。
 
-**Architecture:** 项目表保存所有成员可见的 Emoji 与回收状态；文件夹、项目归属和排序偏好存到按用户隔离的表。网关把这些数据统一为项目首页模型，Dashboard 根据活动侧栏条目过滤、搜索并排序项目。回收的项目仅所有者能看到、恢复或彻底删除。
+**Architecture:** 项目表保存所有成员可见的 Emoji 与回收状态；文件夹、项目归属和排序偏好存到按用户隔离的表。网关把这些数据统一为项目首页模型，Dashboard 根据活动侧栏条目过滤、搜索并排序项目。回收的项目仅所有者能看到、恢复或提交彻底删除请求；彻底删除由后台安全异步处理。
 
 **Tech Stack:** React 18、TypeScript、Vitest、Supabase PostgreSQL/RLS、Vite。
 
@@ -13,8 +13,8 @@
 - Emoji 对项目所有成员可见；文件夹、项目归属、排序仅属于当前用户。
 - 任何可见项目均可被归入当前用户的个人文件夹；删除文件夹只取消归类。
 - 搜索只匹配项目名称；排序为最近更新、创建时间或名称。
-- 回收项目保留所有成员、镜头、字段、图片和个人归属，30 天后永久清除。
-- 只有项目所有者能移入回收站、恢复或彻底删除；普通成员不能访问回收项目。
+- 回收项目保留所有成员、镜头、字段、图片和个人归属，30 天后由后台永久清除；所有者也可提前提交异步彻底删除请求。
+- 只有项目所有者能移入回收站、恢复或提交彻底删除请求；普通成员不能访问回收项目。
 
 ---
 
@@ -133,7 +133,7 @@ Expected: FAIL because home gateway methods do not exist.
 
 - [ ] **Step 3: 实现 fake 与 Supabase 网关**
 
-Use maps in `FakeStoryboardGateway` keyed by `userId` for folders, assignments and settings. In `SupabaseStoryboardGateway`, query folders/assignments scoped by RLS, update `projects.icon`, set/clear `deleted_at`, and use hard delete only in `permanentlyDeleteProject`. `listProjects()` must include trashed projects only for their owner.
+Use maps in `FakeStoryboardGateway` keyed by `userId` for folders, assignments and settings. In `SupabaseStoryboardGateway`, query folders/assignments scoped by RLS, update `projects.icon`, set/clear `deleted_at`, and have `permanentlyDeleteProject` enqueue a safe deletion request with `permanent_delete_requested_at`. `listProjects()` must include trashed projects only for their owner and expose the request timestamp so the UI can show pending status.
 
 - [ ] **Step 4: 运行测试并提交**
 
@@ -219,7 +219,7 @@ Expected: FAIL because trash actions do not exist.
 
 - [ ] **Step 3: 实现安全回收站操作**
 
-Replace the permanent delete entry in normal cards with `移入回收站`. In the recycle-bin scope show `恢复项目` and a separately-confirmed `彻底删除`; expose neither action to editors. Display the 30-day expiration explanation next to trashed projects.
+Normal cards must only expose owner-only `移入回收站`, never a hard-delete path. In the recycle-bin scope show `恢复项目` and a separately-confirmed `彻底删除` request; expose neither action to editors. Display the 30-day expiration explanation next to trashed projects. Once `permanentDeleteRequestedAt` is present, replace both actions with a pending explanation because restoration is no longer allowed.
 
 - [ ] **Step 4: 全量验证并提交**
 
