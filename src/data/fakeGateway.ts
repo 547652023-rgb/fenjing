@@ -1,6 +1,7 @@
 import {
   addShot as addLocalShot,
   createProject as createLocalProject,
+  DEFAULT_ASPECT_RATIO,
   deleteShot as deleteLocalShot,
   moveShot,
   type Shot,
@@ -599,6 +600,7 @@ export class FakeStoryboardGateway implements StoryboardGateway {
     return {
       id: project.id,
       title: project.title,
+      aspectRatio: project.aspectRatio || DEFAULT_ASPECT_RATIO,
       icon: this.projectIcons.get(projectId) ?? null,
       ownerId,
       ownerEmail:

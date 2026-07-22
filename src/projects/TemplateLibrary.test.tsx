@@ -12,6 +12,7 @@ const projects: ProjectSummary[] = [
   {
     id: "project-1",
     title: "自建广告",
+    aspectRatio: "16:9",
     icon: null,
     ownerId: "owner-1",
     ownerEmail: "owner@example.com",
@@ -26,6 +27,7 @@ const projects: ProjectSummary[] = [
   {
     id: "project-2",
     title: "受邀宣传片",
+    aspectRatio: "16:9",
     icon: null,
     ownerId: "owner-2",
     ownerEmail: "teammate@example.com",

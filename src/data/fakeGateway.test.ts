@@ -96,6 +96,10 @@ it("creates a project from a template snapshot without sharing mutable state", a
       { values: { shotNumber: "2", content: "收尾" } },
     ],
   });
+  expect(summary.aspectRatio).toBe("9:16");
+  expect(await gateway.listProjects()).toEqual([
+    expect.objectContaining({ id: summary.id, aspectRatio: "9:16" }),
+  ]);
 });
 
 it("removes image values from caller-supplied template snapshots during project creation", async () => {

@@ -56,6 +56,7 @@ it("assigns an owned project to a personal folder and edits one Emoji", async ()
   const folder = await gateway.createFolder("广告");
   const setProjectFolder = vi.spyOn(gateway, "setProjectFolder");
   const setProjectIcon = vi.spyOn(gateway, "setProjectIcon");
+  const loadProject = vi.spyOn(gateway, "loadProject");
   const user = userEvent.setup();
 
   render(<ProjectDashboard gateway={gateway} user={owner} {...handlers} />);
@@ -64,6 +65,7 @@ it("assigns an owned project to a personal folder and edits one Emoji", async ()
   expect(within(card).getByText("16:9")).toBeVisible();
   expect(within(card).getByText("1 个镜头")).toBeVisible();
   expect(within(card).getByText("所有者")).toBeVisible();
+  expect(loadProject).not.toHaveBeenCalled();
 
   await user.selectOptions(
     within(card).getByLabelText("将品牌片移到文件夹"),
@@ -189,7 +191,7 @@ it("confirms a permanent-delete request and shows its pending state", async () =
   expect(screen.queryByRole("button", { name: "彻底删除品牌片" })).not.toBeInTheDocument();
 });
 
-it("shows invited projects without owner-only actions", async () => {
+it("lets editors organize invited projects without exposing owner-only actions", async () => {
   const gateway = new FakeStoryboardGateway();
   await gateway.signUp("editor@example.com", "password123");
   await gateway.signOut();
@@ -198,6 +200,9 @@ it("shows invited projects without owner-only actions", async () => {
   await gateway.inviteMember(project.id, "editor@example.com");
   await gateway.signOut();
   const editor = await gateway.signIn("editor@example.com", "password123");
+  const folder = await gateway.createFolder("协作中");
+  const setProjectFolder = vi.spyOn(gateway, "setProjectFolder");
+  const user = userEvent.setup();
 
   render(
     <ProjectDashboard
@@ -210,10 +215,14 @@ it("shows invited projects without owner-only actions", async () => {
 
   expect(await screen.findByRole("heading", { name: "受邀项目" })).toBeVisible();
   expect(screen.getByRole("button", { name: "进入共同项目" })).toBeVisible();
+  const folderSelect = screen.getByLabelText("将共同项目移到文件夹");
+  await user.selectOptions(folderSelect, folder.id);
+  expect(setProjectFolder).toHaveBeenLastCalledWith(project.id, folder.id);
+  await user.selectOptions(folderSelect, "");
+  expect(setProjectFolder).toHaveBeenLastCalledWith(project.id, null);
   expect(screen.queryByRole("button", { name: "重命名共同项目" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "移入回收站共同项目" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "恢复共同项目" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "彻底删除共同项目" })).not.toBeInTheDocument();
-  expect(screen.queryByLabelText("将共同项目移到文件夹")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("设置共同项目图标")).not.toBeInTheDocument();
 });

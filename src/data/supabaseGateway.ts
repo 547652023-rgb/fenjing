@@ -177,7 +177,7 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
     const projectRows = requireData<any[]>(
       await this.client
         .from("projects")
-        .select("id,title,owner_id,icon,created_at,updated_at,deleted_at,permanent_delete_requested_at,shots(count)")
+        .select("id,title,aspect_ratio,owner_id,icon,created_at,updated_at,deleted_at,permanent_delete_requested_at,shots(count)")
         .order("updated_at", { ascending: false }),
     ).filter((row) => !row.deleted_at || row.owner_id === user.id);
     if (projectRows.length === 0) return [];
@@ -192,6 +192,7 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
     return projectRows.map((row) => ({
       id: row.id,
       title: row.title,
+      aspectRatio: row.aspect_ratio || DEFAULT_ASPECT_RATIO,
       icon: row.icon ?? null,
       ownerId: row.owner_id,
       ownerEmail: profiles.find((profile) => profile.id === row.owner_id)?.email ?? "",
@@ -357,7 +358,7 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
       await this.client
         .from("projects")
         .insert(projectInsert)
-        .select("id,title,owner_id,icon,created_at,updated_at,deleted_at,permanent_delete_requested_at,shots(count)"),
+        .select("id,title,aspect_ratio,owner_id,icon,created_at,updated_at,deleted_at,permanent_delete_requested_at,shots(count)"),
     );
     const row = rows[0];
     if (!row) throw new GatewayError("not_found");
@@ -379,6 +380,8 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
     return {
       id: row.id,
       title: row.title,
+      aspectRatio:
+        row.aspect_ratio || templateProject?.aspectRatio || DEFAULT_ASPECT_RATIO,
       icon: row.icon ?? null,
       ownerId: row.owner_id,
       ownerEmail: user.email,

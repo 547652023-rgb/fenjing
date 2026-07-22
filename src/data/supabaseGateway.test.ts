@@ -13,6 +13,7 @@ describe("SupabaseStoryboardGateway", () => {
       data: [{
         id: "project-1",
         title: "广告片",
+        aspect_ratio: "9:16",
         owner_id: "user-1",
         icon: "🎬",
         created_at: "2026-07-20T01:00:00.000Z",
@@ -56,6 +57,7 @@ describe("SupabaseStoryboardGateway", () => {
     const projects = await gateway.listProjects();
 
     expect(projects[0]).toMatchObject({
+      aspectRatio: "9:16",
       icon: "🎬",
       shotCount: 3,
       createdAt: expect.any(String),

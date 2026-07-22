@@ -11,7 +11,7 @@
 
 body {
   margin: 0;
-  min-width: 960px;
+  min-width: 320px;
 }
 
 .auth-shell,
@@ -514,6 +514,47 @@ select:focus-visible {
 
   .project-card__metadata {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-shell {
+    padding: 0.75rem;
+  }
+
+  .dashboard-header,
+  .dashboard-toolbar,
+  .local-import-prompt {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-account,
+  .dashboard-toolbar__actions,
+  .local-import-prompt div:last-child,
+  .project-card__actions {
+    flex-wrap: wrap;
+  }
+
+  .project-home-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .project-home-sidebar {
+    position: static;
+  }
+
+  .project-home-content,
+  .project-card {
+    padding: 0.875rem;
+  }
+
+  .project-home-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .project-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

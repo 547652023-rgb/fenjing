@@ -32,7 +32,6 @@ type ProjectDashboardProps = {
 
 type ProjectCardProps = {
   project: ProjectSummary;
-  aspectRatio: string;
   folders: ProjectFolder[];
   folderId: string | undefined;
   onOpen: () => void;
@@ -82,7 +81,6 @@ function ProjectIconEditor({
 
 function ProjectCard({
   project,
-  aspectRatio,
   folders,
   folderId,
   onOpen,
@@ -121,7 +119,7 @@ function ProjectCard({
       <dl className="project-card__metadata">
         <div>
           <dt>画幅</dt>
-          <dd>{aspectRatio}</dd>
+          <dd>{project.aspectRatio}</dd>
         </div>
         <div>
           <dt>镜头</dt>
@@ -133,7 +131,7 @@ function ProjectCard({
         </div>
       </dl>
 
-      {isOwner && !isTrashed ? (
+      {!isTrashed ? (
         <label className="project-card__folder-select">
           <span>个人文件夹</span>
           <select
@@ -221,7 +219,6 @@ export function ProjectDashboard({
   const [templates, setTemplates] = useState<StoryboardTemplate[]>([]);
   const [folders, setFolders] = useState<ProjectFolder[]>([]);
   const [assignments, setAssignments] = useState<Record<string, string>>({});
-  const [aspectRatios, setAspectRatios] = useState<Record<string, string>>({});
   const [sortBy, setSortBy] = useState<ProjectHomeSettings["sortBy"]>("updated");
   const [active, setActive] = useState<ProjectHomeScope>("all");
   const [search, setSearch] = useState("");
@@ -244,22 +241,11 @@ export function ProjectDashboard({
           gateway.listProjectFolderAssignments(),
           gateway.listHomeSettings(),
         ]);
-      const ratios = await Promise.all(
-        nextProjects.map(async (project) => {
-          try {
-            const detail = await gateway.loadProject(project.id);
-            return [project.id, detail.aspectRatio ?? "—"] as const;
-          } catch {
-            return [project.id, "—"] as const;
-          }
-        }),
-      );
       setProjects(nextProjects);
       setTemplates(nextTemplates);
       setFolders(nextFolders);
       setAssignments(nextAssignments);
       setSortBy(settings.sortBy);
-      setAspectRatios(Object.fromEntries(ratios));
       setError("");
     } catch {
       setError("项目或模板加载失败，请检查网络后重试");
@@ -498,7 +484,6 @@ export function ProjectDashboard({
   function cards(items: ProjectSummary[]) {
     return items.map((project) => (
       <ProjectCard
-        aspectRatio={aspectRatios[project.id] ?? "—"}
         folderId={assignments[project.id]}
         folders={folders}
         key={project.id}

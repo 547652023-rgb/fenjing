@@ -12,6 +12,7 @@ export type PermanentDeleteRequestStatus = "requested" | "pending";
 export type ProjectSummary = {
   id: string;
   title: string;
+  aspectRatio: string;
   icon: string | null;
   ownerId: string;
   ownerEmail: string;
