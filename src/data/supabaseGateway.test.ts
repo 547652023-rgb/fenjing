@@ -412,6 +412,43 @@ describe("SupabaseStoryboardGateway", () => {
     expect(client.from).toHaveBeenCalledWith("project_templates");
   });
 
+  it("creates an owner project through the secure database function", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: {
+        id: "project-1",
+        title: "新项目",
+        aspect_ratio: "16:9",
+        owner_id: "user-1",
+        icon: null,
+        created_at: "2026-07-22T01:00:00.000Z",
+        updated_at: "2026-07-22T01:00:00.000Z",
+        deleted_at: null,
+        permanent_delete_requested_at: null,
+        shots: [{ count: 1 }],
+      },
+      error: null,
+    });
+    const client = {
+      auth: {
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: { user: { id: "user-1", email: "owner@example.com" } } },
+          error: null,
+        }),
+      },
+      rpc,
+    };
+
+    await expect(createSupabaseGateway(client).createProject(" 新项目 ")).resolves.toMatchObject({
+      id: "project-1",
+      ownerId: "user-1",
+    });
+
+    expect(rpc).toHaveBeenCalledWith("create_storyboard_project", {
+      p_title: "新项目",
+      p_aspect_ratio: null,
+    });
+  });
+
   it("replaces seeded fields, options, and shots when creating from a snapshot", async () => {
     const project = createProject();
     const snapshot = {
@@ -423,16 +460,21 @@ describe("SupabaseStoryboardGateway", () => {
         { id: "template-shot-2", values: { shotNumber: "2", shotSize: "特写" } },
       ],
     };
-    const projectSelect = vi.fn().mockResolvedValue({
-      data: [{
+    const createProjectRpc = vi.fn().mockResolvedValue({
+      data: {
         id: "project-1",
         title: "新项目",
         owner_id: "user-1",
+        aspect_ratio: "9:16",
+        icon: null,
+        created_at: "2026-07-21T01:00:00.000Z",
         updated_at: "2026-07-21T01:00:00.000Z",
-      }],
+        deleted_at: null,
+        permanent_delete_requested_at: null,
+        shots: [{ count: 1 }],
+      },
       error: null,
     });
-    const projectInsert = vi.fn(() => ({ select: projectSelect }));
     const deleteFieldsEq = vi.fn().mockResolvedValue({ data: null, error: null });
     const insertFieldsSelect = vi.fn().mockResolvedValue({
       data: [
@@ -452,8 +494,8 @@ describe("SupabaseStoryboardGateway", () => {
           error: null,
         }),
       },
+      rpc: createProjectRpc,
       from: vi.fn((table: string) => {
-        if (table === "projects") return { insert: projectInsert };
         if (table === "fields") {
           return {
             delete: vi.fn(() => ({ eq: deleteFieldsEq })),
@@ -474,10 +516,9 @@ describe("SupabaseStoryboardGateway", () => {
 
     await gateway.createProject("新项目", snapshot);
 
-    expect(projectInsert).toHaveBeenCalledWith({
-      title: "新项目",
-      owner_id: "user-1",
-      aspect_ratio: "9:16",
+    expect(createProjectRpc).toHaveBeenCalledWith("create_storyboard_project", {
+      p_title: "新项目",
+      p_aspect_ratio: "9:16",
     });
     expect(insertFields).toHaveBeenCalledWith([
       expect.objectContaining({ project_id: "project-1", field_key: "shotNumber", position: 0 }),
@@ -504,16 +545,21 @@ describe("SupabaseStoryboardGateway", () => {
       ],
       shots: [{ id: "template-shot", values: { frame: "image-data", content: "保留" } }],
     };
-    const projectSelect = vi.fn().mockResolvedValue({
-      data: [{
+    const createProjectRpc = vi.fn().mockResolvedValue({
+      data: {
         id: "project-1",
         title: "新项目",
         owner_id: "user-1",
+        aspect_ratio: "16:9",
+        icon: null,
+        created_at: "2026-07-21T01:00:00.000Z",
         updated_at: "2026-07-21T01:00:00.000Z",
-      }],
+        deleted_at: null,
+        permanent_delete_requested_at: null,
+        shots: [{ count: 1 }],
+      },
       error: null,
     });
-    const projectInsert = vi.fn(() => ({ select: projectSelect }));
     const deleteFieldsEq = vi.fn().mockResolvedValue({ data: null, error: null });
     const insertFieldsSelect = vi.fn().mockResolvedValue({
       data: [
@@ -532,8 +578,8 @@ describe("SupabaseStoryboardGateway", () => {
           error: null,
         }),
       },
+      rpc: createProjectRpc,
       from: vi.fn((table: string) => {
-        if (table === "projects") return { insert: projectInsert };
         if (table === "fields") {
           return {
             delete: vi.fn(() => ({ eq: deleteFieldsEq })),
