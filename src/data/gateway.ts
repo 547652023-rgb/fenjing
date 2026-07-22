@@ -7,6 +7,7 @@ import type {
   ProjectMember,
   ProjectMetaPatch,
   ProjectSummary,
+  PermanentDeleteRequestStatus,
   RemoteImage,
   StoryboardTemplate,
   TemplateSnapshot,
@@ -56,7 +57,7 @@ export interface StoryboardGateway {
   setProjectIcon(projectId: string, icon: string | null): Promise<void>;
   moveProjectToTrash(projectId: string): Promise<void>;
   restoreProject(projectId: string): Promise<void>;
-  permanentlyDeleteProject(projectId: string): Promise<void>;
+  permanentlyDeleteProject(projectId: string): Promise<PermanentDeleteRequestStatus>;
   listTemplates(): Promise<StoryboardTemplate[]>;
   createTemplate(
     sourceProjectId: string,

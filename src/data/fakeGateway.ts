@@ -16,6 +16,7 @@ import type {
   ProjectMetaPatch,
   ProjectRole,
   ProjectSummary,
+  PermanentDeleteRequestStatus,
   RemoteImage,
   StoryboardTemplate,
   TemplateSnapshot,
@@ -74,6 +75,7 @@ export class FakeStoryboardGateway implements StoryboardGateway {
   private readonly projectCreatedAt = new Map<string, string>();
   private readonly projectUpdatedAt = new Map<string, string>();
   private readonly projectDeletedAt = new Map<string, string | null>();
+  private readonly permanentDeleteRequestedAt = new Map<string, string | null>();
   private readonly versions = new Map<string, number>();
   private readonly authListeners = new Set<(user: AuthUser | null) => void>();
   private readonly projectListeners = new Map<
@@ -159,6 +161,7 @@ export class FakeStoryboardGateway implements StoryboardGateway {
     this.projectCreatedAt.set(id, now);
     this.projectUpdatedAt.set(id, now);
     this.projectDeletedAt.set(id, null);
+    this.permanentDeleteRequestedAt.set(id, null);
     project.shots.forEach((shot) => this.versions.set(shot.id, 1));
     return this.summaryFor(id);
   }
@@ -269,17 +272,24 @@ export class FakeStoryboardGateway implements StoryboardGateway {
 
   async restoreProject(projectId: string): Promise<void> {
     this.requireOwner(projectId);
+    if (this.permanentDeleteRequestedAt.get(projectId)) {
+      throw new GatewayError("forbidden");
+    }
     this.projectDeletedAt.set(projectId, null);
     this.touchProject(projectId);
     this.emit(projectId, { type: "project.changed" });
   }
 
-  async permanentlyDeleteProject(projectId: string): Promise<void> {
+  async permanentlyDeleteProject(
+    projectId: string,
+  ): Promise<PermanentDeleteRequestStatus> {
     this.requireOwner(projectId);
-    throw new GatewayError(
-      "forbidden",
-      "Permanent deletion is managed by the purge service",
-    );
+    if (!this.projectDeletedAt.get(projectId)) throw new GatewayError("forbidden");
+    if (this.permanentDeleteRequestedAt.get(projectId)) return "pending";
+    this.permanentDeleteRequestedAt.set(projectId, new Date().toISOString());
+    this.touchProject(projectId);
+    this.emit(projectId, { type: "project.changed" });
+    return "requested";
   }
 
   async listTemplates(): Promise<StoryboardTemplate[]> {
@@ -600,6 +610,8 @@ export class FakeStoryboardGateway implements StoryboardGateway {
       createdAt: this.projectCreatedAt.get(projectId) ?? new Date(0).toISOString(),
       updatedAt: this.projectUpdatedAt.get(projectId) ?? new Date(0).toISOString(),
       deletedAt: this.projectDeletedAt.get(projectId) ?? null,
+      permanentDeleteRequestedAt:
+        this.permanentDeleteRequestedAt.get(projectId) ?? null,
     };
   }
 }

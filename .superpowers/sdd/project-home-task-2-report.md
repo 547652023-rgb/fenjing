@@ -108,3 +108,58 @@ Because this repository's pnpm/Vitest forwarding discovers the full suite, the
 requested test command passed all 27 files and all 128 tests. `tsc --noEmit`
 and the Vite production build completed successfully, and `git diff --check`
 reported no whitespace errors.
+
+## P1 follow-up: owner permanent-deletion requests
+
+The permanent-delete boundary now lets a project owner request deletion of an
+already-trashed project without giving the browser access to either relational
+hard deletion or Storage deletion. `permanentlyDeleteProject()` calls only
+`request_project_permanent_deletion(uuid)` and returns `requested` for the first
+request or `pending` for an idempotent duplicate. The fake gateway mirrors this
+contract; editors and requests for active projects are rejected.
+
+Migration `202607220004_permanent_delete_requests.sql` stores a durable
+`permanent_delete_requested_at` marker that project summaries expose for a
+future recycle-bin status. Its security-definer request RPC locks the project,
+checks `owner_id = auth.uid()` and `deleted_at is not null`, and is executable
+only by `authenticated`. Once marked, the owner update policy denies restore.
+
+The existing service-role Edge worker remains unchanged. Its claim RPC now
+treats requested projects as immediately eligible, then the worker follows the
+existing claim → recursive Storage removal → finalize sequence. The finalizer
+accepts either an expired trash record or an owner-requested record, but still
+requires an active claim. The browser gateway never calls the claim/finalizer
+RPCs and never calls table `.delete()`.
+
+### P1 TDD and verification evidence
+
+The focused RED command was run before implementation:
+
+```sh
+pnpm exec vitest --run src/data/fakeGateway.test.ts \
+  src/data/supabaseGateway.test.ts src/data/projectPurge.contract.test.ts
+```
+
+It exited 1: both gateways still rejected owners, and the new request migration
+did not exist. After the minimal implementation, the same focused command
+passed 3 files and 35 tests.
+
+Fresh full verification then exited 0:
+
+```sh
+pnpm exec vitest --run && pnpm build && git diff --check
+```
+
+Result: 27 files and 132 tests passed; TypeScript and the Vite production build
+completed; the diff had no whitespace errors. Contract tests cover the request
+RPC restrictions/idempotency, immediate worker eligibility, restore denial,
+durable status mapping, and the unchanged claim/Storage/finalize Edge path.
+The pgTAP file was extended with the equivalent database assertions, but this
+environment has no Supabase CLI or `psql`, so pgTAP was not executed locally.
+
+An independent read-only review of the final request boundary, SQL privileges,
+RLS/concurrency behavior, worker eligibility, and gateway API reported no
+Critical or Important findings.
+
+The pre-existing modified `pnpm-lock.yaml` and untracked `pnpm-workspace.yaml`
+remain unstaged and unchanged by this follow-up.

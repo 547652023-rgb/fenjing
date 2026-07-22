@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import onlineMigration from "../../supabase/migrations/202607170001_online_storyboards.sql?raw";
 import migration from "../../supabase/migrations/202607220003_project_home.sql?raw";
+import permanentDeleteMigration from "../../supabase/migrations/202607220004_permanent_delete_requests.sql?raw";
+import purgeWorker from "../../supabase/functions/purge-deleted-projects/index.ts?raw";
 import {
   purgeClaimedProjects,
   removeProjectFiles,
@@ -113,5 +115,33 @@ describe("deleted project purge", () => {
     expect(migration).not.toMatch(
       /create policy projects_delete[^;]*on public\.projects/i,
     );
+  });
+
+  it("exposes an idempotent owner request boundary only for trashed projects", () => {
+    expect(permanentDeleteMigration).toMatch(
+      /create or replace function public\.request_project_permanent_deletion\(p_project_id uuid\)/i,
+    );
+    expect(permanentDeleteMigration).toMatch(/owner_id = auth\.uid\(\)/i);
+    expect(permanentDeleteMigration).toMatch(/deleted_at is not null/i);
+    expect(permanentDeleteMigration).toMatch(/permanent_delete_requested_at is not null[\s\S]*?return 'pending'/i);
+    expect(permanentDeleteMigration).toMatch(/grant execute on function public\.request_project_permanent_deletion\(uuid\) to authenticated/i);
+    expect(permanentDeleteMigration).not.toMatch(/grant execute on function public\.request_project_permanent_deletion\(uuid\) to (?:anon|service_role)/i);
+  });
+
+  it("makes requested projects immediately claimable and impossible to restore", () => {
+    expect(permanentDeleteMigration).toMatch(
+      /deleted_at < now\(\) - interval '30 days'\s+or project\.permanent_delete_requested_at is not null/i,
+    );
+    expect(permanentDeleteMigration).toMatch(
+      /create policy projects_update_owner[\s\S]*?permanent_delete_requested_at is null/iu,
+    );
+  });
+
+  it("keeps permanent requests on the existing service-role storage-first worker path", () => {
+    expect(purgeWorker).toMatch(/claim_deleted_projects_for_purge/);
+    expect(purgeWorker).toMatch(/purgeClaimedProjects/);
+    expect(purgeWorker).toMatch(/finalize_deleted_project_purge/);
+    expect(purgeWorker).not.toMatch(/request_project_permanent_deletion/);
+    expect(permanentDeleteMigration).not.toMatch(/delete\s+from\s+storage\.objects/i);
   });
 });

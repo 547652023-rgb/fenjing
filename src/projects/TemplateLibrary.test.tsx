@@ -21,6 +21,7 @@ const projects: ProjectSummary[] = [
     createdAt: "2026-07-21T00:00:00.000Z",
     updatedAt: "2026-07-21T00:00:00.000Z",
     deletedAt: null,
+    permanentDeleteRequestedAt: null,
   },
   {
     id: "project-2",
@@ -34,6 +35,7 @@ const projects: ProjectSummary[] = [
     createdAt: "2026-07-21T00:00:00.000Z",
     updatedAt: "2026-07-21T00:00:00.000Z",
     deletedAt: null,
+    permanentDeleteRequestedAt: null,
   },
 ];
 

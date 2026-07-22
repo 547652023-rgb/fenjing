@@ -18,6 +18,7 @@ describe("SupabaseStoryboardGateway", () => {
         created_at: "2026-07-20T01:00:00.000Z",
         updated_at: "2026-07-21T01:00:00.000Z",
         deleted_at: null,
+        permanent_delete_requested_at: "2026-07-22T02:00:00.000Z",
         shots: [{ count: 3 }],
       }],
       error: null,
@@ -58,6 +59,7 @@ describe("SupabaseStoryboardGateway", () => {
       icon: "🎬",
       shotCount: 3,
       createdAt: expect.any(String),
+      permanentDeleteRequestedAt: "2026-07-22T02:00:00.000Z",
     });
   });
 
@@ -262,19 +264,37 @@ describe("SupabaseStoryboardGateway", () => {
     ]);
   });
 
-  it("keeps permanent deletion inside the storage-first purge service", async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+  it("requests permanent deletion without bypassing the storage-first purge worker", async () => {
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: "requested", error: null })
+      .mockResolvedValueOnce({ data: "pending", error: null });
     const remove = vi.fn();
     const client = { rpc, from: vi.fn(() => ({ delete: remove })) };
+    const gateway = createSupabaseGateway(client);
+
+    await expect(gateway.permanentlyDeleteProject("project-1")).resolves.toBe("requested");
+    await expect(gateway.permanentlyDeleteProject("project-1")).resolves.toBe("pending");
+
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledWith("request_project_permanent_deletion", {
+      p_project_id: "project-1",
+    });
+    expect(client.from).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("maps a rejected permanent-deletion request without attempting direct deletion", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "42501", message: "project_not_trashed_or_not_owned" },
+    });
+    const client = { rpc, from: vi.fn() };
     const gateway = createSupabaseGateway(client);
 
     await expect(gateway.permanentlyDeleteProject("project-1")).rejects.toMatchObject({
       code: "forbidden",
     });
-
-    expect(rpc).not.toHaveBeenCalled();
     expect(client.from).not.toHaveBeenCalled();
-    expect(remove).not.toHaveBeenCalled();
   });
 
   it("rejects owner-only trash transitions when RLS updates no project", async () => {

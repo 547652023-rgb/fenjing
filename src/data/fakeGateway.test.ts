@@ -196,10 +196,14 @@ it("shares project icons while allowing only the owner to trash and restore", as
   expect((await gateway.listProjects()).map(({ id }) => id)).toContain(project.id);
 });
 
-it("keeps deleteProject soft-delete compatible and reserves hard deletion for the purge service", async () => {
+it("queues owner permanent deletion idempotently and denies restore once requested", async () => {
   const gateway = new FakeStoryboardGateway();
   const owner = await gateway.signUp("owner@example.com", "password123");
   const project = await gateway.createProject("待删除");
+
+  await expect(gateway.permanentlyDeleteProject(project.id)).rejects.toMatchObject({
+    code: "forbidden",
+  });
 
   await gateway.deleteProject(project.id);
   expect(await gateway.listProjects()).toEqual([
@@ -219,11 +223,15 @@ it("keeps deleteProject soft-delete compatible and reserves hard deletion for th
   });
 
   await gateway.signIn(owner.email, "password123");
-  await expect(gateway.permanentlyDeleteProject(project.id)).rejects.toMatchObject({
-    code: "forbidden",
-  });
+  await expect(gateway.permanentlyDeleteProject(project.id)).resolves.toBe("requested");
+  await expect(gateway.permanentlyDeleteProject(project.id)).resolves.toBe("pending");
+  await expect(gateway.restoreProject(project.id)).rejects.toMatchObject({ code: "forbidden" });
   expect(await gateway.listProjects()).toEqual([
-    expect.objectContaining({ id: project.id, deletedAt: expect.any(String) }),
+    expect.objectContaining({
+      id: project.id,
+      deletedAt: expect.any(String),
+      permanentDeleteRequestedAt: expect.any(String),
+    }),
   ]);
 });
 

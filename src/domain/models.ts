@@ -7,6 +7,8 @@ export type AuthUser = {
 
 export type ProjectRole = "owner" | "editor";
 
+export type PermanentDeleteRequestStatus = "requested" | "pending";
+
 export type ProjectSummary = {
   id: string;
   title: string;
@@ -19,6 +21,7 @@ export type ProjectSummary = {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  permanentDeleteRequestedAt: string | null;
 };
 
 export type ProjectFolder = {

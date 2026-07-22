@@ -1,8 +1,9 @@
 begin;
 
-select plan(17);
+select plan(26);
 
 select has_column('public', 'projects', 'purge_started_at');
+select has_column('public', 'projects', 'permanent_delete_requested_at');
 select has_function(
   'public',
   'claim_deleted_projects_for_purge',
@@ -12,6 +13,25 @@ select has_function(
   'public',
   'finalize_deleted_project_purge',
   array['uuid']
+);
+select has_function(
+  'public',
+  'request_project_permanent_deletion',
+  array['uuid']
+);
+select ok(
+  pg_get_functiondef('public.request_project_permanent_deletion(uuid)'::regprocedure)
+    ~* 'owner_id = auth.uid\(\)'
+  and pg_get_functiondef('public.request_project_permanent_deletion(uuid)'::regprocedure)
+    ~* 'project_deleted_at is null',
+  'only an owner of a trashed project may request permanent deletion'
+);
+select ok(
+  pg_get_functiondef('public.request_project_permanent_deletion(uuid)'::regprocedure)
+    ~* 'project_requested_at is not null'
+  and pg_get_functiondef('public.request_project_permanent_deletion(uuid)'::regprocedure)
+    ~* 'return ''pending''',
+  'duplicate permanent-deletion requests are idempotent'
 );
 select ok(
   pg_get_functiondef('public.claim_deleted_projects_for_purge(integer)'::regprocedure)
@@ -31,6 +51,11 @@ select ok(
   'candidate RPC enforces the retention period'
 );
 select ok(
+  pg_get_functiondef('public.claim_deleted_projects_for_purge(integer)'::regprocedure)
+    ~* 'permanent_delete_requested_at is not null',
+  'owner-requested deletion is immediately eligible for a worker claim'
+);
+select ok(
   pg_get_functiondef('public.finalize_deleted_project_purge(uuid)'::regprocedure)
     ~* '30 days'
   and pg_get_functiondef('public.finalize_deleted_project_purge(uuid)'::regprocedure)
@@ -48,6 +73,18 @@ select ok(
       and with_check ~* 'purge_started_at IS NULL'
   ),
   'owners cannot mutate a project after its purge claim'
+);
+select ok(
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'projects'
+      and policyname = 'projects_update_owner'
+      and qual ~* 'permanent_delete_requested_at IS NULL'
+      and with_check ~* 'permanent_delete_requested_at IS NULL'
+  ),
+  'owners cannot restore a project after permanent deletion is requested'
 );
 select ok(
   pg_get_functiondef('public.is_project_member(uuid)'::regprocedure)
@@ -131,6 +168,30 @@ select ok(
     'EXECUTE'
   ),
   'anonymous users cannot finalize a purge'
+);
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.request_project_permanent_deletion(uuid)',
+    'EXECUTE'
+  ),
+  'authenticated owners can call the permanent-deletion request boundary'
+);
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.request_project_permanent_deletion(uuid)',
+    'EXECUTE'
+  ),
+  'anonymous users cannot request permanent deletion'
+);
+select ok(
+  not has_function_privilege(
+    'service_role',
+    'public.request_project_permanent_deletion(uuid)',
+    'EXECUTE'
+  ),
+  'the purge worker does not use the client request boundary'
 );
 
 select * from finish();
