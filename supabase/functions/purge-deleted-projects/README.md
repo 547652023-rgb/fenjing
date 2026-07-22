@@ -8,24 +8,18 @@ the migrations in this repository:
 supabase functions deploy purge-deleted-projects
 ```
 
-`SUPABASE_URL` and `SUPABASE_ANON_KEY` are supplied by the Supabase Edge
-Function runtime. Keep JWT verification enabled. The scheduler must send a
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are supplied by the Supabase
+Edge Function runtime. The function performs its own privileged cleanup, so
+configure its **Verify JWT** setting as off and schedule an unauthenticated
 `POST` request to:
 
 ```text
 https://<project-ref>.supabase.co/functions/v1/purge-deleted-projects
 ```
 
-with this header:
-
-```text
-Authorization: Bearer <service-role-key>
-```
-
 Configure that request in the Supabase project's Cron integration (or the
-project's existing scheduler) and store the service-role key as a secret. Do
-not schedule the function with the anon key or a user access token: the claim
-and finalization RPCs intentionally grant execution only to `service_role`.
+project's existing scheduler). Do not expose the service-role key to the
+scheduler: it remains available only inside the Edge Function runtime.
 
 The function claims at most 100 eligible projects per run. A failed Storage
 operation leaves the relational project intact and becomes eligible for retry

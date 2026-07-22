@@ -8,15 +8,9 @@ Deno.serve(async (request) => {
     return new Response("Method not allowed", { status: 405 });
   }
 
-  const authorization = request.headers.get("Authorization");
-  if (!authorization) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authorization } } },
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
   const { data: candidates, error: claimError } = await supabase.rpc(
