@@ -200,3 +200,54 @@ type-check before those unchanged errors are reported.
 
 The user-owned `pnpm-lock.yaml` and untracked `pnpm-workspace.yaml` remain
 unstaged and unmodified by this review fix.
+
+## P1 rereview fix: close purge-write and hard-delete races
+
+The two P1 rereview findings are addressed without applying the migration to
+any Supabase instance:
+
+- `is_project_member(uuid)` now requires `purge_started_at is null` before
+  either its owner or editor branch. Owners therefore retain their intended
+  access to active and trashed projects before a purge claim, while all
+  inherited member-based Storage insert/update/delete policies close as soon
+  as the worker claims the project and before it lists files.
+- The project-home migration explicitly drops the inherited
+  `projects_delete_owner` policy and creates no authenticated replacement.
+  The service-role-only finalization RPC remains the sole hard-delete path.
+- The legacy Supabase `deleteProject()` compatibility method now updates
+  `deleted_at` instead of issuing a table DELETE. The later dashboard task can
+  move normal UI callers to the explicit `moveProjectToTrash()` method without
+  leaving a retention-bypassing compatibility path in the meantime.
+- Static Vitest contracts cover the helper's owner/editor structure, inherited
+  Storage write-policy dependency, policy removal, and soft-delete gateway
+  call. The pgTAP contract now checks the deployed helper, Storage policies,
+  and absence of any project DELETE policy.
+
+### Rereview-fix TDD evidence
+
+RED was observed with:
+
+```sh
+pnpm exec vitest --run src/data/projectPurge.contract.test.ts src/data/supabaseGateway.test.ts
+```
+
+Vitest exited 1 with exactly three feature-missing failures: the helper lacked
+the purge gate, the migration did not drop `projects_delete_owner`, and
+`deleteProject()` still invoked `.delete()`.
+
+After the minimal implementation, the same focused command exited 0 with 2
+test files and 16 tests passing. The full suite then exited 0:
+
+```text
+Test Files  27 passed (27)
+Tests       119 passed (119)
+```
+
+`pnpm build` still exits 1 on the same three pre-existing cross-task
+`ProjectSummary` errors recorded above: the fake gateway summary and two
+`TemplateLibrary.test.tsx` fixtures do not yet provide `icon`, `shotCount`,
+`createdAt`, and `deletedAt`. No new build error was introduced by this fix.
+
+The environment still has no Supabase CLI or `psql`, so the expanded pgTAP
+contract was not executed locally. The user-owned `pnpm-lock.yaml` and
+untracked `pnpm-workspace.yaml` remain outside this fix.

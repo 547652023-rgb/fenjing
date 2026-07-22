@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import onlineMigration from "../../supabase/migrations/202607170001_online_storyboards.sql?raw";
 import migration from "../../supabase/migrations/202607220003_project_home.sql?raw";
 import {
   purgeClaimedProjects,
@@ -83,6 +84,34 @@ describe("deleted project purge", () => {
   it("blocks owner updates after a project has been claimed for purge", () => {
     expect(migration).toMatch(
       /create policy projects_update_owner[\s\S]*?using \(purge_started_at is null and public\.is_project_owner\(id\)\)[\s\S]*?with check \(purge_started_at is null and owner_id = auth\.uid\(\)\)/i,
+    );
+  });
+
+  it("blocks every Storage member write after purge claim while owners retain pre-claim access", () => {
+    const helper = migration.match(
+      /create or replace function public\.is_project_member\(p_project_id uuid\)[\s\S]*?\$\$;/i,
+    )?.[0];
+
+    expect(onlineMigration).toMatch(
+      /create policy storyboard_images_insert_members[\s\S]*?public\.is_project_member/i,
+    );
+    expect(onlineMigration).toMatch(
+      /create policy storyboard_images_update_members[\s\S]*?public\.is_project_member/i,
+    );
+    expect(helper).toMatch(
+      /where project\.id = p_project_id\s+and project\.purge_started_at is null\s+and \(\s*project\.owner_id = auth\.uid\(\)\s+or \(\s*project\.deleted_at is null/i,
+    );
+  });
+
+  it("removes the inherited authenticated-owner hard-delete policy", () => {
+    expect(onlineMigration).toMatch(
+      /create policy projects_delete_owner on public\.projects\s+for delete using \(public\.is_project_owner\(id\)\)/i,
+    );
+    expect(migration).toMatch(
+      /drop policy if exists projects_delete_owner on public\.projects/i,
+    );
+    expect(migration).not.toMatch(
+      /create policy projects_delete[^;]*on public\.projects/i,
     );
   });
 });

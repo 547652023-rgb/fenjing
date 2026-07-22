@@ -1,6 +1,6 @@
 begin;
 
-select plan(14);
+select plan(17);
 
 select has_column('public', 'projects', 'purge_started_at');
 select has_function(
@@ -48,6 +48,41 @@ select ok(
       and with_check ~* 'purge_started_at IS NULL'
   ),
   'owners cannot mutate a project after its purge claim'
+);
+select ok(
+  pg_get_functiondef('public.is_project_member(uuid)'::regprocedure)
+    ~* 'purge_started_at IS NULL',
+  'project membership access closes when purge starts'
+);
+select ok(
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and policyname = 'storyboard_images_insert_members'
+      and with_check ~* 'is_project_member'
+  )
+  and exists (
+    select 1
+    from pg_policies
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and policyname = 'storyboard_images_update_members'
+      and qual ~* 'is_project_member'
+      and with_check ~* 'is_project_member'
+  ),
+  'Storage uploads and updates use purge-aware project membership'
+);
+select ok(
+  not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'projects'
+      and cmd = 'DELETE'
+  ),
+  'authenticated users have no direct project hard-delete policy'
 );
 select ok(
   has_function_privilege(

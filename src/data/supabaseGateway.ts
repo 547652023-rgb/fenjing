@@ -315,7 +315,10 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
   }
 
   async deleteProject(projectId: string): Promise<void> {
-    const result = await this.client.from("projects").delete().eq("id", projectId);
+    const result = await this.client
+      .from("projects")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", projectId);
     if (result.error) throw mapSupabaseError(result.error);
   }
 

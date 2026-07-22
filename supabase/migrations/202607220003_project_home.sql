@@ -40,8 +40,10 @@ create trigger project_home_settings_set_updated_at
 before update on public.project_home_settings
 for each row execute function public.set_updated_at();
 
--- Owners retain access to trashed projects, while collaborators lose access
--- until the owner restores the project.
+-- Owners retain access to trashed projects until purge starts, while
+-- collaborators lose access until the owner restores the project. The purge
+-- claim closes every policy that depends on this helper, including Storage
+-- object writes, before the worker lists the project's files.
 create or replace function public.is_project_member(p_project_id uuid)
 returns boolean
 language sql
@@ -53,6 +55,7 @@ as $$
     select 1
     from public.projects project
     where project.id = p_project_id
+      and project.purge_started_at is null
       and (
         project.owner_id = auth.uid()
         or (
@@ -77,6 +80,8 @@ create policy projects_update_active_members on public.projects
 for update
 using (deleted_at is null and public.is_project_member(id))
 with check (deleted_at is null and public.is_project_member(id));
+
+drop policy if exists projects_delete_owner on public.projects;
 
 create policy projects_update_owner on public.projects
 for update

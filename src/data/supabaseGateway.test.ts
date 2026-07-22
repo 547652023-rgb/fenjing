@@ -74,6 +74,22 @@ describe("SupabaseStoryboardGateway", () => {
     ).rejects.toMatchObject({ code: "conflict" });
   });
 
+  it("keeps deleteProject as a soft-delete compatibility path", async () => {
+    const eq = vi.fn().mockResolvedValue({ data: null, error: null });
+    const update = vi.fn(() => ({ eq }));
+    const remove = vi.fn();
+    const client = {
+      from: vi.fn(() => ({ update, delete: remove })),
+    };
+    const gateway = createSupabaseGateway(client);
+
+    await gateway.deleteProject("project-1");
+
+    expect(update).toHaveBeenCalledWith({ deleted_at: expect.any(String) });
+    expect(eq).toHaveBeenCalledWith("id", "project-1");
+    expect(remove).not.toHaveBeenCalled();
+  });
+
   it("maps Supabase errors to stable gateway codes", () => {
     expect(mapSupabaseError({ code: "23505", message: "duplicate" })).toMatchObject({
       code: "already_member",
