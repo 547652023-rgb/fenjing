@@ -7,6 +7,8 @@ import type {
 import type {
   AuthUser,
   ProjectEventListener,
+  ProjectFolder,
+  ProjectHomeSettings,
   ProjectMember,
   ProjectMetaPatch,
   ProjectSummary,
@@ -176,7 +178,7 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
         .from("projects")
         .select("id,title,owner_id,icon,created_at,updated_at,deleted_at,shots(count)")
         .order("updated_at", { ascending: false }),
-    );
+    ).filter((row) => !row.deleted_at || row.owner_id === user.id);
     if (projectRows.length === 0) return [];
     const projectIds = projectRows.map((row) => row.id);
     const memberships = requireData<any[]>(
@@ -192,15 +194,140 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
       icon: row.icon ?? null,
       ownerId: row.owner_id,
       ownerEmail: profiles.find((profile) => profile.id === row.owner_id)?.email ?? "",
-      role: memberships.find(
-        (membership) => membership.project_id === row.id && membership.user_id === user.id,
-      )?.role ?? "editor",
+      role: row.owner_id === user.id
+        ? "owner"
+        : memberships.find(
+            (membership) => membership.project_id === row.id && membership.user_id === user.id,
+          )?.role ?? "editor",
       memberCount: memberships.filter((membership) => membership.project_id === row.id).length,
       shotCount: row.shots?.[0]?.count ?? 0,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       deletedAt: row.deleted_at ?? null,
     }));
+  }
+
+  async listFolders(): Promise<ProjectFolder[]> {
+    const rows = requireData<any[]>(
+      await this.client
+        .from("project_folders")
+        .select("id,name,updated_at")
+        .order("updated_at", { ascending: true }),
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      updatedAt: row.updated_at,
+    }));
+  }
+
+  async createFolder(name: string): Promise<ProjectFolder> {
+    const user = await this.requireUser();
+    const rows = requireData<any[]>(
+      await this.client
+        .from("project_folders")
+        .insert({ user_id: user.id, name: name.trim() })
+        .select("id,name,updated_at"),
+    );
+    const row = rows[0];
+    if (!row) throw new GatewayError("not_found");
+    return { id: row.id, name: row.name, updatedAt: row.updated_at };
+  }
+
+  async renameFolder(folderId: string, name: string): Promise<void> {
+    const result = await this.client
+      .from("project_folders")
+      .update({ name: name.trim() })
+      .eq("id", folderId);
+    if (result.error) throw mapSupabaseError(result.error);
+  }
+
+  async deleteFolder(folderId: string): Promise<void> {
+    const result = await this.client.from("project_folders").delete().eq("id", folderId);
+    if (result.error) throw mapSupabaseError(result.error);
+  }
+
+  async setProjectFolder(
+    projectId: string,
+    folderId: string | null,
+  ): Promise<void> {
+    const user = await this.requireUser();
+    if (folderId === null) {
+      const result = await this.client
+        .from("project_folder_assignments")
+        .delete()
+        .eq("project_id", projectId);
+      if (result.error) throw mapSupabaseError(result.error);
+      return;
+    }
+    const result = await this.client.from("project_folder_assignments").upsert(
+      { user_id: user.id, project_id: projectId, folder_id: folderId },
+      { onConflict: "user_id,project_id" },
+    );
+    if (result.error) throw mapSupabaseError(result.error);
+  }
+
+  async listProjectFolderAssignments(): Promise<Record<string, string>> {
+    const rows = requireData<any[]>(
+      await this.client
+        .from("project_folder_assignments")
+        .select("project_id,folder_id"),
+    );
+    return Object.fromEntries(
+      rows.map((row) => [row.project_id as string, row.folder_id as string]),
+    );
+  }
+
+  async listHomeSettings(): Promise<ProjectHomeSettings> {
+    const user = await this.requireUser();
+    const result = await this.client
+      .from("project_home_settings")
+      .select("sort_by")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (result.error) throw mapSupabaseError(result.error);
+    return { sortBy: result.data?.sort_by ?? "updated" };
+  }
+
+  async saveHomeSettings(settings: ProjectHomeSettings): Promise<void> {
+    const user = await this.requireUser();
+    const result = await this.client
+      .from("project_home_settings")
+      .upsert({ user_id: user.id, sort_by: settings.sortBy });
+    if (result.error) throw mapSupabaseError(result.error);
+  }
+
+  async setProjectIcon(projectId: string, icon: string | null): Promise<void> {
+    const result = await this.client
+      .from("projects")
+      .update({ icon })
+      .eq("id", projectId);
+    if (result.error) throw mapSupabaseError(result.error);
+  }
+
+  async moveProjectToTrash(projectId: string): Promise<void> {
+    const result = await this.client
+      .from("projects")
+      .update({ deleted_at: new Date().toISOString() }, { count: "exact" })
+      .eq("id", projectId);
+    if (result.error) throw mapSupabaseError(result.error);
+    if (result.count === 0) throw new GatewayError("forbidden");
+  }
+
+  async restoreProject(projectId: string): Promise<void> {
+    const result = await this.client
+      .from("projects")
+      .update({ deleted_at: null }, { count: "exact" })
+      .eq("id", projectId);
+    if (result.error) throw mapSupabaseError(result.error);
+    if (result.count === 0) throw new GatewayError("forbidden");
+  }
+
+  async permanentlyDeleteProject(_projectId: string): Promise<void> {
+    throw new GatewayError(
+      "forbidden",
+      "Permanent deletion is managed by the purge service",
+    );
   }
 
   async createProject(
@@ -315,11 +442,7 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
   }
 
   async deleteProject(projectId: string): Promise<void> {
-    const result = await this.client
-      .from("projects")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", projectId);
-    if (result.error) throw mapSupabaseError(result.error);
+    await this.moveProjectToTrash(projectId);
   }
 
   async loadProject(projectId: string): Promise<StoryboardProject> {

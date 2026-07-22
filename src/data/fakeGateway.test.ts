@@ -118,3 +118,129 @@ it("removes image values from caller-supplied template snapshots during project 
   });
   expect((await gateway.loadProject(summary.id)).shots[0].values.frame).toBeUndefined();
 });
+
+it("keeps folders, assignments, and home settings personal", async () => {
+  const gateway = new FakeStoryboardGateway();
+  const owner = await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("广告片");
+  const ownerFolder = await gateway.createFolder(" 广告 ");
+  await gateway.setProjectFolder(project.id, ownerFolder.id);
+  await gateway.saveHomeSettings({ sortBy: "name" });
+
+  await gateway.signOut();
+  const editor = await gateway.signUp("editor@example.com", "password123");
+  await gateway.signOut();
+  await gateway.signIn(owner.email, "password123");
+  await gateway.inviteMember(project.id, editor.email);
+  await gateway.signIn(editor.email, "password123");
+
+  expect(await gateway.listFolders()).toEqual([]);
+  expect(await gateway.listProjectFolderAssignments()).toEqual({});
+  expect(await gateway.listHomeSettings()).toEqual({ sortBy: "updated" });
+  expect((await gateway.listProjects()).map(({ id }) => id)).toContain(project.id);
+
+  const editorFolder = await gateway.createFolder("制作中");
+  await gateway.setProjectFolder(project.id, editorFolder.id);
+  await gateway.renameFolder(editorFolder.id, "待审核");
+  expect(await gateway.listFolders()).toEqual([
+    expect.objectContaining({ id: editorFolder.id, name: "待审核" }),
+  ]);
+  expect(await gateway.listProjectFolderAssignments()).toEqual({
+    [project.id]: editorFolder.id,
+  });
+
+  await gateway.deleteFolder(editorFolder.id);
+  expect(await gateway.listFolders()).toEqual([]);
+  expect(await gateway.listProjectFolderAssignments()).toEqual({});
+
+  await gateway.signIn(owner.email, "password123");
+  expect(await gateway.listProjectFolderAssignments()).toEqual({
+    [project.id]: ownerFolder.id,
+  });
+});
+
+it("shares project icons while allowing only the owner to trash and restore", async () => {
+  const gateway = new FakeStoryboardGateway();
+  const owner = await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("协作广告");
+  await gateway.setProjectIcon(project.id, "🎬");
+  await gateway.signOut();
+  const editor = await gateway.signUp("editor@example.com", "password123");
+  await gateway.signOut();
+  await gateway.signIn(owner.email, "password123");
+  await gateway.inviteMember(project.id, editor.email);
+  await gateway.signIn(editor.email, "password123");
+
+  expect(await gateway.listProjects()).toEqual([
+    expect.objectContaining({ id: project.id, icon: "🎬" }),
+  ]);
+  await expect(gateway.moveProjectToTrash(project.id)).rejects.toMatchObject({
+    code: "forbidden",
+  });
+
+  await gateway.signIn(owner.email, "password123");
+  await gateway.moveProjectToTrash(project.id);
+  expect(await gateway.listProjects()).toEqual([
+    expect.objectContaining({ id: project.id, deletedAt: expect.any(String) }),
+  ]);
+
+  await gateway.signIn(editor.email, "password123");
+  expect(await gateway.listProjects()).toEqual([]);
+  await expect(gateway.loadProject(project.id)).rejects.toMatchObject({
+    code: "forbidden",
+  });
+
+  await gateway.signIn(owner.email, "password123");
+  await gateway.restoreProject(project.id);
+  await gateway.signIn(editor.email, "password123");
+  expect((await gateway.listProjects()).map(({ id }) => id)).toContain(project.id);
+});
+
+it("keeps deleteProject soft-delete compatible and reserves hard deletion for the purge service", async () => {
+  const gateway = new FakeStoryboardGateway();
+  const owner = await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("待删除");
+
+  await gateway.deleteProject(project.id);
+  expect(await gateway.listProjects()).toEqual([
+    expect.objectContaining({ id: project.id, deletedAt: expect.any(String) }),
+  ]);
+
+  await gateway.restoreProject(project.id);
+  await gateway.signOut();
+  const editor = await gateway.signUp("editor@example.com", "password123");
+  await gateway.signOut();
+  await gateway.signIn(owner.email, "password123");
+  await gateway.inviteMember(project.id, editor.email);
+  await gateway.moveProjectToTrash(project.id);
+  await gateway.signIn(editor.email, "password123");
+  await expect(gateway.permanentlyDeleteProject(project.id)).rejects.toMatchObject({
+    code: "forbidden",
+  });
+
+  await gateway.signIn(owner.email, "password123");
+  await expect(gateway.permanentlyDeleteProject(project.id)).rejects.toMatchObject({
+    code: "forbidden",
+  });
+  expect(await gateway.listProjects()).toEqual([
+    expect.objectContaining({ id: project.id, deletedAt: expect.any(String) }),
+  ]);
+});
+
+it("hides templates from editors while their source project is trashed", async () => {
+  const gateway = new FakeStoryboardGateway();
+  const owner = await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("广告片");
+  const snapshot = projectToTemplateSnapshot(await gateway.loadProject(project.id));
+  await gateway.createTemplate(project.id, "广告模板", snapshot);
+  await gateway.signOut();
+  const editor = await gateway.signUp("editor@example.com", "password123");
+  await gateway.signOut();
+  await gateway.signIn(owner.email, "password123");
+  await gateway.inviteMember(project.id, editor.email);
+  await gateway.moveProjectToTrash(project.id);
+
+  await gateway.signIn(editor.email, "password123");
+
+  expect(await gateway.listTemplates()).toEqual(BUILT_IN_TEMPLATES);
+});

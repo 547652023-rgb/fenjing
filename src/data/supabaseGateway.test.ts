@@ -85,9 +85,208 @@ describe("SupabaseStoryboardGateway", () => {
 
     await gateway.deleteProject("project-1");
 
-    expect(update).toHaveBeenCalledWith({ deleted_at: expect.any(String) });
+    expect(update).toHaveBeenCalledWith(
+      { deleted_at: expect.any(String) },
+      { count: "exact" },
+    );
     expect(eq).toHaveBeenCalledWith("id", "project-1");
     expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("maps personal folders, assignments, and home settings", async () => {
+    const folderOrder = vi.fn().mockResolvedValue({
+      data: [{ id: "folder-1", name: "广告", updated_at: "2026-07-22T01:00:00.000Z" }],
+      error: null,
+    });
+    const assignmentSelect = vi.fn().mockResolvedValue({
+      data: [{ project_id: "project-1", folder_id: "folder-1" }],
+      error: null,
+    });
+    const settingsSingle = vi.fn().mockResolvedValue({
+      data: { sort_by: "name" },
+      error: null,
+    });
+    const client = {
+      auth: {
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: { user: { id: "user-1", email: "owner@example.com" } } },
+          error: null,
+        }),
+      },
+      from: vi.fn((table: string) => {
+        if (table === "project_folders") {
+          return { select: vi.fn(() => ({ order: folderOrder })) };
+        }
+        if (table === "project_folder_assignments") {
+          return { select: assignmentSelect };
+        }
+        if (table === "project_home_settings") {
+          return {
+            select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: settingsSingle })) })),
+          };
+        }
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    };
+    const gateway = createSupabaseGateway(client);
+
+    await expect(gateway.listFolders()).resolves.toEqual([
+      { id: "folder-1", name: "广告", updatedAt: "2026-07-22T01:00:00.000Z" },
+    ]);
+    await expect(gateway.listProjectFolderAssignments()).resolves.toEqual({
+      "project-1": "folder-1",
+    });
+    await expect(gateway.listHomeSettings()).resolves.toEqual({ sortBy: "name" });
+  });
+
+  it("persists folder, assignment, settings, icon, and trash mutations", async () => {
+    const calls: Array<[string, string, unknown]> = [];
+    const client = {
+      auth: {
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: { user: { id: "user-1", email: "owner@example.com" } } },
+          error: null,
+        }),
+      },
+      from: vi.fn((table: string) => ({
+        insert: vi.fn((value: unknown) => {
+          calls.push([table, "insert", value]);
+          return {
+            select: vi.fn().mockResolvedValue({
+              data: [{ id: "folder-1", name: "广告", updated_at: "2026-07-22T01:00:00.000Z" }],
+              error: null,
+            }),
+          };
+        }),
+        update: vi.fn((value: unknown) => ({
+          eq: vi.fn((column: string, match: unknown) => {
+            calls.push([table, `update:${column}`, { value, match }]);
+            return Promise.resolve({ data: null, error: null });
+          }),
+        })),
+        delete: vi.fn(() => ({
+          eq: vi.fn((column: string, match: unknown) => {
+            calls.push([table, `delete:${column}`, match]);
+            return Promise.resolve({ data: null, error: null });
+          }),
+        })),
+        upsert: vi.fn((value: unknown) => {
+          calls.push([table, "upsert", value]);
+          return Promise.resolve({ data: null, error: null });
+        }),
+      })),
+    };
+    const gateway = createSupabaseGateway(client);
+
+    await expect(gateway.createFolder(" 广告 ")).resolves.toMatchObject({
+      id: "folder-1",
+      name: "广告",
+    });
+    await gateway.renameFolder("folder-1", "新名称");
+    await gateway.deleteFolder("folder-1");
+    await gateway.setProjectFolder("project-1", "folder-1");
+    await gateway.setProjectFolder("project-2", null);
+    await gateway.saveHomeSettings({ sortBy: "created" });
+    await gateway.setProjectIcon("project-1", "🎬");
+    await gateway.moveProjectToTrash("project-1");
+    await gateway.restoreProject("project-1");
+
+    expect(calls).toEqual(expect.arrayContaining([
+      ["project_folders", "insert", { user_id: "user-1", name: "广告" }],
+      ["project_folders", "update:id", {
+        value: { name: "新名称" },
+        match: "folder-1",
+      }],
+      ["project_folders", "delete:id", "folder-1"],
+      ["project_folder_assignments", "upsert", {
+        user_id: "user-1",
+        project_id: "project-1",
+        folder_id: "folder-1",
+      }],
+      ["project_folder_assignments", "delete:project_id", "project-2"],
+      ["project_home_settings", "upsert", { user_id: "user-1", sort_by: "created" }],
+      ["projects", "update:id", { value: { icon: "🎬" }, match: "project-1" }],
+      ["projects", "update:id", {
+        value: { deleted_at: expect.any(String) },
+        match: "project-1",
+      }],
+      ["projects", "update:id", { value: { deleted_at: null }, match: "project-1" }],
+    ]));
+  });
+
+  it("filters trashed projects that do not belong to the current user", async () => {
+    const projectOrder = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: "owned-trash",
+          title: "我的回收项目",
+          owner_id: "user-1",
+          created_at: "2026-07-20T01:00:00.000Z",
+          updated_at: "2026-07-21T01:00:00.000Z",
+          deleted_at: "2026-07-22T01:00:00.000Z",
+          shots: [{ count: 1 }],
+        },
+        {
+          id: "shared-trash",
+          title: "他人的回收项目",
+          owner_id: "user-2",
+          created_at: "2026-07-20T01:00:00.000Z",
+          updated_at: "2026-07-21T01:00:00.000Z",
+          deleted_at: "2026-07-22T01:00:00.000Z",
+          shots: [{ count: 1 }],
+        },
+      ],
+      error: null,
+    });
+    const client = {
+      auth: {
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: { user: { id: "user-1", email: "owner@example.com" } } },
+          error: null,
+        }),
+      },
+      from: vi.fn((table: string) => {
+        if (table === "projects") return { select: vi.fn(() => ({ order: projectOrder })) };
+        if (table === "project_members") {
+          return { select: vi.fn(() => ({ in: vi.fn().mockResolvedValue({ data: [], error: null }) })) };
+        }
+        if (table === "profiles") {
+          return { select: vi.fn(() => ({ in: vi.fn().mockResolvedValue({ data: [], error: null }) })) };
+        }
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    };
+
+    await expect(createSupabaseGateway(client).listProjects()).resolves.toEqual([
+      expect.objectContaining({ id: "owned-trash", role: "owner" }),
+    ]);
+  });
+
+  it("keeps permanent deletion inside the storage-first purge service", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const remove = vi.fn();
+    const client = { rpc, from: vi.fn(() => ({ delete: remove })) };
+    const gateway = createSupabaseGateway(client);
+
+    await expect(gateway.permanentlyDeleteProject("project-1")).rejects.toMatchObject({
+      code: "forbidden",
+    });
+
+    expect(rpc).not.toHaveBeenCalled();
+    expect(client.from).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("rejects owner-only trash transitions when RLS updates no project", async () => {
+    const eq = vi.fn().mockResolvedValue({ data: [], error: null, count: 0 });
+    const client = {
+      from: vi.fn(() => ({ update: vi.fn(() => ({ eq })) })),
+    };
+    const gateway = createSupabaseGateway(client);
+
+    await expect(gateway.restoreProject("project-1")).rejects.toMatchObject({
+      code: "forbidden",
+    });
   });
 
   it("maps Supabase errors to stable gateway codes", () => {

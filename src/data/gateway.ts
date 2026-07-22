@@ -2,6 +2,8 @@ import type { Shot, StoryboardProject } from "../domain/storyboard";
 import type {
   AuthUser,
   ProjectEventListener,
+  ProjectFolder,
+  ProjectHomeSettings,
   ProjectMember,
   ProjectMetaPatch,
   ProjectSummary,
@@ -43,6 +45,18 @@ export interface StoryboardGateway {
   signOut(): Promise<void>;
   listProjects(): Promise<ProjectSummary[]>;
   createProject(title: string, template?: TemplateSnapshot): Promise<ProjectSummary>;
+  listFolders(): Promise<ProjectFolder[]>;
+  createFolder(name: string): Promise<ProjectFolder>;
+  renameFolder(folderId: string, name: string): Promise<void>;
+  deleteFolder(folderId: string): Promise<void>;
+  setProjectFolder(projectId: string, folderId: string | null): Promise<void>;
+  listProjectFolderAssignments(): Promise<Record<string, string>>;
+  listHomeSettings(): Promise<ProjectHomeSettings>;
+  saveHomeSettings(settings: ProjectHomeSettings): Promise<void>;
+  setProjectIcon(projectId: string, icon: string | null): Promise<void>;
+  moveProjectToTrash(projectId: string): Promise<void>;
+  restoreProject(projectId: string): Promise<void>;
+  permanentlyDeleteProject(projectId: string): Promise<void>;
   listTemplates(): Promise<StoryboardTemplate[]>;
   createTemplate(
     sourceProjectId: string,

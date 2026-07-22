@@ -12,20 +12,28 @@ const projects: ProjectSummary[] = [
   {
     id: "project-1",
     title: "自建广告",
+    icon: null,
     ownerId: "owner-1",
     ownerEmail: "owner@example.com",
     role: "owner",
     memberCount: 1,
+    shotCount: 1,
+    createdAt: "2026-07-21T00:00:00.000Z",
     updatedAt: "2026-07-21T00:00:00.000Z",
+    deletedAt: null,
   },
   {
     id: "project-2",
     title: "受邀宣传片",
+    icon: null,
     ownerId: "owner-2",
     ownerEmail: "teammate@example.com",
     role: "editor",
     memberCount: 2,
+    shotCount: 1,
+    createdAt: "2026-07-21T00:00:00.000Z",
     updatedAt: "2026-07-21T00:00:00.000Z",
+    deletedAt: null,
   },
 ];
 

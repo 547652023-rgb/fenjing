@@ -10,6 +10,8 @@ import type {
   AuthUser,
   ProjectEvent,
   ProjectEventListener,
+  ProjectFolder,
+  ProjectHomeSettings,
   ProjectMember,
   ProjectMetaPatch,
   ProjectRole,
@@ -62,6 +64,16 @@ export class FakeStoryboardGateway implements StoryboardGateway {
   private readonly owners = new Map<string, string>();
   private readonly memberships = new Map<string, Map<string, ProjectRole>>();
   private readonly templates = new Map<string, StoryboardTemplate>();
+  private readonly foldersByUser = new Map<string, Map<string, ProjectFolder>>();
+  private readonly folderAssignmentsByUser = new Map<
+    string,
+    Map<string, string>
+  >();
+  private readonly homeSettingsByUser = new Map<string, ProjectHomeSettings>();
+  private readonly projectIcons = new Map<string, string | null>();
+  private readonly projectCreatedAt = new Map<string, string>();
+  private readonly projectUpdatedAt = new Map<string, string>();
+  private readonly projectDeletedAt = new Map<string, string | null>();
   private readonly versions = new Map<string, number>();
   private readonly authListeners = new Set<(user: AuthUser | null) => void>();
   private readonly projectListeners = new Map<
@@ -72,6 +84,7 @@ export class FakeStoryboardGateway implements StoryboardGateway {
   private nextUserId = 1;
   private nextProjectId = 1;
   private nextTemplateId = 1;
+  private nextFolderId = 1;
   private nextConflict: { projectId: string; shot: Shot } | null = null;
 
   async getSession(): Promise<AuthUser | null> {
@@ -115,7 +128,7 @@ export class FakeStoryboardGateway implements StoryboardGateway {
   async listProjects(): Promise<ProjectSummary[]> {
     const user = this.requireUser();
     return [...this.projects.keys()]
-      .filter((projectId) => this.memberships.get(projectId)?.has(user.id))
+      .filter((projectId) => this.canAccessProject(projectId, user.id))
       .map((projectId) => this.summaryFor(projectId));
   }
 
@@ -141,17 +154,139 @@ export class FakeStoryboardGateway implements StoryboardGateway {
     this.projects.set(id, project);
     this.owners.set(id, user.id);
     this.memberships.set(id, new Map([[user.id, "owner"]]));
+    const now = new Date().toISOString();
+    this.projectIcons.set(id, null);
+    this.projectCreatedAt.set(id, now);
+    this.projectUpdatedAt.set(id, now);
+    this.projectDeletedAt.set(id, null);
     project.shots.forEach((shot) => this.versions.set(shot.id, 1));
     return this.summaryFor(id);
+  }
+
+  async listFolders(): Promise<ProjectFolder[]> {
+    const user = this.requireUser();
+    return [...(this.foldersByUser.get(user.id)?.values() ?? [])]
+      .map((folder) => ({ ...folder }))
+      .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt));
+  }
+
+  async createFolder(name: string): Promise<ProjectFolder> {
+    const user = this.requireUser();
+    const folders = this.userFolders(user.id);
+    const normalizedName = name.trim();
+    if ([...folders.values()].some((folder) => folder.name === normalizedName)) {
+      throw new GatewayError("conflict");
+    }
+    const folder = {
+      id: `folder-${this.nextFolderId++}`,
+      name: normalizedName,
+      updatedAt: new Date().toISOString(),
+    };
+    folders.set(folder.id, folder);
+    return { ...folder };
+  }
+
+  async renameFolder(folderId: string, name: string): Promise<void> {
+    const user = this.requireUser();
+    const folders = this.userFolders(user.id);
+    const folder = folders.get(folderId);
+    if (!folder) throw new GatewayError("not_found");
+    const normalizedName = name.trim();
+    if (
+      [...folders.values()].some(
+        (candidate) => candidate.id !== folderId && candidate.name === normalizedName,
+      )
+    ) {
+      throw new GatewayError("conflict");
+    }
+    folders.set(folderId, {
+      ...folder,
+      name: normalizedName,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  async deleteFolder(folderId: string): Promise<void> {
+    const user = this.requireUser();
+    const folders = this.userFolders(user.id);
+    if (!folders.has(folderId)) throw new GatewayError("not_found");
+    folders.delete(folderId);
+    const assignments = this.userFolderAssignments(user.id);
+    for (const [projectId, assignedFolderId] of assignments) {
+      if (assignedFolderId === folderId) assignments.delete(projectId);
+    }
+  }
+
+  async setProjectFolder(
+    projectId: string,
+    folderId: string | null,
+  ): Promise<void> {
+    const user = this.requireUser();
+    this.requireProjectMember(projectId);
+    const assignments = this.userFolderAssignments(user.id);
+    if (folderId === null) {
+      assignments.delete(projectId);
+      return;
+    }
+    if (!this.userFolders(user.id).has(folderId)) {
+      throw new GatewayError("not_found");
+    }
+    assignments.set(projectId, folderId);
+  }
+
+  async listProjectFolderAssignments(): Promise<Record<string, string>> {
+    const user = this.requireUser();
+    return Object.fromEntries(
+      [...this.userFolderAssignments(user.id)].filter(([projectId]) =>
+        this.canAccessProject(projectId, user.id),
+      ),
+    );
+  }
+
+  async listHomeSettings(): Promise<ProjectHomeSettings> {
+    const user = this.requireUser();
+    return { ...(this.homeSettingsByUser.get(user.id) ?? { sortBy: "updated" }) };
+  }
+
+  async saveHomeSettings(settings: ProjectHomeSettings): Promise<void> {
+    const user = this.requireUser();
+    this.homeSettingsByUser.set(user.id, { ...settings });
+  }
+
+  async setProjectIcon(projectId: string, icon: string | null): Promise<void> {
+    this.requireProjectMember(projectId);
+    this.projectIcons.set(projectId, icon);
+    this.touchProject(projectId);
+    this.emit(projectId, { type: "project.changed" });
+  }
+
+  async moveProjectToTrash(projectId: string): Promise<void> {
+    this.requireOwner(projectId);
+    this.projectDeletedAt.set(projectId, new Date().toISOString());
+    this.touchProject(projectId);
+    this.emit(projectId, { type: "project.changed" });
+  }
+
+  async restoreProject(projectId: string): Promise<void> {
+    this.requireOwner(projectId);
+    this.projectDeletedAt.set(projectId, null);
+    this.touchProject(projectId);
+    this.emit(projectId, { type: "project.changed" });
+  }
+
+  async permanentlyDeleteProject(projectId: string): Promise<void> {
+    this.requireOwner(projectId);
+    throw new GatewayError(
+      "forbidden",
+      "Permanent deletion is managed by the purge service",
+    );
   }
 
   async listTemplates(): Promise<StoryboardTemplate[]> {
     const user = this.requireUser();
     const builtIns = BUILT_IN_TEMPLATES.map(cloneTemplate);
     const custom = [...this.templates.values()]
-      .filter((template) =>
-        this.memberships.get(template.sourceProjectId!)?.has(user.id),
-      )
+      .filter((template) => this.canAccessProject(template.sourceProjectId!, user.id))
       .map(cloneTemplate);
     return [...builtIns, ...custom];
   }
@@ -198,22 +333,12 @@ export class FakeStoryboardGateway implements StoryboardGateway {
   async renameProject(projectId: string, title: string): Promise<void> {
     const project = this.requireProjectMember(projectId);
     this.projects.set(projectId, { ...project, title: title.trim() });
+    this.touchProject(projectId);
     this.emit(projectId, { type: "project.changed" });
   }
 
   async deleteProject(projectId: string): Promise<void> {
-    const user = this.requireUser();
-    this.requireProject(projectId);
-    if (this.owners.get(projectId) !== user.id) {
-      throw new GatewayError("forbidden");
-    }
-    this.projects.delete(projectId);
-    this.owners.delete(projectId);
-    this.memberships.delete(projectId);
-    for (const [templateId, template] of this.templates) {
-      if (template.sourceProjectId === projectId) this.templates.delete(templateId);
-    }
-    this.emit(projectId, { type: "project.changed" });
+    await this.moveProjectToTrash(projectId);
   }
 
   async loadProject(projectId: string): Promise<StoryboardProject> {
@@ -233,6 +358,7 @@ export class FakeStoryboardGateway implements StoryboardGateway {
         ? patch.fields.map((field) => ({ ...field }))
         : project.fields,
     });
+    this.touchProject(projectId);
     this.emit(projectId, { type: "project.changed" });
   }
 
@@ -415,7 +541,7 @@ export class FakeStoryboardGateway implements StoryboardGateway {
   private requireProjectMember(projectId: string): StoryboardProject {
     const user = this.requireUser();
     const project = this.requireProject(projectId);
-    if (!this.memberships.get(projectId)?.has(user.id)) {
+    if (!this.canAccessProject(projectId, user.id)) {
       throw new GatewayError("forbidden");
     }
     return project;
@@ -435,6 +561,27 @@ export class FakeStoryboardGateway implements StoryboardGateway {
     return template;
   }
 
+  private canAccessProject(projectId: string, userId: string): boolean {
+    if (!this.memberships.get(projectId)?.has(userId)) return false;
+    return !this.projectDeletedAt.get(projectId) || this.owners.get(projectId) === userId;
+  }
+
+  private userFolders(userId: string): Map<string, ProjectFolder> {
+    const folders = this.foldersByUser.get(userId) ?? new Map();
+    this.foldersByUser.set(userId, folders);
+    return folders;
+  }
+
+  private userFolderAssignments(userId: string): Map<string, string> {
+    const assignments = this.folderAssignmentsByUser.get(userId) ?? new Map();
+    this.folderAssignmentsByUser.set(userId, assignments);
+    return assignments;
+  }
+
+  private touchProject(projectId: string): void {
+    this.projectUpdatedAt.set(projectId, new Date().toISOString());
+  }
+
   private summaryFor(projectId: string): ProjectSummary {
     const project = this.requireProject(projectId);
     const ownerId = this.owners.get(projectId)!;
@@ -442,13 +589,17 @@ export class FakeStoryboardGateway implements StoryboardGateway {
     return {
       id: project.id,
       title: project.title,
+      icon: this.projectIcons.get(projectId) ?? null,
       ownerId,
       ownerEmail:
         [...this.users.values()].find((candidate) => candidate.id === ownerId)
           ?.email ?? "",
       role: this.memberships.get(projectId)?.get(user.id) ?? "editor",
       memberCount: this.memberships.get(projectId)?.size ?? 0,
-      updatedAt: new Date(0).toISOString(),
+      shotCount: project.shots.length,
+      createdAt: this.projectCreatedAt.get(projectId) ?? new Date(0).toISOString(),
+      updatedAt: this.projectUpdatedAt.get(projectId) ?? new Date(0).toISOString(),
+      deletedAt: this.projectDeletedAt.get(projectId) ?? null,
     };
   }
 }

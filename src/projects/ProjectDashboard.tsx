@@ -85,7 +85,7 @@ export function ProjectDashboard({
         gateway.listProjects(),
         gateway.listTemplates(),
       ]);
-      setProjects(nextProjects);
+      setProjects(nextProjects.filter((project) => project.deletedAt === null));
       setTemplates(nextTemplates);
       setError("");
     } catch {
