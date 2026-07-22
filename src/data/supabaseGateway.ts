@@ -347,20 +347,13 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
     const templateProject = template
       ? templateToProject(template, "template-snapshot", title.trim())
       : undefined;
-    const projectInsert = {
-      title: title.trim(),
-      owner_id: user.id,
-      ...(templateProject
-        ? { aspect_ratio: templateProject.aspectRatio || DEFAULT_ASPECT_RATIO }
-        : {}),
-    };
-    const rows = requireData<any[]>(
-      await this.client
-        .from("projects")
-        .insert(projectInsert)
-        .select("id,title,aspect_ratio,owner_id,icon,created_at,updated_at,deleted_at,permanent_delete_requested_at,shots(count)"),
+    const created = requireData<any>(
+      await this.client.rpc("create_storyboard_project", {
+        p_title: title.trim(),
+        p_aspect_ratio: templateProject?.aspectRatio ?? null,
+      }),
     );
-    const row = rows[0];
+    const row = Array.isArray(created) ? created[0] : created;
     if (!row) throw new GatewayError("not_found");
     if (templateProject) {
       await this.replaceFields(row.id, templateProject.fields);
