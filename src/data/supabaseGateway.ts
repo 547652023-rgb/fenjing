@@ -518,37 +518,19 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
     projectId: string,
     fields: FieldDefinition[],
   ): Promise<void> {
-    const removeFields = await this.client.from("fields").delete().eq("project_id", projectId);
-    if (removeFields.error) throw mapSupabaseError(removeFields.error);
-    const rows = requireData<any[]>(
-      await this.client
-        .from("fields")
-        .insert(
-          fields.map((field) => ({
-            project_id: projectId,
-            field_key: field.id,
-            label: field.label,
-            field_type: field.type,
-            visible: field.visible,
-            position: field.order,
-            allow_custom_value: field.allowCustomValue ?? false,
-          })),
-        )
-        .select("id,field_key"),
-    );
-    const options = fields.flatMap((field) => {
-      const fieldId = rows.find((row) => row.field_key === field.id)?.id;
-      if (!fieldId) return [];
-      return (field.options ?? []).map((value, position) => ({
-        field_id: fieldId,
-        value,
-        position,
-      }));
+    const result = await this.client.rpc("replace_storyboard_project_fields", {
+      p_project_id: projectId,
+      p_fields: fields.map((field) => ({
+        field_key: field.id,
+        label: field.label,
+        field_type: field.type,
+        visible: field.visible,
+        position: field.order,
+        allow_custom_value: field.allowCustomValue ?? false,
+        options: field.options ?? [],
+      })),
     });
-    if (options.length > 0) {
-      const insertOptions = await this.client.from("field_options").insert(options);
-      if (insertOptions.error) throw mapSupabaseError(insertOptions.error);
-    }
+    if (result.error) throw mapSupabaseError(result.error);
   }
 
   async saveShot(projectId: string, shot: Shot, expectedVersion: number): Promise<VersionedShot> {
