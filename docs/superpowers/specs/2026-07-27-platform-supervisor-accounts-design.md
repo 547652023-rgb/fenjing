@@ -6,7 +6,7 @@
 
 ## 权限模型
 
-- `supervisor`: 由部署环境变量 `VITE_SUPERVISOR_EMAIL` 指定的固定邮箱，拥有主管后台权限。
+- `supervisor`: 存在于数据库 `platform_supervisors` 白名单中的固定邮箱，拥有主管后台权限。
 - `member`: 普通平台注册用户，只能访问自己拥有或被邀请加入的项目。
 
 主管账号本身不能被禁用。邮箱比较统一使用小写、去除首尾空格后的值。
@@ -29,7 +29,7 @@
 - `check_platform_registration(email)`：注册前检查邮箱是否在白名单且不是禁用状态。
 - `complete_platform_registration(email, user_id)`：注册成功后将 `invited` 账号绑定到用户并转为 `active`。
 
-所有主管函数使用 `SECURITY DEFINER`，在函数内部验证 `auth.uid()` 的邮箱是否等于主管邮箱；普通客户端不能直接写入账号表。
+所有主管函数使用 `SECURITY DEFINER`，在函数内部验证 `auth.uid()` 对应的邮箱是否存在于 `platform_supervisors`；普通客户端不能直接写入账号表。首次部署由项目管理员在 Supabase SQL 编辑器将主管邮箱加入该白名单，前端不承担权限判断。
 
 ## 注册与登录流程
 
