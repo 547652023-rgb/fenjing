@@ -10,6 +10,8 @@ import type {
   ProjectFolder,
   ProjectHomeSettings,
   ProjectMember,
+  PlatformAccount,
+  PlatformAccountStatus,
   ProjectMetaPatch,
   ProjectSummary,
   PermanentDeleteRequestStatus,
@@ -45,6 +47,12 @@ export function mapSupabaseError(
   fallback: GatewayErrorCode = "network",
 ): GatewayError {
   const message = error.message ?? fallback;
+  if (message.includes("not_supervisor")) return new GatewayError("not_supervisor", message);
+  if (message.includes("registration_not_allowed")) return new GatewayError("registration_not_allowed", message);
+  if (message.includes("account_disabled")) return new GatewayError("account_disabled", message);
+  if (message.includes("invalid_email")) return new GatewayError("invalid_email", message);
+  if (message.includes("invalid_status")) return new GatewayError("invalid_status", message);
+  if (message.includes("cannot_disable_supervisor")) return new GatewayError("cannot_disable_supervisor", message);
   if (error.code === "42501" || error.status === 401 || error.status === 403) {
     return new GatewayError("forbidden", message);
   }
@@ -78,6 +86,17 @@ function requireData<T>(result: { data: T | null; error: SupabaseErrorLike | nul
 function authUser(user: any): AuthUser {
   if (!user?.id || !user?.email) throw new GatewayError("not_authenticated");
   return { id: user.id, email: user.email };
+}
+
+function rowToPlatformAccount(row: any): PlatformAccount {
+  return {
+    email: row.email,
+    userId: row.user_id ?? null,
+    status: row.status as PlatformAccountStatus,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    disabledAt: row.disabled_at ?? null,
+  };
 }
 
 function rowToShot(row: any): Shot {
@@ -153,18 +172,65 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
   }
 
   async signUp(email: string, password: string): Promise<AuthUser> {
-    const result = await this.client.auth.signUp({ email: email.trim().toLowerCase(), password });
+    const normalizedEmail = email.trim().toLowerCase();
+    requireData<boolean>(
+      await this.client.rpc("check_platform_registration", { p_email: normalizedEmail }),
+      "registration_not_allowed",
+    );
+    const result = await this.client.auth.signUp({ email: normalizedEmail, password });
     if (result.error) throw mapSupabaseError(result.error);
-    return authUser(result.data.user);
+    const user = authUser(result.data.user);
+    requireData<boolean>(
+      await this.client.rpc("complete_platform_registration", {
+        p_email: normalizedEmail,
+        p_user_id: user.id,
+      }),
+      "registration_not_allowed",
+    );
+    return user;
   }
 
   async signIn(email: string, password: string): Promise<AuthUser> {
+    const normalizedEmail = email.trim().toLowerCase();
+    requireData<boolean>(
+      await this.client.rpc("check_platform_login", { p_email: normalizedEmail }),
+      "registration_not_allowed",
+    );
     const result = await this.client.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
+      email: normalizedEmail,
       password,
     });
     if (result.error) throw mapSupabaseError(result.error, "invalid_credentials");
     return authUser(result.data.user);
+  }
+
+  async isSupervisor(): Promise<boolean> {
+    return requireData<boolean>(await this.client.rpc("is_platform_supervisor"));
+  }
+
+  async listPlatformAccounts(): Promise<PlatformAccount[]> {
+    return requireData<any[]>(await this.client.rpc("supervisor_list_platform_accounts"))
+      .map(rowToPlatformAccount);
+  }
+
+  async invitePlatformAccount(email: string): Promise<PlatformAccount> {
+    const result = requireData<any[] | any>(
+      await this.client.rpc("supervisor_invite_platform_account", { p_email: email.trim().toLowerCase() }),
+    );
+    return rowToPlatformAccount(Array.isArray(result) ? result[0] : result);
+  }
+
+  async setPlatformAccountStatus(
+    userId: string,
+    status: Extract<PlatformAccountStatus, "active" | "disabled">,
+  ): Promise<PlatformAccount> {
+    const result = requireData<any[] | any>(
+      await this.client.rpc("supervisor_set_platform_account_status", {
+        p_user_id: userId,
+        p_status: status,
+      }),
+    );
+    return rowToPlatformAccount(Array.isArray(result) ? result[0] : result);
   }
 
   async signOut(): Promise<void> {

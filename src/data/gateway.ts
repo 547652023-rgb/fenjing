@@ -5,6 +5,8 @@ import type {
   ProjectFolder,
   ProjectHomeSettings,
   ProjectMember,
+  PlatformAccount,
+  PlatformAccountStatus,
   ProjectMetaPatch,
   ProjectSummary,
   PermanentDeleteRequestStatus,
@@ -24,6 +26,12 @@ export type GatewayErrorCode =
   | "not_found"
   | "user_not_found"
   | "already_member"
+  | "not_supervisor"
+  | "registration_not_allowed"
+  | "account_disabled"
+  | "invalid_email"
+  | "invalid_status"
+  | "cannot_disable_supervisor"
   | "conflict"
   | "upload_failed"
   | "network";
@@ -44,6 +52,10 @@ export interface StoryboardGateway {
   signUp(email: string, password: string): Promise<AuthUser>;
   signIn(email: string, password: string): Promise<AuthUser>;
   signOut(): Promise<void>;
+  isSupervisor(): Promise<boolean>;
+  listPlatformAccounts(): Promise<PlatformAccount[]>;
+  invitePlatformAccount(email: string): Promise<PlatformAccount>;
+  setPlatformAccountStatus(userId: string, status: Extract<PlatformAccountStatus, "active" | "disabled">): Promise<PlatformAccount>;
   listProjects(): Promise<ProjectSummary[]>;
   createProject(title: string, template?: TemplateSnapshot): Promise<ProjectSummary>;
   listFolders(): Promise<ProjectFolder[]>;

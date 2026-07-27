@@ -14,6 +14,8 @@ import type {
   ProjectFolder,
   ProjectHomeSettings,
   ProjectMember,
+  PlatformAccount,
+  PlatformAccountStatus,
   ProjectMetaPatch,
   ProjectRole,
   ProjectSummary,
@@ -79,11 +81,13 @@ export class FakeStoryboardGateway implements StoryboardGateway {
   private readonly permanentDeleteRequestedAt = new Map<string, string | null>();
   private readonly versions = new Map<string, number>();
   private readonly authListeners = new Set<(user: AuthUser | null) => void>();
+  private readonly platformAccounts = new Map<string, PlatformAccount>();
   private readonly projectListeners = new Map<
     string,
     Set<ProjectEventListener>
   >();
   private currentUser: AuthUser | null = null;
+  private platformSupervisorId: string | null = null;
   private nextUserId = 1;
   private nextProjectId = 1;
   private nextTemplateId = 1;
@@ -104,12 +108,26 @@ export class FakeStoryboardGateway implements StoryboardGateway {
     if (this.users.has(normalizedEmail)) {
       throw new GatewayError("already_registered");
     }
+    const invited = this.platformAccounts.get(normalizedEmail);
+    if (invited?.status === "disabled") {
+      throw new GatewayError("registration_not_allowed");
+    }
     const user = {
       id: `user-${this.nextUserId++}`,
       email: normalizedEmail,
       password,
     };
     this.users.set(normalizedEmail, user);
+    if (!this.platformSupervisorId) this.platformSupervisorId = user.id;
+    const now = new Date().toISOString();
+    this.platformAccounts.set(normalizedEmail, {
+      email: normalizedEmail,
+      userId: user.id,
+      status: "active",
+      createdAt: invited?.createdAt ?? now,
+      updatedAt: now,
+      disabledAt: null,
+    });
     this.setCurrentUser(user);
     return { id: user.id, email: user.email };
   }
@@ -119,8 +137,58 @@ export class FakeStoryboardGateway implements StoryboardGateway {
     if (!user || user.password !== password) {
       throw new GatewayError("invalid_credentials");
     }
+    if (this.platformAccounts.get(user.email)?.status === "disabled") {
+      throw new GatewayError("account_disabled");
+    }
     this.setCurrentUser(user);
     return { id: user.id, email: user.email };
+  }
+
+  async isSupervisor(): Promise<boolean> {
+    return this.currentUser?.id === this.platformSupervisorId;
+  }
+
+  async listPlatformAccounts(): Promise<PlatformAccount[]> {
+    this.requireSupervisor();
+    return [...this.platformAccounts.values()].map((account) => ({ ...account }));
+  }
+
+  async invitePlatformAccount(email: string): Promise<PlatformAccount> {
+    this.requireSupervisor();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) throw new GatewayError("invalid_email");
+    const existing = this.platformAccounts.get(normalizedEmail);
+    const now = new Date().toISOString();
+    const account: PlatformAccount = existing
+      ? {
+          ...existing,
+          status: existing.status === "disabled" ? "active" : existing.status,
+          disabledAt: existing.status === "disabled" ? null : existing.disabledAt,
+          updatedAt: now,
+        }
+      : {
+          email: normalizedEmail,
+          userId: null,
+          status: "invited",
+          createdAt: now,
+          updatedAt: now,
+          disabledAt: null,
+        };
+    this.platformAccounts.set(normalizedEmail, account);
+    return { ...account };
+  }
+
+  async setPlatformAccountStatus(
+    userId: string,
+    status: Extract<PlatformAccountStatus, "active" | "disabled">,
+  ): Promise<PlatformAccount> {
+    this.requireSupervisor();
+    if (userId === this.platformSupervisorId) throw new GatewayError("cannot_disable_supervisor");
+    const account = [...this.platformAccounts.values()].find((candidate) => candidate.userId === userId);
+    if (!account) throw new GatewayError("user_not_found");
+    const updated = { ...account, status, disabledAt: status === "disabled" ? new Date().toISOString() : null, updatedAt: new Date().toISOString() };
+    this.platformAccounts.set(account.email, updated);
+    return { ...updated };
   }
 
   async signOut(): Promise<void> {
@@ -539,6 +607,14 @@ export class FakeStoryboardGateway implements StoryboardGateway {
       throw new GatewayError("not_authenticated");
     }
     return this.currentUser;
+  }
+
+  private requireSupervisor(): AuthUser {
+    const user = this.requireUser();
+    if (user.id !== this.platformSupervisorId) {
+      throw new GatewayError("not_supervisor");
+    }
+    return user;
   }
 
   private requireProject(projectId: string): StoryboardProject {

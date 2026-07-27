@@ -5,6 +5,17 @@ export type AuthUser = {
   email: string;
 };
 
+export type PlatformAccountStatus = "invited" | "active" | "disabled";
+
+export type PlatformAccount = {
+  email: string;
+  userId: string | null;
+  status: PlatformAccountStatus;
+  createdAt: string;
+  updatedAt: string;
+  disabledAt: string | null;
+};
+
 export type ProjectRole = "owner" | "editor";
 
 export type PermanentDeleteRequestStatus = "requested" | "pending";
