@@ -27,6 +27,7 @@
 - `supervisor_invite_platform_account(email)`：主管添加邮箱，重复的禁用邮箱恢复为 `invited`。
 - `supervisor_set_platform_account_status(user_id, status)`：主管禁用或恢复账号。
 - `check_platform_registration(email)`：注册前检查邮箱是否在白名单且不是禁用状态。
+- `check_platform_login(email)`：登录前只允许 `active` 账号通过。
 - `complete_platform_registration(email, user_id)`：注册成功后将 `invited` 账号绑定到用户并转为 `active`。
 
 所有主管函数使用 `SECURITY DEFINER`，在函数内部验证 `auth.uid()` 对应的邮箱是否存在于 `platform_supervisors`；普通客户端不能直接写入账号表。首次部署由项目管理员在 Supabase SQL 编辑器将主管邮箱加入该白名单，前端不承担权限判断。
@@ -37,7 +38,7 @@
 2. 客户端调用注册检查函数；未被主管添加的邮箱显示“请联系主管添加邮箱”。
 3. 通过检查后调用 Supabase Auth 注册。
 4. 注册成功后绑定 `user_id` 并将账号置为 `active`。
-5. 登录成功后读取账号状态；`disabled` 账号立即退出并显示“账号已被主管禁用”。
+5. 登录前调用登录检查；只有 `active` 账号允许调用 Supabase Auth，`disabled` 账号显示“账号已被主管禁用”。
 6. 主管恢复账号后，账号可再次登录，原有项目数据保持不变。
 
 ## 主管后台界面

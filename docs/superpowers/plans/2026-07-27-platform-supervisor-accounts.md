@@ -26,7 +26,7 @@
 
 **Interfaces:**
 - Produces `platform_supervisors` and `platform_accounts`; `platform_accounts` contains `email`, `status`, `user_id`, timestamps, `disabled_at`, and `created_by`.
-- Produces RPCs `is_platform_supervisor()`, `check_platform_registration(text)`, `complete_platform_registration(text, uuid)`, `supervisor_list_platform_accounts()`, `supervisor_invite_platform_account(text)`, and `supervisor_set_platform_account_status(uuid, text)`.
+- Produces RPCs `is_platform_supervisor()`, `check_platform_registration(text)`, `check_platform_login(text)`, `complete_platform_registration(text, uuid)`, `supervisor_list_platform_accounts()`, `supervisor_invite_platform_account(text)`, and `supervisor_set_platform_account_status(uuid, text)`.
 
 - [ ] **Step 1: Write migration contract tests**
 
