@@ -17,7 +17,17 @@ React + TypeScript 分镜制作工作台，发布在 GitHub Pages。当前在线
 3. 确认 `storyboard-images` bucket 存在且为 private。
 4. 在 Authentication 中启用 Email/Password。
 5. 把 `https://547652023-rgb.github.io/fenjing/` 加入允许的站点/跳转地址。
-6. 使用两个测试账号验证邀请、权限和实时同步。
+6. 执行 `supabase/migrations/202607270001_platform_supervisor_accounts.sql`。
+7. 在 SQL Editor 中将主管已有的 Auth 邮箱加入 `platform_supervisors`：
+
+   ```sql
+   insert into public.platform_supervisors (email)
+   values (lower(trim('主管登录邮箱@example.com')))
+   on conflict (email) do nothing;
+   ```
+
+8. 主管登录后进入“主管后台”，先添加成员邮箱；成员使用该邮箱注册后才能进入平台。
+9. 主管可以禁用或恢复成员账号。恢复只恢复登录权限，不删除项目和分镜数据。
 
 ## 验证
 

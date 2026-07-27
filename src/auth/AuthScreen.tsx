@@ -13,6 +13,12 @@ function authErrorMessage(error: unknown): string {
     if (error.code === "already_registered") {
       return "这个邮箱已经注册，请直接登录";
     }
+    if (error.code === "registration_not_allowed") {
+      return "请联系主管添加邮箱后再注册";
+    }
+    if (error.code === "account_disabled") {
+      return "账号已被主管禁用，请联系主管恢复";
+    }
     if (error.code === "network") {
       return "网络连接失败，请稍后重试";
     }
