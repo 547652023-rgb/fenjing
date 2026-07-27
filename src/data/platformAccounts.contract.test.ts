@@ -14,6 +14,8 @@ describe("platform supervisor account migration", () => {
     expect(migration).toMatch(/create or replace function public\.is_platform_supervisor\(\)/i);
     expect(migration).toMatch(/create or replace function public\.check_platform_registration\(p_email text\)/i);
     expect(migration).toMatch(/create or replace function public\.check_platform_login\(p_email text\)/i);
+    expect(migration).toMatch(/if exists \(\s*select 1 from public\.platform_supervisors/i);
+    expect(migration).toMatch(/return true;[\s\S]*?end if;[\s\S]*?select status into account_status/i);
     expect(migration).toMatch(/create or replace function public\.complete_platform_registration\(p_email text, p_user_id uuid\)/i);
     expect(migration).toMatch(/create or replace function public\.supervisor_list_platform_accounts\(\)/i);
     expect(migration).toMatch(/create or replace function public\.supervisor_invite_platform_account\(p_email text\)/i);

@@ -73,6 +73,15 @@ declare
   normalized_email text := lower(trim(p_email));
   account_status text;
 begin
+  -- Supervisors are allowlisted separately and may not yet have a row in
+  -- platform_accounts. Password authentication still verifies the identity.
+  if exists (
+    select 1 from public.platform_supervisors
+    where email = normalized_email
+  ) then
+    return true;
+  end if;
+
   select status into account_status
   from public.platform_accounts
   where email = normalized_email;
