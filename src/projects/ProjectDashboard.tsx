@@ -22,6 +22,7 @@ import {
 } from "./ProjectHomeSidebar";
 import { TemplateLibrary } from "./TemplateLibrary";
 import { TemplatePicker, type TemplateSelection } from "./TemplatePicker";
+import { SupervisorDashboard } from "./SupervisorDashboard";
 
 type ProjectDashboardProps = {
   gateway: StoryboardGateway;
@@ -230,6 +231,8 @@ export function ProjectDashboard({
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateSelection>("blank");
   const [renaming, setRenaming] = useState<ProjectSummary | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
+  const [isSupervisor, setIsSupervisor] = useState(false);
+  const [showSupervisor, setShowSupervisor] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -257,6 +260,10 @@ export function ProjectDashboard({
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    void gateway.isSupervisor().then(setIsSupervisor).catch(() => setIsSupervisor(false));
+  }, [gateway]);
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -502,6 +509,10 @@ export function ProjectDashboard({
     ));
   }
 
+  if (showSupervisor) {
+    return <SupervisorDashboard gateway={gateway} user={user} onBack={() => setShowSupervisor(false)} />;
+  }
+
   return (
     <main className="dashboard-shell">
       <header className="dashboard-header">
@@ -511,6 +522,9 @@ export function ProjectDashboard({
         </div>
         <div className="dashboard-account">
           <span>{user.email}</span>
+          {isSupervisor ? (
+            <button className="button-secondary" type="button" onClick={() => setShowSupervisor(true)}>主管后台</button>
+          ) : null}
           <button type="button" onClick={onSignOut}>退出登录</button>
         </div>
       </header>

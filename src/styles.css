@@ -111,6 +111,112 @@ body {
   gap: 1rem;
 }
 
+.supervisor-shell {
+  min-height: 100vh;
+}
+
+.supervisor-card {
+  max-width: 1100px;
+  margin: 1.5rem auto 0;
+  border: 1px solid #d8e0da;
+  border-radius: 16px;
+  padding: 1.5rem;
+  background: #fff;
+  box-shadow: 0 12px 35px rgb(24 48 35 / 6%);
+}
+
+.supervisor-card__heading,
+.supervisor-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.supervisor-card__heading h2,
+.supervisor-card__heading p {
+  margin: 0;
+}
+
+.supervisor-card__heading p {
+  margin-top: 0.35rem;
+  color: #66736b;
+}
+
+.supervisor-card__count {
+  color: #638070;
+  font-weight: 700;
+}
+
+.supervisor-toolbar {
+  align-items: end;
+  margin: 1.5rem 0;
+}
+
+.supervisor-toolbar label {
+  display: grid;
+  flex: 1;
+  gap: 0.4rem;
+}
+
+.supervisor-toolbar label span {
+  color: #526158;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.supervisor-toolbar input {
+  min-width: 0;
+  border: 1px solid #cdd8d0;
+  border-radius: 8px;
+  padding: 0.7rem;
+}
+
+.supervisor-table-wrap {
+  overflow-x: auto;
+}
+
+.supervisor-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.supervisor-table th,
+.supervisor-table td {
+  border-bottom: 1px solid #e7ece8;
+  padding: 0.8rem 0.55rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.supervisor-table th {
+  color: #526158;
+  font-size: 0.78rem;
+}
+
+.account-status {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.account-status--active {
+  color: #1f5a3d;
+  background: #e6f3e9;
+}
+
+.account-status--invited {
+  color: #73551b;
+  background: #fff5d9;
+}
+
+.account-status--disabled {
+  color: #8a241f;
+  background: #fff0ee;
+}
+
 .dashboard-toolbar {
   display: flex;
   align-items: center;

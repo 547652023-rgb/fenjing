@@ -102,6 +102,16 @@ it("selects a template while creating a project", async () => {
   expect(createProject).toHaveBeenCalledWith("项目", BUILT_IN_TEMPLATES[2].snapshot);
 });
 
+it("shows the supervisor entry only to the supervisor account", async () => {
+  const gateway = new FakeStoryboardGateway();
+  const supervisor = await gateway.signUp("主管@example.com", "password123");
+  const user = userEvent.setup();
+  render(<ProjectDashboard gateway={gateway} user={supervisor} {...handlers} />);
+
+  await user.click(await screen.findByRole("button", { name: "主管后台" }));
+  expect(screen.getByRole("heading", { name: "主管后台" })).toBeInTheDocument();
+});
+
 it("creates, renames, opens, and moves an owned project to trash", async () => {
   const gateway = new FakeStoryboardGateway();
   const owner = await gateway.signUp("owner@example.com", "password123");
