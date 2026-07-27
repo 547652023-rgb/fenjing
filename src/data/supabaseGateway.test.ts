@@ -324,24 +324,8 @@ describe("SupabaseStoryboardGateway", () => {
   });
 
   it("replaces field rows as one ordered set to avoid position collisions", async () => {
-    const deleteEq = vi.fn().mockResolvedValue({ data: null, error: null });
-    const deleteFields = vi.fn(() => ({ eq: deleteEq }));
-    const selectInserted = vi.fn().mockResolvedValue({
-      data: [
-        { id: "field-1", field_key: "shotNumber" },
-        { id: "field-2", field_key: "shotSize" },
-      ],
-      error: null,
-    });
-    const insertFields = vi.fn(() => ({ select: selectInserted }));
-    const insertOptions = vi.fn().mockResolvedValue({ data: null, error: null });
-    const client = {
-      from: vi.fn((table: string) =>
-        table === "fields"
-          ? { delete: deleteFields, insert: insertFields }
-          : { insert: insertOptions },
-      ),
-    };
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
+    const client = { rpc };
     const gateway = createSupabaseGateway(client);
     const project = createProject();
 
@@ -351,13 +335,13 @@ describe("SupabaseStoryboardGateway", () => {
       ),
     });
 
-    expect(deleteFields).toHaveBeenCalledOnce();
-    expect(insertFields).toHaveBeenCalledOnce();
-    expect(insertOptions).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({ field_id: "field-2", value: "大远景" }),
-      ]),
-    );
+    expect(rpc).toHaveBeenCalledWith("replace_storyboard_project_fields", {
+      p_project_id: "project-1",
+      p_fields: [
+        expect.objectContaining({ field_key: "shotNumber", position: 0 }),
+        expect.objectContaining({ field_key: "shotSize", position: 3, options: ["大远景", "远景", "全景", "中景", "近景", "特写"] }),
+      ],
+    });
   });
 
   it("refreshes private image URLs while keeping image metadata", async () => {
@@ -460,8 +444,11 @@ describe("SupabaseStoryboardGateway", () => {
         { id: "template-shot-2", values: { shotNumber: "2", shotSize: "特写" } },
       ],
     };
-    const createProjectRpc = vi.fn().mockResolvedValue({
-      data: {
+    const createProjectRpc = vi.fn((name: string) => {
+      if (name === "replace_storyboard_project_fields") {
+        return Promise.resolve({ data: null, error: null });
+      }
+      return Promise.resolve({ data: {
         id: "project-1",
         title: "新项目",
         owner_id: "user-1",
@@ -472,19 +459,8 @@ describe("SupabaseStoryboardGateway", () => {
         deleted_at: null,
         permanent_delete_requested_at: null,
         shots: [{ count: 1 }],
-      },
-      error: null,
+      }, error: null });
     });
-    const deleteFieldsEq = vi.fn().mockResolvedValue({ data: null, error: null });
-    const insertFieldsSelect = vi.fn().mockResolvedValue({
-      data: [
-        { id: "field-1", field_key: "shotNumber" },
-        { id: "field-2", field_key: "shotSize" },
-      ],
-      error: null,
-    });
-    const insertFields = vi.fn(() => ({ select: insertFieldsSelect }));
-    const insertOptions = vi.fn().mockResolvedValue({ data: null, error: null });
     const deleteShotsEq = vi.fn().mockResolvedValue({ data: null, error: null });
     const insertShots = vi.fn().mockResolvedValue({ data: null, error: null });
     const client = {
@@ -496,13 +472,6 @@ describe("SupabaseStoryboardGateway", () => {
       },
       rpc: createProjectRpc,
       from: vi.fn((table: string) => {
-        if (table === "fields") {
-          return {
-            delete: vi.fn(() => ({ eq: deleteFieldsEq })),
-            insert: insertFields,
-          };
-        }
-        if (table === "field_options") return { insert: insertOptions };
         if (table === "shots") {
           return {
             delete: vi.fn(() => ({ eq: deleteShotsEq })),
@@ -520,15 +489,13 @@ describe("SupabaseStoryboardGateway", () => {
       p_title: "新项目",
       p_aspect_ratio: "9:16",
     });
-    expect(insertFields).toHaveBeenCalledWith([
-      expect.objectContaining({ project_id: "project-1", field_key: "shotNumber", position: 0 }),
-      expect.objectContaining({ project_id: "project-1", field_key: "shotSize", position: 3 }),
-    ]);
-    expect(insertOptions).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({ field_id: "field-2", value: "大远景", position: 0 }),
+    expect(createProjectRpc).toHaveBeenCalledWith("replace_storyboard_project_fields", {
+      p_project_id: "project-1",
+      p_fields: expect.arrayContaining([
+        expect.objectContaining({ field_key: "shotNumber", position: 0 }),
+        expect.objectContaining({ field_key: "shotSize", position: 3 }),
       ]),
-    );
+    });
     expect(insertShots).toHaveBeenCalledWith([
       { project_id: "project-1", position: 0, values: snapshot.shots[0].values },
       { project_id: "project-1", position: 1, values: snapshot.shots[1].values },
