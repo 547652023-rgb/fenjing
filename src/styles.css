@@ -1023,10 +1023,10 @@ button:disabled {
   height: 100%;
 }
 
-.image-cell--multiple .image-cell__item {
-  width: 100%;
-  height: auto;
-  min-height: 0;
+.image-cell--multiple .image-cell__item--thumbnail {
+  width: min(100%, 12rem);
+  height: 6.75rem;
+  min-height: 6.75rem;
   aspect-ratio: 16 / 9;
   border: 1px solid #cad8ce;
   border-radius: 0.5rem;

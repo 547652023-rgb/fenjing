@@ -306,7 +306,7 @@ function ImageCellLayout({
             const imageLabel = `${label}-图片${index + 1}`;
             return (
               <div
-                className={`image-cell__item ${maxImages > 1 ? "image-cell__item--frame" : ""}`}
+                className={`image-cell__item ${maxImages > 1 ? "image-cell__item--frame image-cell__item--thumbnail" : ""}`}
                 key={image.key}
               >
                 <img alt={imageLabel} className="image-cell__preview" src={image.url} />

@@ -27,7 +27,7 @@ describe("ImageCell online mode", () => {
       "image-cell__previews--vertical",
     );
     expect(screen.getAllByRole("img", { name: /画面-1-图片/ })[0]
-      .parentElement).toHaveClass("image-cell__item--frame");
+      .parentElement).toHaveClass("image-cell__item--frame", "image-cell__item--thumbnail");
     expect(screen.getAllByRole("img", { name: /画面-1-图片/ })).toHaveLength(5);
   });
 
