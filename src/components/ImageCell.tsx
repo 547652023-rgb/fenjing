@@ -235,7 +235,10 @@ function ImageCellLayout({
       }`}
     >
       {images.length > 0 ? (
-        <div className="image-cell__previews">
+        <div
+          className="image-cell__previews image-cell__previews--vertical"
+          data-testid="image-cell-previews"
+        >
           {images.map((image, index) => {
             const imageLabel = `${label}-图片${index + 1}`;
             return (

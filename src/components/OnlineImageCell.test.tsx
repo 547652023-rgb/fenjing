@@ -5,6 +5,30 @@ import { GatewayError } from "../data/gateway";
 import { ImageCell } from "./ImageCell";
 
 describe("ImageCell online mode", () => {
+  it("renders frame previews as a vertical list that fits five images", () => {
+    const images = Array.from({ length: 5 }, (_, position) => ({
+      path: `project/shot/frame/${position}.png`,
+      url: `blob:${position}`,
+      name: `${position}.png`,
+      position,
+    }));
+
+    render(
+      <ImageCell
+        images={images}
+        label="画面-1"
+        maxImages={5}
+        onRemove={vi.fn()}
+        onUpload={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("image-cell-previews")).toHaveClass(
+      "image-cell__previews--vertical",
+    );
+    expect(screen.getAllByRole("img", { name: /画面-1-图片/ })).toHaveLength(5);
+  });
+
   it("uploads up to five frame images and retries one failure", async () => {
     const image = {
       path: "project/shot/frame/a.png",

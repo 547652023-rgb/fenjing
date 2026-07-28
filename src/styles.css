@@ -1006,6 +1006,10 @@ button:disabled {
   gap: 0.5rem;
 }
 
+.image-cell__previews--vertical {
+  flex-direction: column;
+}
+
 .image-cell__item {
   position: relative;
   overflow: hidden;
@@ -1019,7 +1023,8 @@ button:disabled {
 
 .image-cell--multiple .image-cell__item {
   width: 100%;
-  min-height: 8rem;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
   border: 1px solid #cad8ce;
   border-radius: 0.5rem;
 }
