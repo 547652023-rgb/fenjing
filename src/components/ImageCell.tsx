@@ -68,6 +68,7 @@ function readImage(file: File): Promise<string> {
 
 function droppedImageFiles(event: DragEvent<HTMLElement>): File[] {
   event.preventDefault();
+  event.stopPropagation();
   return Array.from(event.dataTransfer.files ?? []);
 }
 
@@ -320,7 +321,11 @@ function ImageCellLayout({
       ))}
 
       {occupiedCount < maxImages ? (
-        <label className="image-cell__upload">
+        <label
+          className="image-cell__upload"
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={onDrop}
+        >
           <span>选择图片</span>
           <input
             aria-label={label}

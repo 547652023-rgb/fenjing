@@ -67,7 +67,7 @@ function inputTypeFor(field: FieldDefinition): "date" | "number" | "text" {
 
 function columnWidth(field: FieldDefinition): string {
   if (field.id === "frame") {
-    return "44rem";
+    return "20rem";
   }
 
   const typeMinimum = field.type === "image" ? 18 : field.type === "number" ? 10 : 14;

@@ -50,7 +50,7 @@ describe("ImageCell online mode", () => {
     );
 
     const file = new File(["image"], "dropped.png", { type: "image/png" });
-    fireEvent.drop(screen.getByTestId("image-cell"), {
+    fireEvent.drop(screen.getByText("选择图片"), {
       dataTransfer: { files: [file] },
     });
 
