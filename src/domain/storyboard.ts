@@ -23,7 +23,12 @@ export type AddFieldInput = Pick<FieldDefinition, "label"> & {
   type: CustomFieldType;
 };
 
-export type Shot = { id: string; values: Record<string, string> };
+export type Shot = {
+  id: string;
+  values: Record<string, string>;
+  /** Server-side optimistic-concurrency version; absent for local-only projects. */
+  version?: number;
+};
 
 export type StoryboardProject = {
   id: string;

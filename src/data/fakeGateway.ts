@@ -421,7 +421,14 @@ export class FakeStoryboardGateway implements StoryboardGateway {
   }
 
   async loadProject(projectId: string): Promise<StoryboardProject> {
-    return cloneProject(this.requireProjectMember(projectId));
+    const project = cloneProject(this.requireProjectMember(projectId));
+    return {
+      ...project,
+      shots: project.shots.map((shot) => ({
+        ...shot,
+        version: this.versions.get(shot.id) ?? 1,
+      })),
+    };
   }
 
   async saveProjectMeta(

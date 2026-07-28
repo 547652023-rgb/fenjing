@@ -219,3 +219,34 @@ it("uploads frame images through the online gateway and persists their metadata"
   expect(JSON.parse((await gateway.loadProject(project.id)).shots[0].values.frame))
     .toEqual([uploaded]);
 });
+
+it("uploads a frame after reloading a shot whose server version has advanced", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const initial = await gateway.loadProject(project.id);
+  await gateway.saveShot(
+    project.id,
+    {
+      ...initial.shots[0],
+      values: { ...initial.shots[0].values, content: "已由其他成员更新" },
+    },
+    1,
+  );
+
+  render(
+    <ProjectWorkbench
+      gateway={gateway}
+      onBack={vi.fn()}
+      projectId={project.id}
+      user={owner}
+    />,
+  );
+
+  await userEvent.upload(
+    await screen.findByLabelText("画面-1"),
+    new File(["frame"], "frame.png", { type: "image/png" }),
+  );
+
+  expect(await screen.findByRole("img", { name: "画面-1-图片1" })).toBeVisible();
+  expect(JSON.parse((await gateway.loadProject(project.id)).shots[0].values.frame))
+    .toHaveLength(1);
+});
