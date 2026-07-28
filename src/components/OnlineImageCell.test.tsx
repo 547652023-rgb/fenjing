@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { GatewayError } from "../data/gateway";
@@ -27,6 +27,38 @@ describe("ImageCell online mode", () => {
       "image-cell__previews--vertical",
     );
     expect(screen.getAllByRole("img", { name: /画面-1-图片/ })).toHaveLength(5);
+  });
+
+  it("uploads dropped image files", async () => {
+    const onUpload = vi.fn().mockResolvedValue([
+      {
+        path: "project/shot/frame/dropped.png",
+        url: "blob:dropped",
+        name: "dropped.png",
+        position: 0,
+      },
+    ]);
+
+    render(
+      <ImageCell
+        images={[]}
+        label="画面-1"
+        maxImages={5}
+        onRemove={vi.fn()}
+        onUpload={onUpload}
+      />,
+    );
+
+    const file = new File(["image"], "dropped.png", { type: "image/png" });
+    fireEvent.drop(screen.getByTestId("image-cell"), {
+      dataTransfer: { files: [file] },
+    });
+
+    expect(onUpload).toHaveBeenCalledWith([file]);
+    expect(await screen.findByRole("img", { name: "画面-1-图片1" })).toHaveAttribute(
+      "src",
+      "blob:dropped",
+    );
   });
 
   it("uploads up to five frame images and retries one failure", async () => {

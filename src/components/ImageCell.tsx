@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type DragEvent } from "react";
 import type { RemoteImage } from "../domain/models";
 
 type SharedImageCellProps = {
@@ -66,6 +66,11 @@ function readImage(file: File): Promise<string> {
   });
 }
 
+function droppedImageFiles(event: DragEvent<HTMLElement>): File[] {
+  event.preventDefault();
+  return Array.from(event.dataTransfer.files ?? []);
+}
+
 function LocalImageCell({
   value,
   label,
@@ -104,6 +109,24 @@ function LocalImageCell({
     }
   }
 
+  async function handleDrop(event: DragEvent<HTMLElement>) {
+    const selected = droppedImageFiles(event);
+    if (selected.length === 0) return;
+    const valid = selected.filter((file) => file.type.startsWith("image/"));
+    if (valid.length !== selected.length) {
+      setError("请选择图片文件");
+      return;
+    }
+    const accepted = valid.slice(0, Math.max(0, maxImages - images.length));
+    setError(accepted.length < valid.length ? `每行最多 ${maxImages} 张图片` : "");
+    try {
+      const loaded = await Promise.all(accepted.map(readImage));
+      onChange(serializeImageValues([...images, ...loaded], maxImages));
+    } catch {
+      setError("读取图片失败");
+    }
+  }
+
   function removeImage(index: number) {
     const nextImages = images.filter((_, imageIndex) => imageIndex !== index);
     onChange(serializeImageValues(nextImages, maxImages));
@@ -119,6 +142,7 @@ function LocalImageCell({
       label={label}
       maxImages={maxImages}
       onFileChange={handleFileChange}
+      onDrop={handleDrop}
       onRemove={(index) => removeImage(index)}
     />
   );
@@ -178,6 +202,21 @@ function OnlineImageCell({
     await Promise.all(accepted.map(uploadFile));
   }
 
+  async function handleDrop(event: DragEvent<HTMLElement>) {
+    const selected = droppedImageFiles(event);
+    if (selected.length === 0) return;
+    if (selected.some((file) => !file.type.startsWith("image/"))) {
+      setError("请选择图片文件");
+      return;
+    }
+    const remaining = Math.max(0, maxImages - visibleImages.length - pendingNames.length);
+    const accepted = selected.slice(0, remaining);
+    if (accepted.length < selected.length) {
+      setError(`每行最多 ${maxImages} 张图片`);
+    }
+    await Promise.all(accepted.map(uploadFile));
+  }
+
   async function removeImage(index: number) {
     const image = visibleImages[index];
     setError("");
@@ -196,6 +235,7 @@ function OnlineImageCell({
       label={label}
       maxImages={maxImages}
       onFileChange={handleFileChange}
+      onDrop={handleDrop}
       onRemove={removeImage}
       pendingNames={pendingNames}
       retryFiles={failedFiles}
@@ -210,6 +250,7 @@ type ImageCellLayoutProps = {
   label: string;
   maxImages: number;
   onFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onDrop: (event: DragEvent<HTMLElement>) => void;
   onRemove: (index: number) => void;
   onRetry?: (file: File) => void;
   pendingNames?: string[];
@@ -222,6 +263,7 @@ function ImageCellLayout({
   label,
   maxImages,
   onFileChange,
+  onDrop,
   onRemove,
   onRetry,
   pendingNames = [],
@@ -233,6 +275,9 @@ function ImageCellLayout({
       className={`image-cell ${
         maxImages > 1 ? "image-cell--multiple" : "image-cell--single"
       }`}
+      data-testid="image-cell"
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={onDrop}
     >
       {images.length > 0 ? (
         <div

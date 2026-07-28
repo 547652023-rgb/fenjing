@@ -979,7 +979,8 @@ button:disabled {
 }
 
 .storyboard-table td.image-table-cell {
-  min-height: 160px;
+  min-height: 0;
+  vertical-align: top;
 }
 
 .image-cell {
@@ -995,6 +996,7 @@ button:disabled {
   align-items: stretch;
   gap: 0.5rem;
   padding: 0.75rem;
+  min-height: 0;
   overflow: visible;
 }
 
@@ -1023,8 +1025,8 @@ button:disabled {
 
 .image-cell--multiple .image-cell__item {
   width: 100%;
-  aspect-ratio: 16 / 9;
-  min-height: 0;
+  height: 5rem;
+  min-height: 5rem;
   border: 1px solid #cad8ce;
   border-radius: 0.5rem;
 }
