@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { cropToSixteenByNine } from "./prepareStoryboardImage";
+import { describe, expect, it, vi } from "vitest";
+import { cropToSixteenByNine, prepareStoryboardFrame } from "./prepareStoryboardImage";
 
 describe("cropToSixteenByNine", () => {
   it("center-crops a portrait image to a 16:9 source rectangle", () => {
@@ -18,5 +18,13 @@ describe("cropToSixteenByNine", () => {
       sw: 1600,
       sh: 900,
     });
+  });
+
+  it("uploads the original file when browser decoding stalls", async () => {
+    vi.stubGlobal("createImageBitmap", vi.fn().mockImplementation(() => new Promise(() => undefined)));
+    const original = new File(["image"], "frame.png", { type: "image/png" });
+
+    await expect(prepareStoryboardFrame(original, 1)).resolves.toBe(original);
+    vi.unstubAllGlobals();
   });
 });

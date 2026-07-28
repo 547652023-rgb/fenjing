@@ -7,6 +7,7 @@ export type ImageCrop = {
 
 const FRAME_RATIO = 16 / 9;
 const MAX_FRAME_EDGE = 1920;
+const DEFAULT_DECODE_TIMEOUT_MS = 1500;
 
 export function cropToSixteenByNine(width: number, height: number): ImageCrop {
   if (width / height > FRAME_RATIO) {
@@ -32,16 +33,29 @@ function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   });
 }
 
-async function loadBitmap(file: File): Promise<ImageBitmap> {
+async function loadBitmap(file: File, timeoutMs: number): Promise<ImageBitmap> {
   if (typeof createImageBitmap !== "function") {
     throw new Error("当前浏览器不支持图片裁切");
   }
-  return createImageBitmap(file);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      createImageBitmap(file),
+      new Promise<ImageBitmap>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("图片解码超时")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
-export async function prepareStoryboardFrame(file: File): Promise<File> {
+export async function prepareStoryboardFrame(
+  file: File,
+  decodeTimeoutMs = DEFAULT_DECODE_TIMEOUT_MS,
+): Promise<File> {
   try {
-    const bitmap = await loadBitmap(file);
+    const bitmap = await loadBitmap(file, decodeTimeoutMs);
     const crop = cropToSixteenByNine(bitmap.width, bitmap.height);
     const scale = Math.min(1, MAX_FRAME_EDGE / crop.sw);
     const outputWidth = Math.max(1, Math.round(crop.sw * scale));
