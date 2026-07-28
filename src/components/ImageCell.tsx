@@ -1,5 +1,7 @@
 import { useEffect, useState, type ChangeEvent, type DragEvent } from "react";
+import { GatewayError } from "../data/gateway";
 import type { RemoteImage } from "../domain/models";
+import { prepareStoryboardFrame } from "../images/prepareStoryboardImage";
 
 type SharedImageCellProps = {
   label: string;
@@ -70,6 +72,15 @@ function droppedImageFiles(event: DragEvent<HTMLElement>): File[] {
   event.preventDefault();
   event.stopPropagation();
   return Array.from(event.dataTransfer.files ?? []);
+}
+
+function uploadErrorMessage(error: unknown): string {
+  if (!(error instanceof GatewayError)) return "上传失败，请检查网络后重试";
+  if (error.code === "forbidden") return "没有上传权限，请联系项目主管";
+  if (error.code === "not_authenticated") return "登录已失效，请重新登录后上传";
+  if (error.code === "network") return "网络连接失败，请检查网络后重试";
+  if (error.code === "upload_failed") return "图片存储拒绝上传，请联系主管检查图片存储权限";
+  return "上传失败，请重试";
 }
 
 function LocalImageCell({
@@ -172,8 +183,8 @@ function OnlineImageCell({
       const uploaded = await onUpload([file]);
       setVisibleImages((current) => [...current, ...uploaded].slice(0, maxImages));
       setFailedFiles((current) => current.filter((candidate) => candidate !== file));
-    } catch {
-      setError("上传失败");
+    } catch (error) {
+      setError(uploadErrorMessage(error));
       setFailedFiles((current) =>
         current.includes(file) ? current : [...current, file],
       );
@@ -200,7 +211,10 @@ function OnlineImageCell({
     if (accepted.length < selected.length) {
       setError(`每行最多 ${maxImages} 张图片`);
     }
-    await Promise.all(accepted.map(uploadFile));
+    const prepared = await Promise.all(
+      accepted.map((file) => maxImages > 1 ? prepareStoryboardFrame(file) : file),
+    );
+    await Promise.all(prepared.map(uploadFile));
   }
 
   async function handleDrop(event: DragEvent<HTMLElement>) {
@@ -215,7 +229,10 @@ function OnlineImageCell({
     if (accepted.length < selected.length) {
       setError(`每行最多 ${maxImages} 张图片`);
     }
-    await Promise.all(accepted.map(uploadFile));
+    const prepared = await Promise.all(
+      accepted.map((file) => maxImages > 1 ? prepareStoryboardFrame(file) : file),
+    );
+    await Promise.all(prepared.map(uploadFile));
   }
 
   async function removeImage(index: number) {
@@ -288,7 +305,10 @@ function ImageCellLayout({
           {images.map((image, index) => {
             const imageLabel = `${label}-图片${index + 1}`;
             return (
-              <div className="image-cell__item" key={image.key}>
+              <div
+                className={`image-cell__item ${maxImages > 1 ? "image-cell__item--frame" : ""}`}
+                key={image.key}
+              >
                 <img alt={imageLabel} className="image-cell__preview" src={image.url} />
                 <button
                   aria-label={`移除${imageLabel}`}
