@@ -24,7 +24,7 @@ it("exports visible fields and shots in workbench order", () => {
     .toBe("第一镜");
 });
 
-it("limits frame images to five and reference images to one", () => {
+it("limits frame and reference images to five", () => {
   const project = createProject();
   const images = Array.from({ length: 7 }, (_, position) => ({
     path: `p-${position}`,
@@ -37,7 +37,7 @@ it("limits frame images to five and reference images to one", () => {
 
   const [row] = buildExportModel(project).rows;
   expect(row.cells.find((cell) => cell.fieldId === "frame")?.images).toHaveLength(5);
-  expect(row.cells.find((cell) => cell.fieldId === "reference")?.images).toHaveLength(1);
+  expect(row.cells.find((cell) => cell.fieldId === "reference")?.images).toHaveLength(5);
 });
 
 it("creates a safe dated filename and supports an empty project", () => {
