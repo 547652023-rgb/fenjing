@@ -176,21 +176,31 @@ function OnlineImageCell({
     setVisibleImages(images.slice(0, maxImages));
   }, [images, maxImages]);
 
-  async function uploadFile(file: File) {
-    setPendingNames((current) => [...current, file.name]);
+  async function uploadFiles(files: File[]) {
+    setPendingNames((current) => [...current, ...files.map((file) => file.name)]);
     setError("");
     try {
-      const uploaded = await onUpload([file]);
+      const uploaded = await onUpload(files);
       setVisibleImages((current) => [...current, ...uploaded].slice(0, maxImages));
-      setFailedFiles((current) => current.filter((candidate) => candidate !== file));
+      setFailedFiles((current) =>
+        current.filter((candidate) => !files.includes(candidate)),
+      );
     } catch (error) {
       setError(uploadErrorMessage(error));
       setFailedFiles((current) =>
-        current.includes(file) ? current : [...current, file],
+        [...current, ...files].filter(
+          (candidate, index, all) => all.indexOf(candidate) === index,
+        ),
       );
     } finally {
-      setPendingNames((current) => current.filter((name) => name !== file.name));
+      setPendingNames((current) =>
+        current.filter((name) => !files.some((file) => file.name === name)),
+      );
     }
+  }
+
+  async function uploadFile(file: File) {
+    await uploadFiles([file]);
   }
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -214,7 +224,7 @@ function OnlineImageCell({
     const prepared = await Promise.all(
       accepted.map((file) => maxImages > 1 ? prepareStoryboardFrame(file) : file),
     );
-    await Promise.all(prepared.map(uploadFile));
+    await uploadFiles(prepared);
   }
 
   async function handleDrop(event: DragEvent<HTMLElement>) {
@@ -232,7 +242,7 @@ function OnlineImageCell({
     const prepared = await Promise.all(
       accepted.map((file) => maxImages > 1 ? prepareStoryboardFrame(file) : file),
     );
-    await Promise.all(prepared.map(uploadFile));
+    await uploadFiles(prepared);
   }
 
   async function removeImage(index: number) {

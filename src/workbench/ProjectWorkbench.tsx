@@ -277,7 +277,7 @@ export function ProjectWorkbench({
     async upload(shotId, fieldId, currentImages, files) {
       const remaining = Math.max(
         0,
-        (fieldId === "frame" ? 5 : 1) - currentImages.length,
+        (fieldId === "frame" || fieldId === "reference" ? 5 : 1) - currentImages.length,
       );
       const accepted = files.slice(0, remaining);
       const uploaded: RemoteImage[] = [];

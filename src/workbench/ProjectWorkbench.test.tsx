@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { FakeStoryboardGateway } from "../data/fakeGateway";
@@ -218,6 +218,28 @@ it("uploads frame images through the online gateway and persists their metadata"
   );
   expect(JSON.parse((await gateway.loadProject(project.id)).shots[0].values.frame))
     .toEqual([uploaded]);
+});
+
+it("persists five reference images selected together", async () => {
+  const { gateway, owner, project } = await setupProject();
+  render(
+    <ProjectWorkbench
+      gateway={gateway}
+      onBack={vi.fn()}
+      projectId={project.id}
+      user={owner}
+    />,
+  );
+
+  const files = Array.from({ length: 5 }, (_, index) =>
+    new File([`reference-${index}`], `reference-${index}.png`, { type: "image/png" }),
+  );
+  await userEvent.upload(await screen.findByLabelText("参考-1"), files);
+
+  await waitFor(async () => {
+    const saved = JSON.parse((await gateway.loadProject(project.id)).shots[0].values.reference);
+    expect(saved).toHaveLength(5);
+  });
 });
 
 it("uploads a frame after reloading a shot whose server version has advanced", async () => {
