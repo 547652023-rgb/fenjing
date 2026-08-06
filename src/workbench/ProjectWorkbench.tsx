@@ -393,6 +393,73 @@ export function ProjectWorkbench({
     }
   }
 
+  async function createScene() {
+    setSaveStatus("saving");
+    try {
+      await gateway.createScene(projectId, { name: "未命名场次" });
+      await reload();
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("error");
+    }
+  }
+
+  async function updateScene(scene: StoryboardProject["scenes"][number]) {
+    setSaveStatus("saving");
+    try {
+      await gateway.updateScene(projectId, scene);
+      await reload();
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("error");
+      await reload();
+    }
+  }
+
+  async function assignShotsToScene(shotIds: string[], sceneId: string | null) {
+    const current = projectRef.current;
+    if (!current || shotIds.length === 0) return;
+    const selected = new Set(shotIds);
+    setSaveStatus("saving");
+    try {
+      for (const shot of current.shots.filter((candidate) => selected.has(candidate.id))) {
+        const saved = await gateway.saveShot(
+          projectId,
+          { ...shot, sceneId: sceneId ?? undefined },
+          versions.current.get(shot.id) ?? 1,
+        );
+        versions.current.set(shot.id, saved.version);
+      }
+      await reload();
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("error");
+      await reload();
+    }
+  }
+
+  async function deleteScene(
+    sceneId: string,
+    treatment: "ungroup" | "delete-shots",
+  ) {
+    const current = projectRef.current;
+    if (!current) return;
+    setSaveStatus("saving");
+    try {
+      if (treatment === "delete-shots") {
+        for (const shot of current.shots.filter((candidate) => candidate.sceneId === sceneId)) {
+          await gateway.deleteShot(projectId, shot.id);
+        }
+      }
+      await gateway.deleteScene(projectId, sceneId);
+      await reload();
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("error");
+      await reload();
+    }
+  }
+
   function updateSelectedShots(shotIds: string[], fieldId: string, value: string) {
     updateProject(
       (current) =>
@@ -519,7 +586,11 @@ export function ProjectWorkbench({
         onBatchCopy={copySelectedShots}
         onBatchDelete={deleteSelectedShots}
         onBatchUpdate={updateSelectedShots}
+        onAssignShotsToScene={assignShotsToScene}
+        onCreateScene={createScene}
         onCreateShots={createShots}
+        onDeleteScene={deleteScene}
+        onUpdateScene={updateScene}
         project={project}
         onChange={updateProject}
       />

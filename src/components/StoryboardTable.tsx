@@ -1,8 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import {
   addShot,
+  assignShotsToScene,
+  createScene,
+  deleteScene as deleteLocalScene,
   deleteShot,
   moveShot,
+  toggleSceneCollapsed,
   updateShotValue,
   type FieldDefinition,
   type ProjectUpdate,
@@ -48,6 +52,16 @@ type StoryboardTableProps = {
   onCreateShots?: (
     options: ShotCreationOptions,
   ) => void | string[] | Promise<void | string[]>;
+  onCreateScene?: () => void | Promise<void>;
+  onUpdateScene?: (scene: StoryboardProject["scenes"][number]) => void | Promise<void>;
+  onDeleteScene?: (
+    sceneId: string,
+    treatment: "ungroup" | "delete-shots",
+  ) => void | Promise<void>;
+  onAssignShotsToScene?: (
+    shotIds: string[],
+    sceneId: string | null,
+  ) => void | Promise<void>;
 };
 
 export function parseRemoteImages(value: string): RemoteImage[] {
@@ -99,15 +113,22 @@ export function StoryboardTable({
   onBatchDelete,
   onBatchUpdate,
   onCreateShots,
+  onCreateScene,
+  onUpdateScene,
+  onDeleteScene,
+  onAssignShotsToScene,
 }: StoryboardTableProps) {
   const [draggedShotId, setDraggedShotId] = useState<string | null>(null);
   const [selectedShotIds, setSelectedShotIds] = useState<string[]>([]);
   const [batchFieldId, setBatchFieldId] = useState("");
   const [batchFieldValue, setBatchFieldValue] = useState("");
+  const [batchSceneId, setBatchSceneId] = useState("");
   const [isCreationMenuOpen, setIsCreationMenuOpen] = useState(false);
   const [activeShotId, setActiveShotId] = useState<string | null>(null);
   const [openRowMenuShotId, setOpenRowMenuShotId] = useState<string | null>(null);
   const [focusShotId, setFocusShotId] = useState<string | null>(null);
+  const [sceneEditorId, setSceneEditorId] = useState<string | null>(null);
+  const [rowScenePickerShotId, setRowScenePickerShotId] = useState<string | null>(null);
   const editableCellRefs = useRef(new Map<string, HTMLElement>());
   const visibleFields = project.fields
     .filter((field) => field.visible)
@@ -117,6 +138,20 @@ export function StoryboardTable({
   );
   const allSelected =
     project.shots.length > 0 && selectedShotIds.length === project.shots.length;
+  const scenesById = new Map(project.scenes.map((scene) => [scene.id, scene]));
+  const sceneShotIds = new Map<string, string>();
+  const sceneShotCounts = new Map<string, number>();
+  let firstUngroupedShotId: string | null = null;
+  let ungroupedShotCount = 0;
+  project.shots.forEach((shot) => {
+    if (shot.sceneId && scenesById.has(shot.sceneId)) {
+      if (!sceneShotIds.has(shot.sceneId)) sceneShotIds.set(shot.sceneId, shot.id);
+      sceneShotCounts.set(shot.sceneId, (sceneShotCounts.get(shot.sceneId) ?? 0) + 1);
+      return;
+    }
+    if (!firstUngroupedShotId) firstUngroupedShotId = shot.id;
+    ungroupedShotCount += 1;
+  });
 
   useEffect(() => {
     setSelectedShotIds((current) =>
@@ -151,6 +186,24 @@ export function StoryboardTable({
         latestProject,
       ),
     );
+  }
+
+  function assignShots(shotIds: string[], sceneId: string | null) {
+    if (shotIds.length === 0) return;
+    if (onAssignShotsToScene) {
+      void onAssignShotsToScene(shotIds, sceneId);
+      return;
+    }
+    onChange((latestProject) => assignShotsToScene(latestProject, shotIds, sceneId));
+  }
+
+  function createNewScene() {
+    setIsCreationMenuOpen(false);
+    if (onCreateScene) {
+      void onCreateScene();
+      return;
+    }
+    onChange((latestProject) => createScene(latestProject));
   }
 
   function deleteSelectedShots() {
@@ -252,6 +305,62 @@ export function StoryboardTable({
     if (createdShotIds[0]) setFocusShotId(createdShotIds[0]);
   }
 
+  function renderSceneHeader(
+    label: string,
+    shotCount: number,
+    sceneId?: string,
+  ) {
+    const scene = sceneId ? scenesById.get(sceneId) : undefined;
+    const collapseLabel = scene?.collapsed ? `展开场次 ${scene.number}` : `收起场次 ${scene?.number}`;
+    return (
+      <tr
+        aria-label={scene ? `场次 ${scene.number} ${scene.name}` : "未分组镜头"}
+        className={`scene-group-row${scene ? "" : " scene-group-row--ungrouped"}`}
+        key={`scene-header-${sceneId ?? "ungrouped"}`}
+      >
+        <td colSpan={visibleFields.length + 1}>
+          <div className="scene-group-row__content">
+            {scene ? (
+              <button
+                aria-label={collapseLabel}
+                className="scene-group-row__toggle"
+                type="button"
+                onClick={() => {
+                  const nextScene = { ...scene, collapsed: !scene.collapsed };
+                  if (onUpdateScene) void onUpdateScene(nextScene);
+                  else onChange((current) => toggleSceneCollapsed(current, scene.id));
+                }}
+              >
+                <svg aria-hidden="true" viewBox="0 0 16 16">
+                  <path d={scene.collapsed ? "M6 3l5 5-5 5" : "M3 6l5 5 5-5"} />
+                </svg>
+              </button>
+            ) : null}
+            <strong>{label}</strong>
+            <span>{shotCount} 个镜头</span>
+            {scene ? (
+              <span className="scene-group-row__meta">
+                {[scene.intExt, scene.dayNight, scene.targetDurationSeconds && `${scene.targetDurationSeconds} 秒`, scene.shootDate]
+                  .filter(Boolean)
+                  .join(" · ") || "待补充制作信息"}
+              </span>
+            ) : null}
+            {scene ? (
+              <button
+                aria-label={`编辑场次 ${scene.number}`}
+                className="scene-group-row__edit"
+                type="button"
+                onClick={() => setSceneEditorId(scene.id)}
+              >
+                编辑
+              </button>
+            ) : null}
+          </div>
+        </td>
+      </tr>
+    );
+  }
+
   return (
     <section
       className="storyboard-panel"
@@ -298,6 +407,9 @@ export function StoryboardTable({
               >
                 复制当前镜头
               </button>
+              <button role="menuitem" type="button" onClick={createNewScene}>
+                新增场次
+              </button>
             </div>
           ) : null}
         </div>
@@ -339,6 +451,32 @@ export function StoryboardTable({
           <button disabled={!batchFieldId} type="button" onClick={applyBatchFieldValue}>
             应用字段值
           </button>
+          <label>
+            <span className="sr-only">归入场次</span>
+            <select
+              aria-label="归入场次"
+              value={batchSceneId}
+              onChange={(event) => setBatchSceneId(event.target.value)}
+            >
+              <option value="">选择场次</option>
+              <option value="__ungrouped__">移出场次</option>
+              {project.scenes.map((scene) => (
+                <option key={scene.id} value={scene.id}>
+                  场次 {scene.number} · {scene.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            disabled={!batchSceneId}
+            type="button"
+            onClick={() => {
+              assignShots(selectedShotIds, batchSceneId === "__ungrouped__" ? null : batchSceneId);
+              setBatchSceneId("");
+            }}
+          >
+            归入场次
+          </button>
           <button className="storyboard-batch-bar__delete" type="button" onClick={deleteSelectedShots}>
             删除镜头
           </button>
@@ -377,10 +515,25 @@ export function StoryboardTable({
             </tr>
           </thead>
           <tbody>
-            {project.shots.map((shot, shotIndex) => (
-              <tr
+            {project.shots.map((shot, shotIndex) => {
+              const scene = shot.sceneId ? scenesById.get(shot.sceneId) : undefined;
+              const isUngrouped = !scene;
+              const showSceneHeader = scene && sceneShotIds.get(scene.id) === shot.id;
+              const showUngroupedHeader = isUngrouped && firstUngroupedShotId === shot.id;
+              return (
+              <Fragment key={shot.id}>
+                {showSceneHeader
+                  ? renderSceneHeader(
+                    `场次 ${scene.number} · ${scene.name}`,
+                    sceneShotCounts.get(scene.id) ?? 0,
+                    scene.id,
+                  )
+                  : null}
+                {showUngroupedHeader
+                  ? renderSceneHeader("未分组镜头", ungroupedShotCount)
+                  : null}
+                {scene?.collapsed ? null : <tr
                 aria-label={`镜头 ${shot.id}`}
-                key={shot.id}
                 onFocusCapture={() => setActiveShotId(shot.id)}
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={() => {
@@ -435,8 +588,35 @@ export function StoryboardTable({
                       <button role="menuitem" type="button" onClick={() => void createShots({ beforeShotId: shot.id, count: 1 })}>在上方新增</button>
                       <button role="menuitem" type="button" onClick={() => void createShots({ afterShotId: shot.id, count: 1 })}>在下方新增</button>
                       <button role="menuitem" type="button" onClick={() => void createShots({ copyShotId: shot.id, count: 1 })}>复制镜头</button>
-                      <button aria-describedby={`scene-action-note-${shot.id}`} disabled role="menuitem" type="button">移动到场次</button>
-                      <span className="sr-only" id={`scene-action-note-${shot.id}`}>场次管理将在下一阶段开放</span>
+                      <button
+                        aria-expanded={rowScenePickerShotId === shot.id}
+                        role="menuitem"
+                        type="button"
+                        onClick={() => setRowScenePickerShotId((current) => current === shot.id ? null : shot.id)}
+                      >
+                        移动到场次
+                      </button>
+                      {rowScenePickerShotId === shot.id ? (
+                        <label className="shot-actions__scene-picker">
+                          <span>选择场次</span>
+                          <select
+                            aria-label={`移动镜头 ${shot.id} 到场次`}
+                            defaultValue={shot.sceneId ?? "__ungrouped__"}
+                            onChange={(event) => {
+                              assignShots([shot.id], event.target.value === "__ungrouped__" ? null : event.target.value);
+                              setOpenRowMenuShotId(null);
+                              setRowScenePickerShotId(null);
+                            }}
+                          >
+                            <option value="__ungrouped__">未分组</option>
+                            {project.scenes.map((candidate) => (
+                              <option key={candidate.id} value={candidate.id}>
+                                场次 {candidate.number} · {candidate.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
                       <button disabled={shotIndex === 0} role="menuitem" type="button" onClick={() => moveShotByOffset(shot.id, -1)}>上移</button>
                       <button disabled={shotIndex === project.shots.length - 1} role="menuitem" type="button" onClick={() => moveShotByOffset(shot.id, 1)}>下移</button>
                       <button className="shot-actions__menu-delete" role="menuitem" type="button" onClick={() => deleteOneShot(shot.id)}>删除镜头</button>
@@ -525,11 +705,58 @@ export function StoryboardTable({
                     )}
                   </td>
                 ))}
-              </tr>
-            ))}
+              </tr>}
+              </Fragment>
+              );
+            })}
+            {project.scenes
+              .filter((scene) => !sceneShotIds.has(scene.id))
+              .map((scene) => renderSceneHeader(`场次 ${scene.number} · ${scene.name}`, 0, scene.id))}
           </tbody>
         </table>
       </div>
+      {sceneEditorId ? (() => {
+        const scene = scenesById.get(sceneEditorId);
+        if (!scene) return null;
+        return (
+          <form
+            aria-label={`编辑场次 ${scene.number}`}
+            className="scene-editor"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              const nextScene = {
+                ...scene,
+                name: String(form.get("name") ?? "").trim() || "未命名场次",
+                intExt: String(form.get("intExt") ?? "") as typeof scene.intExt,
+                dayNight: String(form.get("dayNight") ?? "") as typeof scene.dayNight,
+                targetDurationSeconds: String(form.get("targetDurationSeconds") ?? ""),
+                shootDate: String(form.get("shootDate") ?? ""),
+                notes: String(form.get("notes") ?? ""),
+              };
+              if (onUpdateScene) void onUpdateScene(nextScene);
+              else onChange((latestProject) => ({
+                ...latestProject,
+                scenes: latestProject.scenes.map((candidate) => candidate.id === scene.id ? nextScene : candidate),
+              }));
+              setSceneEditorId(null);
+            }}
+          >
+            <header><p>场次 {scene.number}</p><button type="button" onClick={() => setSceneEditorId(null)}>关闭</button></header>
+            <label>名称<input defaultValue={scene.name} name="name" /></label>
+            <label>内外景<select defaultValue={scene.intExt} name="intExt"><option value="">未设置</option><option value="INT">INT</option><option value="EXT">EXT</option><option value="INT/EXT">INT/EXT</option></select></label>
+            <label>日夜<select defaultValue={scene.dayNight} name="dayNight"><option value="">未设置</option><option value="DAY">DAY</option><option value="NIGHT">NIGHT</option></select></label>
+            <label>目标时长（秒）<input defaultValue={scene.targetDurationSeconds} name="targetDurationSeconds" type="number" /></label>
+            <label>拍摄日期<input defaultValue={scene.shootDate} name="shootDate" type="date" /></label>
+            <label>制作备注<textarea defaultValue={scene.notes} name="notes" /></label>
+            <footer>
+              <button type="button" onClick={() => { if (window.confirm("解除镜头归属后删除这个场次吗？")) { if (onDeleteScene) void onDeleteScene(scene.id, "ungroup"); else onChange((latest) => deleteLocalScene(latest, scene.id, "ungroup")); setSceneEditorId(null); } }}>解除并删除场次</button>
+              <button type="button" onClick={() => { if (window.confirm("确定删除这个场次及其全部镜头吗？")) { if (onDeleteScene) void onDeleteScene(scene.id, "delete-shots"); else onChange((latest) => deleteLocalScene(latest, scene.id, "delete-shots")); setSceneEditorId(null); } }}>删除场次及镜头</button>
+              <button type="submit">保存场次</button>
+            </footer>
+          </form>
+        );
+      })() : null}
     </section>
   );
 }

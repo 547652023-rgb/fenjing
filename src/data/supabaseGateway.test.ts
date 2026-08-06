@@ -369,11 +369,12 @@ describe("SupabaseStoryboardGateway", () => {
       id: "template-1",
       source_project_id: "project-1",
       name: "广告",
-      snapshot: {
-        title: "广告模板",
-        aspectRatio: "16:9",
-        fields: [],
-        shots: [],
+        snapshot: {
+          title: "广告模板",
+          aspectRatio: "16:9",
+          fields: [],
+          scenes: [],
+          shots: [],
       },
       updated_at: "2026-07-21T01:00:00.000Z",
     };
@@ -439,6 +440,7 @@ describe("SupabaseStoryboardGateway", () => {
       title: "模板标题",
       aspectRatio: "9:16",
       fields: project.fields.filter((field) => ["shotNumber", "shotSize"].includes(field.id)),
+      scenes: [],
       shots: [
         { id: "template-shot-1", values: { shotNumber: "1", shotSize: "远景" } },
         { id: "template-shot-2", values: { shotNumber: "2", shotSize: "特写" } },
@@ -497,8 +499,8 @@ describe("SupabaseStoryboardGateway", () => {
       ]),
     });
     expect(insertShots).toHaveBeenCalledWith([
-      { project_id: "project-1", position: 0, values: snapshot.shots[0].values },
-      { project_id: "project-1", position: 1, values: snapshot.shots[1].values },
+      { project_id: "project-1", position: 0, scene_id: null, values: snapshot.shots[0].values },
+      { project_id: "project-1", position: 1, scene_id: null, values: snapshot.shots[1].values },
     ]);
   });
 
@@ -510,6 +512,7 @@ describe("SupabaseStoryboardGateway", () => {
         { id: "frame", label: "画面", type: "image" as const, visible: true, order: 0 },
         { id: "content", label: "内容", type: "text" as const, visible: true, order: 1 },
       ],
+      scenes: [],
       shots: [{ id: "template-shot", values: { frame: "image-data", content: "保留" } }],
     };
     const createProjectRpc = vi.fn().mockResolvedValue({
@@ -568,7 +571,7 @@ describe("SupabaseStoryboardGateway", () => {
     await gateway.createProject("新项目", snapshot);
 
     expect(insertShots).toHaveBeenCalledWith([
-      { project_id: "project-1", position: 0, values: { content: "保留" } },
+      { project_id: "project-1", position: 0, scene_id: null, values: { content: "保留" } },
     ]);
   });
 });

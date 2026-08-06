@@ -23,13 +23,37 @@ export type AddFieldInput = Pick<FieldDefinition, "label"> & {
   type: CustomFieldType;
 };
 
-export type Shot = { id: string; values: Record<string, string> };
+export type Shot = {
+  id: string;
+  sceneId?: string;
+  values: Record<string, string>;
+};
+
+export type StoryboardScene = {
+  id: string;
+  number: string;
+  name: string;
+  intExt: "INT" | "EXT" | "INT/EXT" | "";
+  dayNight: "DAY" | "NIGHT" | "";
+  targetDurationSeconds: string;
+  shootDate: string;
+  notes: string;
+  collapsed: boolean;
+};
+
+export type CreateSceneInput = Partial<
+  Pick<
+    StoryboardScene,
+    "name" | "intExt" | "dayNight" | "targetDurationSeconds" | "shootDate" | "notes"
+  >
+>;
 
 export type StoryboardProject = {
   id: string;
   title: string;
   aspectRatio?: string;
   fields: FieldDefinition[];
+  scenes: StoryboardScene[];
   shots: Shot[];
 };
 
@@ -116,8 +140,87 @@ export function createProject(): StoryboardProject {
     title: "未命名项目",
     aspectRatio: DEFAULT_ASPECT_RATIO,
     fields: copyFields(DEFAULT_FIELDS),
+    scenes: [],
     shots: [{ id: "1", values: { shotNumber: "1" } }],
   };
+}
+
+function normalizeSceneNumbers(scenes: StoryboardScene[]): StoryboardScene[] {
+  return scenes.map((scene, index) => ({ ...scene, number: String(index + 1) }));
+}
+
+export function createScene(
+  project: StoryboardProject,
+  input: CreateSceneInput = {},
+): StoryboardProject {
+  const nextId = Math.max(
+    0,
+    ...project.scenes.map((scene) => {
+      const numericId = Number(scene.id.replace(/^scene-/, ""));
+      return Number.isSafeInteger(numericId) ? numericId : 0;
+    }),
+  ) + 1;
+  const scene: StoryboardScene = {
+    id: `scene-${nextId}`,
+    number: String(project.scenes.length + 1),
+    name: input.name?.trim() ?? "未命名场次",
+    intExt: input.intExt ?? "",
+    dayNight: input.dayNight ?? "",
+    targetDurationSeconds: input.targetDurationSeconds ?? "",
+    shootDate: input.shootDate ?? "",
+    notes: input.notes ?? "",
+    collapsed: false,
+  };
+  return { ...project, scenes: [...project.scenes, scene] };
+}
+
+export function assignShotsToScene(
+  project: StoryboardProject,
+  shotIds: string[],
+  sceneId: string | null,
+): StoryboardProject {
+  if (sceneId !== null && !project.scenes.some((scene) => scene.id === sceneId)) {
+    return project;
+  }
+  const selected = new Set(shotIds);
+  return {
+    ...project,
+    shots: project.shots.map((shot) =>
+      selected.has(shot.id)
+        ? { ...shot, sceneId: sceneId ?? undefined, values: { ...shot.values } }
+        : { ...shot, values: { ...shot.values } },
+    ),
+  };
+}
+
+export function toggleSceneCollapsed(
+  project: StoryboardProject,
+  sceneId: string,
+): StoryboardProject {
+  return {
+    ...project,
+    scenes: project.scenes.map((scene) =>
+      scene.id === sceneId ? { ...scene, collapsed: !scene.collapsed } : { ...scene },
+    ),
+  };
+}
+
+export function deleteScene(
+  project: StoryboardProject,
+  sceneId: string,
+  treatment: "ungroup" | "delete-shots",
+): StoryboardProject {
+  const scenes = normalizeSceneNumbers(
+    project.scenes.filter((scene) => scene.id !== sceneId).map((scene) => ({ ...scene })),
+  );
+  const shots = treatment === "delete-shots"
+    ? project.shots.filter((shot) => shot.sceneId !== sceneId)
+    : project.shots.map((shot) =>
+      shot.sceneId === sceneId
+        ? { ...shot, sceneId: undefined, values: { ...shot.values } }
+        : { ...shot, values: { ...shot.values } },
+    );
+  return { ...project, scenes, shots: normalizeShotNumbers(shots) };
 }
 
 export function addField(

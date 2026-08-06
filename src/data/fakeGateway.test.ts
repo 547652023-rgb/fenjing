@@ -112,6 +112,7 @@ it("removes image values from caller-supplied template snapshots during project 
       { id: "frame", label: "画面", type: "image" as const, visible: true, order: 0 },
       { id: "content", label: "内容", type: "text" as const, visible: true, order: 1 },
     ],
+    scenes: [],
     shots: [{ id: "template-shot", values: { frame: "image-data", content: "保留" } }],
   };
 
@@ -121,6 +122,22 @@ it("removes image values from caller-supplied template snapshots during project 
     shots: [{ values: { content: "保留" } }],
   });
   expect((await gateway.loadProject(summary.id)).shots[0].values.frame).toBeUndefined();
+});
+
+it("persists independent scene records alongside the project shots", async () => {
+  const gateway = new FakeStoryboardGateway();
+  await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("广告片");
+
+  const scene = await gateway.createScene(project.id, {
+    name: "夜 · 外景入口",
+    intExt: "EXT",
+    dayNight: "NIGHT",
+  });
+  const loaded = await gateway.loadProject(project.id);
+
+  expect(scene).toMatchObject({ number: "1", name: "夜 · 外景入口" });
+  expect(loaded.scenes).toEqual([scene]);
 });
 
 it("keeps folders, assignments, and home settings personal", async () => {

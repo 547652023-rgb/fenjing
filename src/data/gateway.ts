@@ -1,4 +1,9 @@
-import type { Shot, StoryboardProject } from "../domain/storyboard";
+import type {
+  CreateSceneInput,
+  Shot,
+  StoryboardProject,
+  StoryboardScene,
+} from "../domain/storyboard";
 import type {
   AuthUser,
   ProjectEventListener,
@@ -85,6 +90,9 @@ export interface StoryboardGateway {
   renameProject(projectId: string, title: string): Promise<void>;
   deleteProject(projectId: string): Promise<void>;
   loadProject(projectId: string): Promise<StoryboardProject>;
+  createScene(projectId: string, input: CreateSceneInput): Promise<StoryboardScene>;
+  updateScene(projectId: string, scene: StoryboardScene): Promise<void>;
+  deleteScene(projectId: string, sceneId: string): Promise<void>;
   saveProjectMeta(projectId: string, patch: ProjectMetaPatch): Promise<void>;
   saveShot(
     projectId: string,

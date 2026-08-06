@@ -22,6 +22,7 @@ const projectWithFrameImage: StoryboardProject = {
       options: ["近景"],
     },
   ],
+  scenes: [],
   shots: [{ id: "1", values: { frame: "image-data", size: "近景" } }],
 };
 

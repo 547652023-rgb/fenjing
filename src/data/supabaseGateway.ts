@@ -3,6 +3,7 @@ import type {
   FieldType,
   Shot,
   StoryboardProject,
+  StoryboardScene,
 } from "../domain/storyboard";
 import type {
   AuthUser,
@@ -27,7 +28,7 @@ import {
   type GatewayErrorCode,
   type StoryboardGateway,
 } from "./gateway";
-import { DEFAULT_ASPECT_RATIO } from "../domain/storyboard";
+import { DEFAULT_ASPECT_RATIO, type CreateSceneInput } from "../domain/storyboard";
 import {
   BUILT_IN_TEMPLATES,
   templateToProject,
@@ -100,7 +101,25 @@ function rowToPlatformAccount(row: any): PlatformAccount {
 }
 
 function rowToShot(row: any): Shot {
-  return { id: row.id, values: { ...(row.values ?? {}) } };
+  return {
+    id: row.id,
+    sceneId: row.scene_id ?? undefined,
+    values: { ...(row.values ?? {}) },
+  };
+}
+
+function rowToScene(row: any): StoryboardScene {
+  return {
+    id: row.id,
+    number: String(row.position + 1),
+    name: row.name,
+    intExt: row.int_ext ?? "",
+    dayNight: row.day_night ?? "",
+    targetDurationSeconds: row.target_duration_seconds ?? "",
+    shootDate: row.shoot_date ?? "",
+    notes: row.notes ?? "",
+    collapsed: Boolean(row.collapsed),
+  };
 }
 
 function rowToVersionedShot(row: any): VersionedShot {
@@ -425,11 +444,33 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
       await this.replaceFields(row.id, templateProject.fields);
       const removeShots = await this.client.from("shots").delete().eq("project_id", row.id);
       if (removeShots.error) throw mapSupabaseError(removeShots.error);
+      const sceneIdMap = new Map<string, string>();
+      if (templateProject.scenes.length > 0) {
+        const scenes = requireData<any[]>(
+          await this.client.from("scenes").insert(
+            templateProject.scenes.map((scene, position) => ({
+              project_id: row.id,
+              position,
+              name: scene.name,
+              int_ext: scene.intExt,
+              day_night: scene.dayNight,
+              target_duration_seconds: scene.targetDurationSeconds,
+              shoot_date: scene.shootDate || null,
+              notes: scene.notes,
+              collapsed: scene.collapsed,
+            })),
+          ).select("id"),
+        );
+        templateProject.scenes.forEach((scene, index) => {
+          if (scenes[index]?.id) sceneIdMap.set(scene.id, scenes[index].id);
+        });
+      }
       if (templateProject.shots.length > 0) {
         const insertShots = await this.client.from("shots").insert(
           templateProject.shots.map((shot, position) => ({
             project_id: row.id,
             position,
+            scene_id: shot.sceneId ? sceneIdMap.get(shot.sceneId) ?? null : null,
             values: { ...shot.values },
           })),
         );
@@ -517,15 +558,17 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
   }
 
   async loadProject(projectId: string): Promise<StoryboardProject> {
-    const [projectResult, fieldsResult, optionsResult, shotsResult] = await Promise.all([
+    const [projectResult, fieldsResult, optionsResult, scenesResult, shotsResult] = await Promise.all([
       this.client.from("projects").select("id,title,aspect_ratio").eq("id", projectId).single(),
       this.client.from("fields").select("id,field_key,label,field_type,visible,position,allow_custom_value").eq("project_id", projectId).order("position"),
       this.client.from("field_options").select("field_id,value,position").order("position"),
-      this.client.from("shots").select("id,values,version,position").eq("project_id", projectId).order("position"),
+      this.client.from("scenes").select("id,name,int_ext,day_night,target_duration_seconds,shoot_date,notes,collapsed,position").eq("project_id", projectId).order("position"),
+      this.client.from("shots").select("id,scene_id,values,version,position").eq("project_id", projectId).order("position"),
     ]);
     const projectRow = requireData<any>(projectResult);
     const fieldRows = requireData<any[]>(fieldsResult);
     const optionRows = requireData<any[]>(optionsResult);
+    const sceneRows = requireData<any[]>(scenesResult);
     const shotRows = requireData<any[]>(shotsResult);
     const imageFieldIds = new Set(
       fieldRows
@@ -535,6 +578,7 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
     const shots = await Promise.all(
       shotRows.map(async (row) => ({
         id: row.id,
+        sceneId: row.scene_id ?? undefined,
         values: await refreshImageUrlsInValues(
           { ...(row.values ?? {}) },
           imageFieldIds,
@@ -564,6 +608,7 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
           .sort((left, right) => left.position - right.position)
           .map((option) => option.value),
       })),
+      scenes: sceneRows.map(rowToScene),
       shots,
     };
   }
@@ -578,6 +623,59 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
     }
     if (!patch.fields) return;
     await this.replaceFields(projectId, patch.fields);
+  }
+
+  async createScene(
+    projectId: string,
+    input: CreateSceneInput,
+  ): Promise<StoryboardScene> {
+    const rows = requireData<any[]>(
+      await this.client.from("scenes").select("position").eq("project_id", projectId).order("position", { ascending: false }).limit(1),
+    );
+    const position = (rows[0]?.position ?? -1) + 1;
+    const inserted = requireData<any[]>(
+      await this.client
+        .from("scenes")
+        .insert({
+          project_id: projectId,
+          position,
+          name: input.name?.trim() || "未命名场次",
+          int_ext: input.intExt ?? "",
+          day_night: input.dayNight ?? "",
+          target_duration_seconds: input.targetDurationSeconds ?? "",
+          shoot_date: input.shootDate || null,
+          notes: input.notes ?? "",
+          collapsed: false,
+        })
+        .select("id,name,int_ext,day_night,target_duration_seconds,shoot_date,notes,collapsed,position"),
+    );
+    return rowToScene(inserted[0]);
+  }
+
+  async updateScene(projectId: string, scene: StoryboardScene): Promise<void> {
+    const result = await this.client
+      .from("scenes")
+      .update({
+        name: scene.name,
+        int_ext: scene.intExt,
+        day_night: scene.dayNight,
+        target_duration_seconds: scene.targetDurationSeconds,
+        shoot_date: scene.shootDate || null,
+        notes: scene.notes,
+        collapsed: scene.collapsed,
+      })
+      .eq("id", scene.id)
+      .eq("project_id", projectId);
+    if (result.error) throw mapSupabaseError(result.error);
+  }
+
+  async deleteScene(projectId: string, sceneId: string): Promise<void> {
+    const result = await this.client
+      .from("scenes")
+      .delete()
+      .eq("id", sceneId)
+      .eq("project_id", projectId);
+    if (result.error) throw mapSupabaseError(result.error);
   }
 
   private async replaceFields(
@@ -602,11 +700,11 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
   async saveShot(projectId: string, shot: Shot, expectedVersion: number): Promise<VersionedShot> {
     const result = await this.client
       .from("shots")
-      .update({ values: shot.values })
+      .update({ values: shot.values, scene_id: shot.sceneId ?? null })
       .eq("id", shot.id)
       .eq("project_id", projectId)
       .eq("version", expectedVersion)
-      .select("id,values,version");
+      .select("id,scene_id,values,version");
     if (result.error) throw mapSupabaseError(result.error);
     if (!result.data?.[0]) throw new GatewayError("conflict");
     return rowToVersionedShot(result.data[0]);
@@ -621,7 +719,7 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
       await this.client
         .from("shots")
         .insert({ project_id: projectId, position, values: { shotNumber: String(position + 1) } })
-        .select("id,values,version"),
+        .select("id,scene_id,values,version"),
       "conflict",
     );
     return rowToVersionedShot(inserted[0]);

@@ -1,5 +1,11 @@
 import type { TemplateSnapshot, StoryboardTemplate } from "./models";
-import { DEFAULT_FIELDS, type FieldDefinition, type Shot, type StoryboardProject } from "./storyboard";
+import {
+  DEFAULT_FIELDS,
+  type FieldDefinition,
+  type Shot,
+  type StoryboardProject,
+  type StoryboardScene,
+} from "./storyboard";
 
 export type { StoryboardTemplate, TemplateSnapshot } from "./models";
 
@@ -43,11 +49,16 @@ function cloneShotsWithoutImages(
   }));
 }
 
+function cloneScenes(scenes: readonly DeepReadonly<StoryboardScene>[]): StoryboardScene[] {
+  return scenes.map((scene) => ({ ...scene }));
+}
+
 function snapshot(title: string, fields: readonly DeepReadonly<FieldDefinition>[]): TemplateSnapshot {
   return {
     title,
     aspectRatio: "16:9",
     fields: cloneFields(fields),
+    scenes: [],
     shots: [{ id: "1", values: { shotNumber: "1" } }],
   };
 }
@@ -89,6 +100,7 @@ export function projectToTemplateSnapshot(project: StoryboardProject): TemplateS
     title: project.title,
     aspectRatio: project.aspectRatio,
     fields,
+    scenes: cloneScenes(project.scenes),
     shots: cloneShotsWithoutImages(project.shots, imageFieldIds),
   };
 }
@@ -108,6 +120,7 @@ export function templateToProject(
     title,
     aspectRatio: template.aspectRatio,
     fields,
+    scenes: cloneScenes(template.scenes ?? []),
     shots: cloneShotsWithoutImages(template.shots, imageFieldIds),
   };
 }

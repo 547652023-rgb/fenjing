@@ -26,6 +26,7 @@ function createPdfProject(): StoryboardProject {
   return {
     id: "pdf-project",
     title: "测试分镜",
+    scenes: [],
     fields: [
       { id: "shotNumber", label: "镜号", type: "number", visible: true, order: 0 },
       { id: "frame", label: "画面", type: "image", visible: true, order: 1 },

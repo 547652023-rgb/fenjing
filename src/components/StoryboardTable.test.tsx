@@ -2,7 +2,12 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { vi } from "vitest";
-import { addShot, createProject } from "../domain/storyboard";
+import {
+  addShot,
+  assignShotsToScene,
+  createProject,
+  createScene,
+} from "../domain/storyboard";
 import { ImageCell } from "./ImageCell";
 import { StoryboardTable } from "./StoryboardTable";
 
@@ -199,6 +204,31 @@ function StoryboardHarness() {
   );
 }
 
+function SceneGroupingHarness({ initialProject }: { initialProject: ReturnType<typeof createProject> }) {
+  const [project, setProject] = useState(initialProject);
+  return (
+    <StoryboardTable
+      project={project}
+      onChange={(update) => setProject((current) =>
+        typeof update === "function" ? update(current) : update,
+      )}
+    />
+  );
+}
+
+it("creates a scene and assigns selected shots through the batch bar", async () => {
+  const user = userEvent.setup();
+  const projectWithScene = createScene(createProject(), { name: "夜景天台" });
+  render(<SceneGroupingHarness initialProject={projectWithScene} />);
+
+  await user.click(screen.getByLabelText("选择镜头 1"));
+  await user.selectOptions(screen.getByLabelText("归入场次"), "scene-1");
+  await user.click(screen.getByRole("button", { name: "归入场次" }));
+
+  expect(screen.getByRole("row", { name: "场次 1 夜景天台" })).toBeVisible();
+  expect(screen.queryByRole("row", { name: "未分组镜头" })).not.toBeInTheDocument();
+});
+
 it("keeps row operations inside an accessible more menu", async () => {
   const user = userEvent.setup();
   vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -213,7 +243,7 @@ it("keeps row operations inside an accessible more menu", async () => {
   expect(within(menu).getByRole("menuitem", { name: "在上方新增" })).toBeVisible();
   expect(within(menu).getByRole("menuitem", { name: "在下方新增" })).toBeVisible();
   expect(within(menu).getByRole("menuitem", { name: "复制镜头" })).toBeVisible();
-  expect(within(menu).getByRole("menuitem", { name: "移动到场次" })).toBeDisabled();
+  expect(within(menu).getByRole("menuitem", { name: "移动到场次" })).toBeEnabled();
 
   await user.click(within(menu).getByRole("menuitem", { name: "上移" }));
   expect(screen.getByTestId("shot-order")).toHaveTextContent("1,3,2");
@@ -368,4 +398,27 @@ it("copies text and select values when the table uses its local fallback", async
 
   expect(screen.getByLabelText("内容-4")).toHaveValue("导演画面");
   expect(screen.getByRole("combobox", { name: "景别-4" })).toHaveValue("近景");
+});
+
+it("groups assigned shots beneath a collapsible scene header while retaining ungrouped shots", async () => {
+  const user = userEvent.setup();
+  const withShots = addShot(createProject());
+  const withScene = createScene(withShots, {
+    name: "夜 · 酒吧门口",
+    intExt: "EXT",
+    dayNight: "NIGHT",
+  });
+  const project = assignShotsToScene(withScene, ["1"], withScene.scenes[0].id);
+
+  render(<SceneGroupingHarness initialProject={project} />);
+
+  expect(screen.getByRole("row", { name: /场次 1 夜 · 酒吧门口/ })).toBeVisible();
+  expect(screen.getByRole("button", { name: "收起场次 1" })).toBeVisible();
+  expect(screen.getByLabelText("镜号-1")).toBeVisible();
+  expect(screen.getByRole("row", { name: "未分组镜头" })).toBeVisible();
+
+  await user.click(screen.getByRole("button", { name: "收起场次 1" }));
+  expect(screen.queryByLabelText("镜号-1")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("镜号-2")).toBeVisible();
+  expect(screen.getByRole("button", { name: "展开场次 1" })).toBeVisible();
 });

@@ -80,7 +80,7 @@ export type UploadImageInput = {
 
 export type TemplateSnapshot = Pick<
   StoryboardProject,
-  "title" | "aspectRatio" | "fields" | "shots"
+  "title" | "aspectRatio" | "fields" | "scenes" | "shots"
 >;
 
 export type StoryboardTemplate = {

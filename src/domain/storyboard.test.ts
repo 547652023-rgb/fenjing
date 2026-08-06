@@ -3,11 +3,15 @@ import {
   SHOT_SIZE_OPTIONS,
   addField,
   addShot,
+  assignShotsToScene,
+  createScene,
   createProject,
+  deleteScene,
   deleteShot,
   moveField,
   moveShot,
   setFieldOptions,
+  toggleSceneCollapsed,
   toggleFieldVisibility,
 } from "./storyboard";
 
@@ -107,6 +111,47 @@ it("uses a collision-free local shot id after deleting an earlier row", () => {
   const project = deleteShot(addShot(addShot(createProject())), "2");
 
   expect(addShot(project).shots.map(({ id }) => id)).toEqual(["1", "3", "4"]);
+});
+
+it("keeps scene records independent from their assigned shots", () => {
+  const project = addShot(createProject());
+  const withScene = createScene(project, {
+    name: "夜 · 酒吧门口",
+    intExt: "EXT",
+    dayNight: "NIGHT",
+  });
+  const scene = withScene.scenes[0];
+  const assigned = assignShotsToScene(withScene, ["1", "2"], scene.id);
+
+  expect(assigned.scenes).toHaveLength(1);
+  expect(assigned.shots.map((shot) => shot.sceneId)).toEqual([scene.id, scene.id]);
+  expect(assigned.scenes[0]).toMatchObject({
+    number: "1",
+    name: "夜 · 酒吧门口",
+    intExt: "EXT",
+    dayNight: "NIGHT",
+  });
+});
+
+it("collapses a scene without changing its shots and can ungroup it safely", () => {
+  const withScene = createScene(createProject(), { name: "开场" });
+  const sceneId = withScene.scenes[0].id;
+  const assigned = assignShotsToScene(withScene, ["1"], sceneId);
+  const collapsed = toggleSceneCollapsed(assigned, sceneId);
+  const ungrouped = deleteScene(collapsed, sceneId, "ungroup");
+
+  expect(collapsed.scenes[0].collapsed).toBe(true);
+  expect(collapsed.shots[0].sceneId).toBe(sceneId);
+  expect(ungrouped.scenes).toEqual([]);
+  expect(ungrouped.shots[0].sceneId).toBeUndefined();
+});
+
+it("deletes a scene together with its shots only when explicitly requested", () => {
+  const withScene = createScene(addShot(createProject()), { name: "尾声" });
+  const sceneId = withScene.scenes[0].id;
+  const assigned = assignShotsToScene(withScene, ["1", "2"], sceneId);
+
+  expect(deleteScene(assigned, sceneId, "delete-shots").shots).toEqual([]);
 });
 
 it("stores project-specific dropdown options while allowing custom values", () => {

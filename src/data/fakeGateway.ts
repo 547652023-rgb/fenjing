@@ -1,11 +1,14 @@
 import {
   addShot as addLocalShot,
+  createScene as createLocalScene,
   createProject as createLocalProject,
   DEFAULT_ASPECT_RATIO,
   deleteShot as deleteLocalShot,
   moveShot,
   type Shot,
   type StoryboardProject,
+  type CreateSceneInput,
+  type StoryboardScene,
 } from "../domain/storyboard";
 import type {
   AuthUser,
@@ -43,6 +46,7 @@ function cloneProject(project: StoryboardProject): StoryboardProject {
       ...field,
       options: field.options ? [...field.options] : undefined,
     })),
+    scenes: project.scenes.map((scene) => ({ ...scene })),
     shots: project.shots.map((shot) => ({
       ...shot,
       values: { ...shot.values },
@@ -414,6 +418,54 @@ export class FakeStoryboardGateway implements StoryboardGateway {
     this.projects.set(projectId, { ...project, title: title.trim() });
     this.touchProject(projectId);
     this.emit(projectId, { type: "project.changed" });
+  }
+
+  async createScene(
+    projectId: string,
+    input: CreateSceneInput,
+  ): Promise<StoryboardScene> {
+    const project = this.requireProjectMember(projectId);
+    const next = createLocalScene(project, input);
+    const scene = next.scenes[next.scenes.length - 1];
+    this.projects.set(projectId, next);
+    this.touchProject(projectId);
+    this.emit(projectId, { type: "structure.changed" });
+    return { ...scene };
+  }
+
+  async updateScene(projectId: string, scene: StoryboardScene): Promise<void> {
+    const project = this.requireProjectMember(projectId);
+    if (!project.scenes.some((candidate) => candidate.id === scene.id)) {
+      throw new GatewayError("not_found");
+    }
+    this.projects.set(projectId, {
+      ...project,
+      scenes: project.scenes.map((candidate) =>
+        candidate.id === scene.id ? { ...scene } : { ...candidate },
+      ),
+    });
+    this.touchProject(projectId);
+    this.emit(projectId, { type: "structure.changed" });
+  }
+
+  async deleteScene(projectId: string, sceneId: string): Promise<void> {
+    const project = this.requireProjectMember(projectId);
+    if (!project.scenes.some((scene) => scene.id === sceneId)) {
+      throw new GatewayError("not_found");
+    }
+    this.projects.set(projectId, {
+      ...project,
+      scenes: project.scenes
+        .filter((scene) => scene.id !== sceneId)
+        .map((scene, index) => ({ ...scene, number: String(index + 1) })),
+      shots: project.shots.map((shot) =>
+        shot.sceneId === sceneId
+          ? { ...shot, sceneId: undefined, values: { ...shot.values } }
+          : { ...shot, values: { ...shot.values } },
+      ),
+    });
+    this.touchProject(projectId);
+    this.emit(projectId, { type: "structure.changed" });
   }
 
   async deleteProject(projectId: string): Promise<void> {
