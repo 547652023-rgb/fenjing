@@ -30,9 +30,4 @@ create policy scenes_update_member on public.scenes
 create policy scenes_delete_member on public.scenes
   for delete using (public.is_project_member(project_id));
 
-do $$
-begin
-  alter publication supabase_realtime add table public.scenes;
-exception
-  when duplicate_object then null;
-end $$;
+alter publication supabase_realtime add table public.scenes;
