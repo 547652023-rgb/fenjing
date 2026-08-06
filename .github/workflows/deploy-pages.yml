@@ -3,7 +3,7 @@ name: Deploy GitHub Pages
 on:
   push:
     branches:
-      - agent/add-storyboard-saas-design
+      - agent/next-optimization
   workflow_dispatch:
 
 permissions:
