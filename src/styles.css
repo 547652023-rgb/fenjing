@@ -858,11 +858,44 @@ select:focus-visible { outline: 2px solid var(--copper-bright); outline-offset: 
 .storyboard-panel { margin: clamp(1.25rem, 3vw, 3rem); border: 1px solid #b9a994; border-radius: 0; background: var(--paper); box-shadow: 0 18px 44px rgb(0 0 0 / 24%); }
 .storyboard-toolbar { padding: 0.8rem 1rem; border-color: #b9a994; background: #eee2d3; }
 .storyboard-toolbar p { color: #6d5b50; font-variant-numeric: tabular-nums; }
+.storyboard-batch-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid #b9a994;
+  color: var(--paper);
+  background: var(--ink-raised);
+}
+.storyboard-batch-bar strong { margin-right: 0.35rem; color: var(--copper-bright); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.storyboard-batch-bar select,
+.storyboard-batch-bar input {
+  min-height: 2.25rem;
+  border: 1px solid rgb(246 240 231 / 28%);
+  border-radius: 1px;
+  padding: 0.38rem 0.55rem;
+  color: var(--paper);
+  background: rgb(246 240 231 / 9%);
+}
+.storyboard-batch-bar input { min-width: 11rem; }
+.storyboard-batch-bar input::placeholder { color: var(--paper-deep); }
+.storyboard-batch-bar button { border-color: transparent; }
+.storyboard-batch-bar__delete { color: #ffd9d9 !important; background: var(--wine-deep) !important; }
 .storyboard-table th,
 .storyboard-table td { border-color: #cbbba8; background: var(--paper); }
 .storyboard-table th { color: var(--paper); background: var(--ink); font-size: 0.72rem; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; }
 .storyboard-table input,
 .storyboard-table select { line-height: 1.5; }
+.storyboard-table input[type="checkbox"] {
+  display: inline-block;
+  width: 1rem;
+  min-height: 1rem;
+  margin: 0.2rem;
+  padding: 0;
+  accent-color: var(--wine);
+  vertical-align: middle;
+}
 .storyboard-table td[data-field-type="number"] input,
 .storyboard-table .sticky-shot-number input { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
 .storyboard-table tr:hover td { background: #fffaf2; }

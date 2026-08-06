@@ -16,6 +16,7 @@ import type {
   Shot,
   StoryboardProject,
 } from "../domain/storyboard";
+import { updateShotValue } from "../domain/storyboard";
 import type { ProjectEvent } from "../domain/models";
 import { useProjectRealtime } from "./useProjectRealtime";
 import { SaveTemplateDialog } from "./SaveTemplateDialog";
@@ -30,6 +31,14 @@ type ProjectWorkbenchProps = {
 
 function fieldSignature(project: StoryboardProject): string {
   return JSON.stringify(project.fields);
+}
+
+function copiedShotValues(shot: Shot, imageFieldIds: Set<string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(shot.values).filter(
+      ([fieldId]) => fieldId !== "shotNumber" && !imageFieldIds.has(fieldId),
+    ),
+  );
 }
 
 export function ProjectWorkbench({
@@ -268,6 +277,75 @@ export function ProjectWorkbench({
     });
   }
 
+  async function copySelectedShots(shotIds: string[]) {
+    const current = projectRef.current;
+    if (!current) return;
+    const selected = new Set(shotIds);
+    const sourceShots = current.shots.filter((shot) => selected.has(shot.id));
+    if (sourceShots.length === 0) return;
+
+    setSaveStatus("saving");
+    try {
+      const imageFieldIds = new Set(
+        current.fields
+          .filter((field) => field.type === "image")
+          .map((field) => field.id),
+      );
+      const copyIds: string[] = [];
+      for (const sourceShot of sourceShots) {
+        const added = await gateway.addShot(projectId);
+        const saved = await gateway.saveShot(
+          projectId,
+          { ...added.shot, values: copiedShotValues(sourceShot, imageFieldIds) },
+          added.version,
+        );
+        versions.current.set(saved.shot.id, saved.version);
+        copyIds.push(saved.shot.id);
+      }
+      const lastSelectedIndex = current.shots.reduce(
+        (lastIndex, shot, index) => (selected.has(shot.id) ? index : lastIndex),
+        -1,
+      );
+      const order = [
+        ...current.shots.slice(0, lastSelectedIndex + 1).map((shot) => shot.id),
+        ...copyIds,
+        ...current.shots.slice(lastSelectedIndex + 1).map((shot) => shot.id),
+      ];
+      await gateway.reorderShots(projectId, order);
+      await reload();
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("error");
+      await reload();
+    }
+  }
+
+  async function deleteSelectedShots(shotIds: string[]) {
+    if (shotIds.length === 0) return;
+    setSaveStatus("saving");
+    try {
+      for (const shotId of shotIds) {
+        await gateway.deleteShot(projectId, shotId);
+      }
+      await reload();
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("error");
+      await reload();
+    }
+  }
+
+  function updateSelectedShots(shotIds: string[], fieldId: string, value: string) {
+    updateProject(
+      (current) =>
+        shotIds.reduce(
+          (nextProject, shotId) => updateShotValue(nextProject, shotId, fieldId, value),
+          current,
+        ),
+      true,
+    );
+  }
+
   async function saveTemplate(name: string, snapshot: TemplateSnapshot) {
     setTemplateMessage("");
     await gateway.createTemplate(projectId, name, snapshot);
@@ -380,6 +458,9 @@ export function ProjectWorkbench({
       ) : null}
       <StoryboardTable
         imageActions={imageActions}
+        onBatchCopy={copySelectedShots}
+        onBatchDelete={deleteSelectedShots}
+        onBatchUpdate={updateSelectedShots}
         project={project}
         onChange={updateProject}
       />

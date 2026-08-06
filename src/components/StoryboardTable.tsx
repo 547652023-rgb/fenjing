@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   addShot,
   deleteShot,
@@ -31,6 +31,13 @@ type StoryboardTableProps = {
   project: StoryboardProject;
   onChange: (update: ProjectUpdate) => void;
   imageActions?: StoryboardImageActions;
+  onBatchCopy?: (shotIds: string[]) => void | Promise<void>;
+  onBatchDelete?: (shotIds: string[]) => void | Promise<void>;
+  onBatchUpdate?: (
+    shotIds: string[],
+    fieldId: string,
+    value: string,
+  ) => void | Promise<void>;
 };
 
 export function parseRemoteImages(value: string): RemoteImage[] {
@@ -74,11 +81,71 @@ function columnWidth(field: FieldDefinition): string {
   return `${Math.max(typeMinimum, field.label.length * 2 + 4)}rem`;
 }
 
-export function StoryboardTable({ project, onChange, imageActions }: StoryboardTableProps) {
+export function StoryboardTable({
+  project,
+  onChange,
+  imageActions,
+  onBatchCopy,
+  onBatchDelete,
+  onBatchUpdate,
+}: StoryboardTableProps) {
   const [draggedShotId, setDraggedShotId] = useState<string | null>(null);
+  const [selectedShotIds, setSelectedShotIds] = useState<string[]>([]);
+  const [batchFieldId, setBatchFieldId] = useState("");
+  const [batchFieldValue, setBatchFieldValue] = useState("");
   const visibleFields = project.fields
     .filter((field) => field.visible)
     .sort((left, right) => left.order - right.order);
+  const batchFields = visibleFields.filter(
+    (field) => field.type !== "image" && field.id !== "shotNumber",
+  );
+  const allSelected =
+    project.shots.length > 0 && selectedShotIds.length === project.shots.length;
+
+  useEffect(() => {
+    setSelectedShotIds((current) =>
+      current.filter((shotId) => project.shots.some((shot) => shot.id === shotId)),
+    );
+  }, [project.shots]);
+
+  function toggleShotSelection(shotId: string, selected: boolean) {
+    setSelectedShotIds((current) =>
+      selected
+        ? [...current, shotId]
+        : current.filter((candidate) => candidate !== shotId),
+    );
+  }
+
+  function applyBatchFieldValue() {
+    if (!batchFieldId || selectedShotIds.length === 0) return;
+    if (onBatchUpdate) {
+      void onBatchUpdate(selectedShotIds, batchFieldId, batchFieldValue);
+      return;
+    }
+    onChange((latestProject) =>
+      selectedShotIds.reduce(
+        (nextProject, shotId) =>
+          updateShotValue(nextProject, shotId, batchFieldId, batchFieldValue),
+        latestProject,
+      ),
+    );
+  }
+
+  function deleteSelectedShots() {
+    if (selectedShotIds.length === 0) return;
+    if (!window.confirm(`确定删除选中的 ${selectedShotIds.length} 个镜头吗？`)) return;
+    if (onBatchDelete) {
+      void onBatchDelete(selectedShotIds);
+    } else {
+      onChange((latestProject) =>
+        selectedShotIds.reduce(
+          (nextProject, shotId) => deleteShot(nextProject, shotId),
+          latestProject,
+        ),
+      );
+    }
+    setSelectedShotIds([]);
+  }
 
   return (
     <section className="storyboard-panel" aria-label="分镜表格区域">
@@ -88,12 +155,66 @@ export function StoryboardTable({ project, onChange, imageActions }: StoryboardT
           新增镜头
         </button>
       </div>
+      {selectedShotIds.length > 0 ? (
+        <div aria-label="批量操作" className="storyboard-batch-bar" role="toolbar">
+          <strong>已选择 {selectedShotIds.length} 个镜头</strong>
+          <button
+            type="button"
+            onClick={() => onBatchCopy && void onBatchCopy(selectedShotIds)}
+          >
+            复制镜头
+          </button>
+          <label>
+            <span className="sr-only">批量字段</span>
+            <select
+              aria-label="批量字段"
+              value={batchFieldId}
+              onChange={(event) => {
+                setBatchFieldId(event.target.value);
+                setBatchFieldValue("");
+              }}
+            >
+              <option value="">选择字段</option>
+              {batchFields.map((field) => (
+                <option key={field.id} value={field.id}>
+                  {field.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <input
+            aria-label="批量字段值"
+            disabled={!batchFieldId}
+            placeholder="输入字段值"
+            value={batchFieldValue}
+            onChange={(event) => setBatchFieldValue(event.target.value)}
+          />
+          <button disabled={!batchFieldId} type="button" onClick={applyBatchFieldValue}>
+            应用字段值
+          </button>
+          <button className="storyboard-batch-bar__delete" type="button" onClick={deleteSelectedShots}>
+            删除镜头
+          </button>
+          <button type="button" onClick={() => setSelectedShotIds([])}>
+            取消选择
+          </button>
+        </div>
+      ) : null}
       <div className="storyboard-table-scroll">
         <table className="storyboard-table">
           <thead>
             <tr>
               <th className="sticky-shot-actions" scope="col">
-                操作
+                <input
+                  aria-label="选择全部镜头"
+                  checked={allSelected}
+                  type="checkbox"
+                  onChange={(event) =>
+                    setSelectedShotIds(
+                      event.target.checked ? project.shots.map((shot) => shot.id) : [],
+                    )
+                  }
+                />
               </th>
               {visibleFields.map((field) => (
                 <th
@@ -128,6 +249,12 @@ export function StoryboardTable({ project, onChange, imageActions }: StoryboardT
                 }}
               >
                 <td className="sticky-shot-actions shot-actions">
+                  <input
+                    aria-label={`选择镜头 ${shot.id}`}
+                    checked={selectedShotIds.includes(shot.id)}
+                    type="checkbox"
+                    onChange={(event) => toggleShotSelection(shot.id, event.target.checked)}
+                  />
                   <button
                     aria-label={`拖动镜头 ${shot.id}`}
                     className="shot-actions__drag"

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { vi } from "vitest";
@@ -244,4 +244,44 @@ it("renders shot size as the restricted six-option dropdown", () => {
     "近景",
     "特写",
   ]);
+});
+
+it("selects shots and exposes batch copy, field update, and delete actions", async () => {
+  const user = userEvent.setup();
+  const project = addShot(addShot(createProject()));
+  const onBatchCopy = vi.fn();
+  const onBatchDelete = vi.fn();
+  const onBatchUpdate = vi.fn();
+
+  render(
+    <StoryboardTable
+      project={project}
+      onChange={vi.fn()}
+      onBatchCopy={onBatchCopy}
+      onBatchDelete={onBatchDelete}
+      onBatchUpdate={onBatchUpdate}
+    />,
+  );
+
+  await user.click(screen.getByRole("checkbox", { name: "选择镜头 1" }));
+  await user.click(screen.getByRole("checkbox", { name: "选择镜头 3" }));
+
+  const batchBar = screen.getByRole("toolbar", { name: "批量操作" });
+  expect(batchBar).toHaveTextContent("已选择 2 个镜头");
+
+  await user.click(within(batchBar).getByRole("button", { name: "复制镜头" }));
+  expect(onBatchCopy).toHaveBeenCalledWith(["1", "3"]);
+
+  await user.selectOptions(
+    within(batchBar).getByRole("combobox", { name: "批量字段" }),
+    "content",
+  );
+  await user.type(within(batchBar).getByRole("textbox", { name: "批量字段值" }), "开场特写");
+  await user.click(within(batchBar).getByRole("button", { name: "应用字段值" }));
+  expect(onBatchUpdate).toHaveBeenCalledWith(["1", "3"], "content", "开场特写");
+
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  await user.click(within(batchBar).getByRole("button", { name: "删除镜头" }));
+  expect(window.confirm).toHaveBeenCalledWith("确定删除选中的 2 个镜头吗？");
+  expect(onBatchDelete).toHaveBeenCalledWith(["1", "3"]);
 });

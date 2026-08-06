@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { FakeStoryboardGateway } from "../data/fakeGateway";
@@ -218,4 +218,48 @@ it("uploads frame images through the online gateway and persists their metadata"
   );
   expect(JSON.parse((await gateway.loadProject(project.id)).shots[0].values.frame))
     .toEqual([uploaded]);
+});
+
+it("copies selected shots after the selection and clears copied images", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const first = await gateway.loadProject(project.id);
+  await gateway.saveShot(
+    project.id,
+    {
+      ...first.shots[0],
+      values: {
+        ...first.shots[0].values,
+        content: "开场远景",
+        frame: JSON.stringify([{ path: "frame.png", url: "blob:frame", name: "frame.png", position: 0 }]),
+      },
+    },
+    1,
+  );
+  await gateway.addShot(project.id);
+  await gateway.addShot(project.id);
+  const user = userEvent.setup();
+
+  render(
+    <ProjectWorkbench
+      gateway={gateway}
+      onBack={vi.fn()}
+      projectId={project.id}
+      user={owner}
+    />,
+  );
+
+  await screen.findByDisplayValue("广告片");
+  await user.click(screen.getByRole("checkbox", { name: "选择镜头 1" }));
+  await user.click(screen.getByRole("checkbox", { name: "选择镜头 2" }));
+  await user.click(screen.getByRole("button", { name: "复制镜头" }));
+
+  await waitFor(async () => {
+    const saved = await gateway.loadProject(project.id);
+    expect(saved.shots).toHaveLength(5);
+    expect(saved.shots.slice(2, 4).map((shot) => shot.values.content)).toEqual([
+      "开场远景",
+      undefined,
+    ]);
+    expect(saved.shots[2].values.frame).toBeUndefined();
+  });
 });
