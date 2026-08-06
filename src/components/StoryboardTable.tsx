@@ -424,7 +424,11 @@ export function StoryboardTable({
                       current === shot.id ? null : shot.id,
                     )}
                   >
-                    <span aria-hidden="true">•••</span>
+                    <svg aria-hidden="true" className="shot-actions__more-icon" viewBox="0 0 16 16">
+                      <circle cx="3" cy="8" r="1" />
+                      <circle cx="8" cy="8" r="1" />
+                      <circle cx="13" cy="8" r="1" />
+                    </svg>
                   </button>
                   {openRowMenuShotId === shot.id ? (
                     <div aria-label={`镜头 ${shot.id} 操作`} className="shot-actions__menu" role="menu">

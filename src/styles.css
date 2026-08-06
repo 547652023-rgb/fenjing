@@ -1342,7 +1342,14 @@ button:disabled {
 .shot-actions__more {
   min-width: 2rem !important;
   margin-left: 0.25rem !important;
-  letter-spacing: 0.08em;
+}
+
+.shot-actions__more-icon {
+  display: block;
+  width: 1rem;
+  height: 1rem;
+  margin: auto;
+  fill: currentColor;
 }
 
 .shot-actions__menu {
