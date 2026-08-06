@@ -514,11 +514,11 @@ export function ProjectDashboard({
   }
 
   return (
-    <main className="dashboard-shell">
+    <main className="dashboard-shell studio-shell">
       <header className="dashboard-header">
         <div>
-          <p className="project-header__eyebrow">Storyboard Workbench</p>
           <h1>我的项目</h1>
+          <p>从项目档案到最终分镜，一切都在场。</p>
         </div>
         <div className="dashboard-account">
           <span>{user.email}</span>
@@ -544,7 +544,6 @@ export function ProjectDashboard({
         <section className="project-home-content" aria-labelledby="project-home-title">
           <div className="dashboard-toolbar">
             <div>
-              <p className="project-header__eyebrow">当前视图</p>
               <h2 id="project-home-title">{scopeTitle}</h2>
               <p>{loading ? "正在加载项目…" : `共 ${visibleProjects.length} 个项目`}</p>
             </div>

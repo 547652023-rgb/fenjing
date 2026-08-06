@@ -75,11 +75,11 @@ export function SupervisorDashboard({ gateway, user, onBack }: SupervisorDashboa
   }
 
   return (
-    <main className="dashboard-shell supervisor-shell">
+    <main className="dashboard-shell supervisor-shell studio-shell">
       <header className="dashboard-header">
         <div>
-          <p className="project-header__eyebrow">Storyboard Workbench</p>
           <h1>主管后台</h1>
+          <p>平台访问与账号状态管理</p>
         </div>
         <div className="dashboard-account">
           <span>{user.email}</span>

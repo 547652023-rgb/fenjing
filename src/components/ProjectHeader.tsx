@@ -10,8 +10,8 @@ export function ProjectHeader({ title, onTitleChange, saveStatus }: ProjectHeade
   return (
     <header className="project-header">
       <div>
-        <p className="project-header__eyebrow">Storyboard Workbench</p>
         <h1>分镜工作台</h1>
+        <p className="project-header__subtitle">镜头、协作与交付在同一处推进</p>
       </div>
       <label className="project-title">
         <span>项目名称</span>

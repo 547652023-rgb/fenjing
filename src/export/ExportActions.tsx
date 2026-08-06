@@ -61,23 +61,37 @@ export function ExportActions({
 
   return (
     <div className="export-actions">
-      <button type="button" onClick={() => setOpen(true)}>导出文件</button>
-      {open ? <div className="export-dialog" role="dialog" aria-modal="true" aria-label="导出文件设置">
-        <h2>导出文件</h2>
-        <p>项目名称：{project.title}</p>
-        <p>画幅比例：{project.aspectRatio || "16:9"}</p>
-        <p>镜头总数：{project.shots.length}</p>
-        <label>
-          本次导出 Logo
-          <input aria-label="本次导出 Logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => chooseLogo(event.currentTarget.files?.[0])} />
-        </label>
-        {logo ? <div><img src={logo.url} alt="Logo 预览" /><span>{logo.name}</span><button type="button" onClick={() => setLogo(undefined)}>移除 Logo</button></div> : null}
-        {error ? <p className="export-actions__error" role="alert">{error}</p> : null}
-        <div className="export-dialog__buttons">
-          <button disabled={active !== null} type="button" onClick={() => void run("excel")}>{active === "excel" ? "正在导出 Excel…" : "导出 Excel"}</button>
-          <button disabled={active !== null} type="button" onClick={() => void run("pdf")}>{active === "pdf" ? "正在导出 PDF…" : "导出 PDF"}</button>
-          <button disabled={active !== null} type="button" onClick={close}>取消</button>
-        </div>
+      <button aria-label="导出文件" type="button" onClick={() => setOpen(true)}>导出交付</button>
+      {open ? <div className="export-overlay">
+        <section className="export-dialog" role="dialog" aria-modal="true" aria-labelledby="export-dialog-title">
+          <header className="export-dialog__header">
+            <div>
+              <p className="export-dialog__kicker">DELIVERY ROOM</p>
+              <h2 id="export-dialog-title">导出交付</h2>
+            </div>
+            <button aria-label="关闭导出交付" className="export-dialog__close" disabled={active !== null} type="button" onClick={close}>×</button>
+          </header>
+          <dl className="export-dialog__summary">
+            <div><dt>项目</dt><dd>{project.title}</dd></div>
+            <div><dt>画幅</dt><dd>{project.aspectRatio || "16:9"}</dd></div>
+            <div><dt>镜头</dt><dd>{project.shots.length} 个</dd></div>
+          </dl>
+          <label className="export-dialog__logo">
+            <span>本次导出 Logo</span>
+            <input aria-label="本次导出 Logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => chooseLogo(event.currentTarget.files?.[0])} />
+          </label>
+          {logo ? <div className="export-dialog__logo-preview"><img src={logo.url} alt="Logo 预览" /><span>{logo.name}</span><button className="button-quiet" type="button" onClick={() => setLogo(undefined)}>移除</button></div> : null}
+          {error ? <p className="export-actions__error" role="alert">{error}</p> : null}
+          <div className="export-dialog__formats">
+            <button className="export-format-option" disabled={active !== null} type="button" onClick={() => void run("excel")}>
+              <span>Excel</span><strong>可编辑镜头清单</strong><small>{active === "excel" ? "正在生成文件…" : "供制片、排期与现场协作使用"}</small>
+            </button>
+            <button className="export-format-option export-format-option--dark" disabled={active !== null} type="button" onClick={() => void run("pdf")}>
+              <span>PDF</span><strong>审阅用制片稿</strong><small>{active === "pdf" ? "正在生成文件…" : "供导演、客户与团队确认使用"}</small>
+            </button>
+          </div>
+          <div className="export-dialog__footer"><span>文件将在浏览器中下载</span><button className="button-quiet" disabled={active !== null} type="button" onClick={close}>取消</button></div>
+        </section>
       </div> : null}
     </div>
   );

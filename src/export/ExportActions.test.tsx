@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { createProject } from "../domain/storyboard";
@@ -33,20 +33,23 @@ it("opens export settings and passes a temporary logo to the selected exporter",
 
   await user.click(screen.getByRole("button", { name: "导出文件" }));
 
-  expect(screen.getByText(`项目名称：${project.title}`)).toBeVisible();
-  expect(screen.getByText("画幅比例：16:9")).toBeVisible();
-  expect(screen.getByText("镜头总数：1")).toBeVisible();
+  const dialog = screen.getByRole("dialog", { name: "导出交付" });
+  expect(within(dialog).getByText(project.title)).toBeVisible();
+  expect(within(dialog).getByText("16:9")).toBeVisible();
+  expect(within(dialog).getByText("1 个")).toBeVisible();
+  expect(within(dialog).getByText("可编辑镜头清单")).toBeVisible();
+  expect(within(dialog).getByText("审阅用制片稿")).toBeVisible();
   const logo = new File(["logo"], "logo.png", { type: "image/png" });
   await user.upload(screen.getByLabelText("本次导出 Logo"), logo);
   expect(screen.getByText("logo.png")).toBeVisible();
 
-  await user.click(screen.getByRole("button", { name: "导出 Excel" }));
+  await user.click(screen.getByRole("button", { name: /可编辑镜头清单/ }));
 
   expect(exportExcel).toHaveBeenCalledWith(project, expect.objectContaining({
     logo: expect.objectContaining({ name: "logo.png", url: expect.any(String) }),
   }));
-  expect(screen.getByRole("button", { name: "正在导出 Excel…" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "导出 PDF" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: /可编辑镜头清单/ })).toBeDisabled();
+  expect(screen.getByRole("button", { name: /审阅用制片稿/ })).toBeDisabled();
 
   pending.resolve();
   expect(await screen.findByRole("button", { name: "导出文件" })).toBeEnabled();
@@ -68,12 +71,12 @@ it("keeps settings open after an export error and clears the temporary logo when
   await user.click(screen.getByRole("button", { name: "导出文件" }));
   const logo = new File(["logo"], "logo.png", { type: "image/png" });
   await user.upload(screen.getByLabelText("本次导出 Logo"), logo);
-  await user.click(screen.getByRole("button", { name: "导出 Excel" }));
+  await user.click(screen.getByRole("button", { name: /可编辑镜头清单/ }));
   pending.reject(new Error("download failed"));
 
   expect(await screen.findByRole("alert")).toHaveTextContent("导出失败，请稍后重试");
-  expect(screen.getByRole("button", { name: "导出 Excel" })).toBeEnabled();
-  expect(screen.getByRole("button", { name: "导出 PDF" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: /可编辑镜头清单/ })).toBeEnabled();
+  expect(screen.getByRole("button", { name: /审阅用制片稿/ })).toBeEnabled();
   await user.click(screen.getByRole("button", { name: "取消" }));
   await user.click(screen.getByRole("button", { name: "导出文件" }));
   expect(screen.queryByText("logo.png")).not.toBeInTheDocument();

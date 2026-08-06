@@ -348,7 +348,7 @@ export function ProjectWorkbench({
   }
 
   return (
-    <main className="workbench-shell">
+    <main className="workbench-shell studio-shell">
       <ProjectHeader
         title={project.title}
         saveStatus={saveStatus}
@@ -356,32 +356,18 @@ export function ProjectWorkbench({
           updateProject((current) => ({ ...current, title }))
         }
       />
-      <div className="workbench-actions workbench-actions--spread">
-        <button className="button-secondary" type="button" onClick={onBack}>
-          返回项目
-        </button>
-        <span>{user.email}</span>
-        {role === "owner" ? (
-          <button type="button" onClick={() => setShowMemberManager(true)}>
-            成员管理
-          </button>
-        ) : null}
-        <button type="button" onClick={() => setShowFieldSettings(true)}>
-          字段设置
-        </button>
-        <button type="button" onClick={() => setShowProjectSettings(true)}>
-          项目设置
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setTemplateMessage("");
-            setShowSaveTemplate(true);
-          }}
-        >
-          保存为模板
-        </button>
-        <ExportActions project={project} />
+      <div className="workbench-actions">
+        <div className="workbench-actions__group">
+          <button className="button-secondary" type="button" onClick={onBack}>返回项目</button>
+          <span className="workbench-actions__account">{user.email}</span>
+        </div>
+        <div className="workbench-actions__group">
+          {role === "owner" ? <button type="button" onClick={() => setShowMemberManager(true)}>成员管理</button> : null}
+          <button type="button" onClick={() => setShowFieldSettings(true)}>字段设置</button>
+          <button type="button" onClick={() => setShowProjectSettings(true)}>项目设置</button>
+          <button type="button" onClick={() => { setTemplateMessage(""); setShowSaveTemplate(true); }}>保存为模板</button>
+        </div>
+        <div className="workbench-actions__group workbench-actions__group--delivery"><ExportActions project={project} /></div>
       </div>
       {templateMessage ? (
         <p
