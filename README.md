@@ -13,7 +13,7 @@ React + TypeScript 分镜制作工作台，发布在 GitHub Pages。当前在线
 ## Supabase 初始化
 
 1. 创建 Supabase 项目。
-2. 在 SQL Editor 执行 `supabase/migrations/202607170001_online_storyboards.sql`，或使用 Supabase CLI 执行迁移。
+2. 在 SQL Editor 按文件名顺序执行 `supabase/migrations/` 中的全部 SQL 文件，或使用 Supabase CLI 执行迁移。已运行旧版初始化的项目还需要执行 `202608060001_repair_project_shot_reorder.sql`，以修复镜头排序。
 3. 确认 `storyboard-images` bucket 存在且为 private。
 4. 在 Authentication 中启用 Email/Password。
 5. 把 `https://547652023-rgb.github.io/fenjing/` 加入允许的站点/跳转地址。

@@ -379,3 +379,28 @@ it("inserts a row-menu shot directly above its source shot", async () => {
     ]);
   });
 });
+
+it("persists a row-menu reorder through the project gateway", async () => {
+  const { gateway, owner, project } = await setupProject();
+  await gateway.addShot(project.id);
+  const user = userEvent.setup();
+
+  render(
+    <ProjectWorkbench
+      gateway={gateway}
+      onBack={vi.fn()}
+      projectId={project.id}
+      user={owner}
+    />,
+  );
+
+  await screen.findByLabelText("镜号-2");
+  await user.click(screen.getByRole("button", { name: "更多镜头 1" }));
+  await user.click(screen.getByRole("menuitem", { name: "下移" }));
+
+  await waitFor(async () => {
+    expect((await gateway.loadProject(project.id)).shots.map((shot) => shot.id)).toEqual([
+      "2", "1",
+    ]);
+  });
+});
