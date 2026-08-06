@@ -199,24 +199,67 @@ function StoryboardHarness() {
   );
 }
 
-it("moves and deletes rows with accessible controls", async () => {
+it("keeps row operations inside an accessible more menu", async () => {
   const user = userEvent.setup();
   vi.spyOn(window, "confirm").mockReturnValue(true);
   render(<StoryboardHarness />);
 
-  expect(screen.getByRole("button", { name: "上移镜头 1" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "下移镜头 3" })).toBeDisabled();
+  expect(screen.queryByRole("button", { name: "上移镜头 1" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "下移镜头 3" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "删除镜头 3" })).not.toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: "上移镜头 3" }));
+  await user.click(screen.getByRole("button", { name: "更多镜头 3" }));
+  const menu = screen.getByRole("menu", { name: "镜头 3 操作" });
+  expect(within(menu).getByRole("menuitem", { name: "在上方新增" })).toBeVisible();
+  expect(within(menu).getByRole("menuitem", { name: "在下方新增" })).toBeVisible();
+  expect(within(menu).getByRole("menuitem", { name: "复制镜头" })).toBeVisible();
+  expect(within(menu).getByRole("menuitem", { name: "移动到场次" })).toBeDisabled();
+
+  await user.click(within(menu).getByRole("menuitem", { name: "上移" }));
   expect(screen.getByTestId("shot-order")).toHaveTextContent("1,3,2");
 
-  await user.click(screen.getByRole("button", { name: "删除镜头 3" }));
+  await user.click(screen.getByRole("button", { name: "更多镜头 3" }));
+  await user.click(screen.getByRole("menuitem", { name: "删除镜头" }));
   expect(window.confirm).toHaveBeenCalledWith("确定删除这个镜头吗？");
   expect(screen.getByTestId("shot-order")).toHaveTextContent("1,2");
   expect(screen.getAllByLabelText(/^镜号-/).map((input) => input.getAttribute("value"))).toEqual([
     "1",
     "2",
   ]);
+});
+
+it("runs row shortcuts without disrupting active field editing", async () => {
+  const user = userEvent.setup();
+  const project = addShot(createProject());
+  const onCreateShots = vi.fn().mockResolvedValue(["3"]);
+  const onBatchDelete = vi.fn();
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+
+  render(
+    <StoryboardTable
+      project={project}
+      onBatchDelete={onBatchDelete}
+      onChange={vi.fn()}
+      onCreateShots={onCreateShots}
+    />,
+  );
+
+  const secondShotContent = screen.getByLabelText("内容-2");
+  await user.click(secondShotContent);
+  await user.keyboard("{Meta>}d{/Meta}");
+  expect(onCreateShots).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole("button", { name: "更多镜头 2" }));
+  await user.keyboard("{Meta>}d{/Meta}");
+  expect(onCreateShots).toHaveBeenCalledWith({ copyShotId: "2", count: 1 });
+
+  await user.keyboard("{Meta>}{Enter}{/Meta}");
+  expect(onCreateShots).toHaveBeenLastCalledWith({ afterShotId: "2", count: 1 });
+
+  await user.click(screen.getByRole("checkbox", { name: "选择镜头 1" }));
+  await user.keyboard("{Delete}");
+  expect(window.confirm).toHaveBeenCalledWith("确定删除选中的 1 个镜头吗？");
+  expect(onBatchDelete).toHaveBeenCalledWith(["1"]);
 });
 
 it("moves a dragged row to the dropped row position", () => {

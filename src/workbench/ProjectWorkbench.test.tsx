@@ -344,3 +344,38 @@ it("copies the current shot below itself while leaving uploaded images blank", a
     expect(saved.shots[1].values.frame).toBeUndefined();
   });
 });
+
+it("inserts a row-menu shot directly above its source shot", async () => {
+  const { gateway, owner, project } = await setupProject();
+  await gateway.addShot(project.id);
+  await gateway.addShot(project.id);
+  const saved = await gateway.loadProject(project.id);
+  for (const [index, content] of ["首", "中", "尾"].entries()) {
+    await gateway.saveShot(
+      project.id,
+      { ...saved.shots[index], values: { ...saved.shots[index].values, content } },
+      1,
+    );
+  }
+  const user = userEvent.setup();
+
+  render(
+    <ProjectWorkbench
+      gateway={gateway}
+      onBack={vi.fn()}
+      projectId={project.id}
+      user={owner}
+    />,
+  );
+
+  await screen.findByDisplayValue("中");
+  await user.click(screen.getByRole("button", { name: "更多镜头 2" }));
+  await user.click(screen.getByRole("menuitem", { name: "在上方新增" }));
+
+  await waitFor(async () => {
+    const next = await gateway.loadProject(project.id);
+    expect(next.shots.map((shot) => shot.values.content)).toEqual([
+      "首", undefined, "中", "尾",
+    ]);
+  });
+});

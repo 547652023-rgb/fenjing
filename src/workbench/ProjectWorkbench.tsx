@@ -329,6 +329,10 @@ export function ProjectWorkbench({
       ? current.shots.find((shot) => shot.id === sourceShotId)
       : undefined;
     if (sourceShotId && !sourceShot) return [];
+    if (
+      options.beforeShotId &&
+      !current.shots.some((shot) => shot.id === options.beforeShotId)
+    ) return [];
 
     setSaveStatus("saving");
     try {
@@ -353,9 +357,11 @@ export function ProjectWorkbench({
           createdShotIds.push(added.shot.id);
         }
       }
-      const insertionIndex = sourceShotId
-        ? current.shots.findIndex((shot) => shot.id === sourceShotId) + 1
-        : current.shots.length;
+      const insertionIndex = options.beforeShotId
+        ? current.shots.findIndex((shot) => shot.id === options.beforeShotId)
+        : sourceShotId
+          ? current.shots.findIndex((shot) => shot.id === sourceShotId) + 1
+          : current.shots.length;
       const order = [
         ...current.shots.slice(0, insertionIndex).map((shot) => shot.id),
         ...createdShotIds,

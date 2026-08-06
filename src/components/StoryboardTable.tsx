@@ -30,6 +30,7 @@ export type StoryboardImageActions = {
 export type ShotCreationOptions = {
   count: number;
   afterShotId?: string;
+  beforeShotId?: string;
   copyShotId?: string;
 };
 
@@ -105,6 +106,7 @@ export function StoryboardTable({
   const [batchFieldValue, setBatchFieldValue] = useState("");
   const [isCreationMenuOpen, setIsCreationMenuOpen] = useState(false);
   const [activeShotId, setActiveShotId] = useState<string | null>(null);
+  const [openRowMenuShotId, setOpenRowMenuShotId] = useState<string | null>(null);
   const [focusShotId, setFocusShotId] = useState<string | null>(null);
   const editableCellRefs = useRef(new Map<string, HTMLElement>());
   const visibleFields = project.fields
@@ -167,6 +169,48 @@ export function StoryboardTable({
     setSelectedShotIds([]);
   }
 
+  function isEditingField(target: EventTarget | null) {
+    if (target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) {
+      return true;
+    }
+    if (!(target instanceof HTMLInputElement)) return false;
+    return !["checkbox", "radio", "file", "button", "submit"].includes(target.type);
+  }
+
+  function moveShotByOffset(shotId: string, offset: number) {
+    setOpenRowMenuShotId(null);
+    onChange((latestProject) => {
+      const index = latestProject.shots.findIndex((shot) => shot.id === shotId);
+      if (index < 0) return latestProject;
+      return moveShot(latestProject, shotId, index + offset);
+    });
+  }
+
+  function deleteOneShot(shotId: string) {
+    setOpenRowMenuShotId(null);
+    if (!window.confirm("确定删除这个镜头吗？")) return;
+    onChange((latestProject) => deleteShot(latestProject, shotId));
+  }
+
+  function handleTableKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+    if (isEditingField(event.target)) return;
+    if (!activeShotId) return;
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "d") {
+      event.preventDefault();
+      void createShots({ count: 1, copyShotId: activeShotId });
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      void createShots({ count: 1, afterShotId: activeShotId });
+      return;
+    }
+    if ((event.key === "Delete" || event.key === "Backspace") && selectedShotIds.length > 0) {
+      event.preventDefault();
+      deleteSelectedShots();
+    }
+  }
+
   async function createShots(options: ShotCreationOptions) {
     setIsCreationMenuOpen(false);
     if (onCreateShots) {
@@ -194,10 +238,14 @@ export function StoryboardTable({
         });
       }
     }
-    if (sourceShotId) {
+    if (sourceShotId || options.beforeShotId) {
+      const insertionShotId = options.beforeShotId ?? sourceShotId;
       const sourceIndex = nextProject.shots.findIndex((shot) => shot.id === sourceShotId);
+      const insertionIndex = options.beforeShotId
+        ? nextProject.shots.findIndex((shot) => shot.id === insertionShotId)
+        : sourceIndex + 1;
       createdShotIds.forEach((shotId, index) => {
-        nextProject = moveShot(nextProject, shotId, sourceIndex + index + 1);
+        nextProject = moveShot(nextProject, shotId, insertionIndex + index);
       });
     }
     onChange(nextProject);
@@ -205,7 +253,11 @@ export function StoryboardTable({
   }
 
   return (
-    <section className="storyboard-panel" aria-label="分镜表格区域">
+    <section
+      className="storyboard-panel"
+      aria-label="分镜表格区域"
+      onKeyDown={handleTableKeyDown}
+    >
       <div className="storyboard-toolbar">
         <p>{project.shots.length} 个镜头</p>
         <div className="shot-creation-control">
@@ -363,52 +415,29 @@ export function StoryboardTable({
                     ⋮⋮
                   </button>
                   <button
-                    aria-label={`上移镜头 ${shot.id}`}
-                    disabled={shotIndex === 0}
-                    title="上移"
+                    aria-expanded={openRowMenuShotId === shot.id}
+                    aria-haspopup="menu"
+                    aria-label={`更多镜头 ${shot.id}`}
+                    className="shot-actions__more"
                     type="button"
-                    onClick={() =>
-                      onChange((latestProject) => {
-                        const index = latestProject.shots.findIndex(
-                          (latestShot) => latestShot.id === shot.id,
-                        );
-                        return moveShot(latestProject, shot.id, index - 1);
-                      })
-                    }
+                    onClick={() => setOpenRowMenuShotId((current) =>
+                      current === shot.id ? null : shot.id,
+                    )}
                   >
-                    ↑
+                    <span aria-hidden="true">•••</span>
                   </button>
-                  <button
-                    aria-label={`下移镜头 ${shot.id}`}
-                    disabled={shotIndex === project.shots.length - 1}
-                    title="下移"
-                    type="button"
-                    onClick={() =>
-                      onChange((latestProject) => {
-                        const index = latestProject.shots.findIndex(
-                          (latestShot) => latestShot.id === shot.id,
-                        );
-                        return moveShot(latestProject, shot.id, index + 1);
-                      })
-                    }
-                  >
-                    ↓
-                  </button>
-                  <button
-                    aria-label={`删除镜头 ${shot.id}`}
-                    className="shot-actions__delete"
-                    title="删除"
-                    type="button"
-                    onClick={() => {
-                      if (window.confirm("确定删除这个镜头吗？")) {
-                        onChange((latestProject) =>
-                          deleteShot(latestProject, shot.id),
-                        );
-                      }
-                    }}
-                  >
-                    ×
-                  </button>
+                  {openRowMenuShotId === shot.id ? (
+                    <div aria-label={`镜头 ${shot.id} 操作`} className="shot-actions__menu" role="menu">
+                      <button role="menuitem" type="button" onClick={() => void createShots({ beforeShotId: shot.id, count: 1 })}>在上方新增</button>
+                      <button role="menuitem" type="button" onClick={() => void createShots({ afterShotId: shot.id, count: 1 })}>在下方新增</button>
+                      <button role="menuitem" type="button" onClick={() => void createShots({ copyShotId: shot.id, count: 1 })}>复制镜头</button>
+                      <button aria-describedby={`scene-action-note-${shot.id}`} disabled role="menuitem" type="button">移动到场次</button>
+                      <span className="sr-only" id={`scene-action-note-${shot.id}`}>场次管理将在下一阶段开放</span>
+                      <button disabled={shotIndex === 0} role="menuitem" type="button" onClick={() => moveShotByOffset(shot.id, -1)}>上移</button>
+                      <button disabled={shotIndex === project.shots.length - 1} role="menuitem" type="button" onClick={() => moveShotByOffset(shot.id, 1)}>下移</button>
+                      <button className="shot-actions__menu-delete" role="menuitem" type="button" onClick={() => deleteOneShot(shot.id)}>删除镜头</button>
+                    </div>
+                  ) : null}
                 </td>
                 {visibleFields.map((field) => (
                   <td

@@ -1333,6 +1333,62 @@ button:disabled {
   background: #9a332c;
 }
 
+.shot-actions {
+  position: relative;
+  width: 6.25rem;
+  min-width: 6.25rem;
+}
+
+.shot-actions__more {
+  min-width: 2rem !important;
+  margin-left: 0.25rem !important;
+  letter-spacing: 0.08em;
+}
+
+.shot-actions__menu {
+  position: absolute;
+  z-index: 12;
+  top: calc(100% - 0.2rem);
+  left: 0.35rem;
+  display: grid;
+  width: 10.5rem;
+  padding: 0.35rem;
+  border: 1px solid #b99a7c;
+  background: #fffaf2;
+  box-shadow: 0 0.75rem 1.8rem rgb(36 25 16 / 22%);
+}
+
+.shot-actions__menu button {
+  width: 100%;
+  margin: 0;
+  padding: 0.48rem 0.55rem;
+  color: #211a15;
+  text-align: left;
+}
+
+.shot-actions__menu button:hover:not(:disabled),
+.shot-actions__menu button:focus-visible:not(:disabled) {
+  color: #fffaf2;
+  background: #211a15;
+}
+
+.shot-actions__menu button:focus-visible,
+.shot-actions__more:focus-visible {
+  outline: 2px solid #b07a56;
+  outline-offset: 2px;
+}
+
+.shot-actions__menu-delete,
+.shot-actions__menu-delete:hover:not(:disabled),
+.shot-actions__menu-delete:focus-visible:not(:disabled) {
+  color: #8e302d !important;
+}
+
+.shot-actions__menu-delete:hover:not(:disabled),
+.shot-actions__menu-delete:focus-visible:not(:disabled) {
+  background: #fff0ee !important;
+}
+
 .storyboard-table td.image-table-cell {
   min-height: 160px;
 }
