@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   addShot,
   deleteShot,
@@ -27,6 +27,12 @@ export type StoryboardImageActions = {
   ) => Promise<void>;
 };
 
+export type ShotCreationOptions = {
+  count: number;
+  afterShotId?: string;
+  copyShotId?: string;
+};
+
 type StoryboardTableProps = {
   project: StoryboardProject;
   onChange: (update: ProjectUpdate) => void;
@@ -38,6 +44,9 @@ type StoryboardTableProps = {
     fieldId: string,
     value: string,
   ) => void | Promise<void>;
+  onCreateShots?: (
+    options: ShotCreationOptions,
+  ) => void | string[] | Promise<void | string[]>;
 };
 
 export function parseRemoteImages(value: string): RemoteImage[] {
@@ -88,11 +97,16 @@ export function StoryboardTable({
   onBatchCopy,
   onBatchDelete,
   onBatchUpdate,
+  onCreateShots,
 }: StoryboardTableProps) {
   const [draggedShotId, setDraggedShotId] = useState<string | null>(null);
   const [selectedShotIds, setSelectedShotIds] = useState<string[]>([]);
   const [batchFieldId, setBatchFieldId] = useState("");
   const [batchFieldValue, setBatchFieldValue] = useState("");
+  const [isCreationMenuOpen, setIsCreationMenuOpen] = useState(false);
+  const [activeShotId, setActiveShotId] = useState<string | null>(null);
+  const [focusShotId, setFocusShotId] = useState<string | null>(null);
+  const editableCellRefs = useRef(new Map<string, HTMLElement>());
   const visibleFields = project.fields
     .filter((field) => field.visible)
     .sort((left, right) => left.order - right.order);
@@ -107,6 +121,12 @@ export function StoryboardTable({
       current.filter((shotId) => project.shots.some((shot) => shot.id === shotId)),
     );
   }, [project.shots]);
+
+  useEffect(() => {
+    if (!focusShotId) return;
+    editableCellRefs.current.get(focusShotId)?.focus();
+    setFocusShotId(null);
+  }, [focusShotId, project.shots]);
 
   function toggleShotSelection(shotId: string, selected: boolean) {
     setSelectedShotIds((current) =>
@@ -147,13 +167,88 @@ export function StoryboardTable({
     setSelectedShotIds([]);
   }
 
+  async function createShots(options: ShotCreationOptions) {
+    setIsCreationMenuOpen(false);
+    if (onCreateShots) {
+      const createdShotIds = await onCreateShots(options);
+      if (createdShotIds?.[0]) setFocusShotId(createdShotIds[0]);
+      return;
+    }
+
+    let nextProject = project;
+    const sourceShotId = options.copyShotId ?? options.afterShotId;
+    const sourceShot = sourceShotId
+      ? project.shots.find((shot) => shot.id === sourceShotId)
+      : undefined;
+    const createdShotIds: string[] = [];
+    for (let index = 0; index < options.count; index += 1) {
+      nextProject = addShot(nextProject);
+      const createdShot = nextProject.shots[nextProject.shots.length - 1];
+      createdShotIds.push(createdShot.id);
+      if (sourceShot && options.copyShotId) {
+        Object.entries(sourceShot.values).forEach(([fieldId, value]) => {
+          const field = project.fields.find((candidate) => candidate.id === fieldId);
+          if (fieldId !== "shotNumber" && field?.type !== "image") {
+            nextProject = updateShotValue(nextProject, createdShot.id, fieldId, value);
+          }
+        });
+      }
+    }
+    if (sourceShotId) {
+      const sourceIndex = nextProject.shots.findIndex((shot) => shot.id === sourceShotId);
+      createdShotIds.forEach((shotId, index) => {
+        nextProject = moveShot(nextProject, shotId, sourceIndex + index + 1);
+      });
+    }
+    onChange(nextProject);
+    if (createdShotIds[0]) setFocusShotId(createdShotIds[0]);
+  }
+
   return (
     <section className="storyboard-panel" aria-label="分镜表格区域">
       <div className="storyboard-toolbar">
         <p>{project.shots.length} 个镜头</p>
-        <button type="button" onClick={() => onChange(addShot(project))}>
-          新增镜头
-        </button>
+        <div className="shot-creation-control">
+          <button type="button" onClick={() => void createShots({ count: 1 })}>
+            新增 1 个镜头
+          </button>
+          <button
+            aria-expanded={isCreationMenuOpen}
+            aria-haspopup="menu"
+            aria-label="新增选项"
+            className="shot-creation-control__toggle"
+            type="button"
+            onClick={() => setIsCreationMenuOpen((open) => !open)}
+          >
+            ▾
+          </button>
+          {isCreationMenuOpen ? (
+            <div className="shot-creation-menu" role="menu">
+              <button role="menuitem" type="button" onClick={() => void createShots({ count: 5 })}>
+                新增 5 个镜头
+              </button>
+              <button role="menuitem" type="button" onClick={() => void createShots({ count: 10 })}>
+                新增 10 个镜头
+              </button>
+              <button
+                disabled={!activeShotId}
+                role="menuitem"
+                type="button"
+                onClick={() => activeShotId && void createShots({ count: 1, afterShotId: activeShotId })}
+              >
+                在当前镜头下方新增
+              </button>
+              <button
+                disabled={!activeShotId}
+                role="menuitem"
+                type="button"
+                onClick={() => activeShotId && void createShots({ count: 1, copyShotId: activeShotId })}
+              >
+                复制当前镜头
+              </button>
+            </div>
+          ) : null}
+        </div>
       </div>
       {selectedShotIds.length > 0 ? (
         <div aria-label="批量操作" className="storyboard-batch-bar" role="toolbar">
@@ -234,6 +329,7 @@ export function StoryboardTable({
               <tr
                 aria-label={`镜头 ${shot.id}`}
                 key={shot.id}
+                onFocusCapture={() => setActiveShotId(shot.id)}
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={() => {
                   if (draggedShotId === null) {
@@ -379,6 +475,12 @@ export function StoryboardTable({
                     ) : (
                       <input
                         aria-label={`${field.label}-${shot.id}`}
+                        ref={(element) => {
+                          if (field.id === "shotNumber") {
+                            if (element) editableCellRefs.current.set(shot.id, element);
+                            else editableCellRefs.current.delete(shot.id);
+                          }
+                        }}
                         type={inputTypeFor(field)}
                         value={shot.values[field.id] ?? ""}
                         onChange={(event) =>

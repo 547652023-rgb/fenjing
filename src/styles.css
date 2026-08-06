@@ -858,6 +858,24 @@ select:focus-visible { outline: 2px solid var(--copper-bright); outline-offset: 
 .storyboard-panel { margin: clamp(1.25rem, 3vw, 3rem); border: 1px solid #b9a994; border-radius: 0; background: var(--paper); box-shadow: 0 18px 44px rgb(0 0 0 / 24%); }
 .storyboard-toolbar { padding: 0.8rem 1rem; border-color: #b9a994; background: #eee2d3; }
 .storyboard-toolbar p { color: #6d5b50; font-variant-numeric: tabular-nums; }
+.shot-creation-control { position: relative; display: inline-flex; align-items: stretch; }
+.shot-creation-control > button { border-radius: 1px; }
+.shot-creation-control > button:first-child { padding-inline: 0.9rem; }
+.shot-creation-control__toggle { min-width: 2.2rem; margin-left: 1px; padding: 0; }
+.shot-creation-menu {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  display: grid;
+  min-width: 13rem;
+  padding: 0.35rem;
+  border: 1px solid #9f866f;
+  background: var(--ink-raised);
+  box-shadow: 0 12px 24px rgb(0 0 0 / 28%);
+}
+.shot-creation-menu button { border-color: transparent; text-align: left; }
+.shot-creation-menu button:hover:not(:disabled) { color: var(--ink); background: var(--copper); }
 .storyboard-batch-bar {
   display: flex;
   align-items: center;

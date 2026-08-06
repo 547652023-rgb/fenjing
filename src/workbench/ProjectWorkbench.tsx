@@ -3,6 +3,7 @@ import { FieldSettings } from "../components/FieldSettings";
 import { ProjectHeader } from "../components/ProjectHeader";
 import {
   StoryboardTable,
+  type ShotCreationOptions,
   type StoryboardImageActions,
 } from "../components/StoryboardTable";
 import type { StoryboardGateway } from "../data/gateway";
@@ -320,6 +321,57 @@ export function ProjectWorkbench({
     }
   }
 
+  async function createShots(options: ShotCreationOptions): Promise<string[]> {
+    const current = projectRef.current;
+    if (!current || options.count < 1) return [];
+    const sourceShotId = options.copyShotId ?? options.afterShotId;
+    const sourceShot = sourceShotId
+      ? current.shots.find((shot) => shot.id === sourceShotId)
+      : undefined;
+    if (sourceShotId && !sourceShot) return [];
+
+    setSaveStatus("saving");
+    try {
+      const imageFieldIds = new Set(
+        current.fields
+          .filter((field) => field.type === "image")
+          .map((field) => field.id),
+      );
+      const createdShotIds: string[] = [];
+      for (let index = 0; index < options.count; index += 1) {
+        const added = await gateway.addShot(projectId);
+        if (sourceShot && options.copyShotId) {
+          const saved = await gateway.saveShot(
+            projectId,
+            { ...added.shot, values: copiedShotValues(sourceShot, imageFieldIds) },
+            added.version,
+          );
+          versions.current.set(saved.shot.id, saved.version);
+          createdShotIds.push(saved.shot.id);
+        } else {
+          versions.current.set(added.shot.id, added.version);
+          createdShotIds.push(added.shot.id);
+        }
+      }
+      const insertionIndex = sourceShotId
+        ? current.shots.findIndex((shot) => shot.id === sourceShotId) + 1
+        : current.shots.length;
+      const order = [
+        ...current.shots.slice(0, insertionIndex).map((shot) => shot.id),
+        ...createdShotIds,
+        ...current.shots.slice(insertionIndex).map((shot) => shot.id),
+      ];
+      await gateway.reorderShots(projectId, order);
+      await reload();
+      setSaveStatus("saved");
+      return createdShotIds;
+    } catch {
+      setSaveStatus("error");
+      await reload();
+      return [];
+    }
+  }
+
   async function deleteSelectedShots(shotIds: string[]) {
     if (shotIds.length === 0) return;
     setSaveStatus("saving");
@@ -461,6 +513,7 @@ export function ProjectWorkbench({
         onBatchCopy={copySelectedShots}
         onBatchDelete={deleteSelectedShots}
         onBatchUpdate={updateSelectedShots}
+        onCreateShots={createShots}
         project={project}
         onChange={updateProject}
       />

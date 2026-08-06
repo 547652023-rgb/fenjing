@@ -17,7 +17,7 @@ it("edits a visible storyboard cell and adds a shot", async () => {
   await user.type(screen.getByLabelText("镜号-1"), "2");
   expect(onChange).toHaveBeenCalled();
 
-  await user.click(screen.getByRole("button", { name: "新增镜头" }));
+  await user.click(screen.getByRole("button", { name: "新增 1 个镜头" }));
   expect(onChange).toHaveBeenLastCalledWith(
     expect.objectContaining({ shots: expect.any(Array) }),
   );
@@ -284,4 +284,45 @@ it("selects shots and exposes batch copy, field update, and delete actions", asy
   await user.click(within(batchBar).getByRole("button", { name: "删除镜头" }));
   expect(window.confirm).toHaveBeenCalledWith("确定删除选中的 2 个镜头吗？");
   expect(onBatchDelete).toHaveBeenCalledWith(["1", "3"]);
+});
+
+it("creates a five-shot run and inserts a derivative shot below the active row", async () => {
+  const user = userEvent.setup();
+  const project = addShot(createProject());
+  const onCreateShots = vi.fn().mockResolvedValue(["3", "4", "5", "6", "7"]);
+
+  render(
+    <StoryboardTable
+      project={project}
+      onChange={vi.fn()}
+      onCreateShots={onCreateShots}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "新增选项" }));
+  await user.click(screen.getByRole("menuitem", { name: "新增 5 个镜头" }));
+  expect(onCreateShots).toHaveBeenCalledWith({ count: 5 });
+
+  await user.click(screen.getByLabelText("镜号-2"));
+  await user.click(screen.getByRole("button", { name: "新增选项" }));
+  await user.click(screen.getByRole("menuitem", { name: "在当前镜头下方新增" }));
+  expect(onCreateShots).toHaveBeenLastCalledWith({ afterShotId: "2", count: 1 });
+
+  await user.click(screen.getByRole("button", { name: "新增选项" }));
+  await user.click(screen.getByRole("menuitem", { name: "复制当前镜头" }));
+  expect(onCreateShots).toHaveBeenLastCalledWith({ copyShotId: "2", count: 1 });
+});
+
+it("copies text and select values when the table uses its local fallback", async () => {
+  const user = userEvent.setup();
+  render(<StoryboardHarness />);
+
+  await user.type(screen.getByLabelText("内容-1"), "导演画面");
+  await user.selectOptions(screen.getByRole("combobox", { name: "景别-1" }), "近景");
+  await user.click(screen.getByLabelText("内容-1"));
+  await user.click(screen.getByRole("button", { name: "新增选项" }));
+  await user.click(screen.getByRole("menuitem", { name: "复制当前镜头" }));
+
+  expect(screen.getByLabelText("内容-4")).toHaveValue("导演画面");
+  expect(screen.getByRole("combobox", { name: "景别-4" })).toHaveValue("近景");
 });

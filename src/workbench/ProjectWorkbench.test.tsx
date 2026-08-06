@@ -263,3 +263,84 @@ it("copies selected shots after the selection and clears copied images", async (
     expect(saved.shots[2].values.frame).toBeUndefined();
   });
 });
+
+it("inserts new shots directly below the current shot and automatically renumbers them", async () => {
+  const { gateway, owner, project } = await setupProject();
+  await gateway.addShot(project.id);
+  await gateway.addShot(project.id);
+  const user = userEvent.setup();
+
+  render(
+    <ProjectWorkbench
+      gateway={gateway}
+      onBack={vi.fn()}
+      projectId={project.id}
+      user={owner}
+    />,
+  );
+
+  await screen.findByDisplayValue("广告片");
+  await user.click(screen.getByLabelText("镜号-2"));
+  await user.click(screen.getByRole("button", { name: "新增选项" }));
+  await user.click(screen.getByRole("menuitem", { name: "新增 5 个镜头" }));
+
+  expect(await screen.findByLabelText("镜号-4")).toHaveFocus();
+
+  await waitFor(async () => {
+    const saved = await gateway.loadProject(project.id);
+    expect(saved.shots).toHaveLength(8);
+    expect(saved.shots.map((shot) => shot.values.shotNumber)).toEqual([
+      "1", "2", "3", "4", "5", "6", "7", "8",
+    ]);
+  });
+
+  await user.click(screen.getByRole("button", { name: "新增选项" }));
+  await user.click(screen.getByRole("menuitem", { name: "在当前镜头下方新增" }));
+
+  await waitFor(async () => {
+    const saved = await gateway.loadProject(project.id);
+    expect(saved.shots).toHaveLength(9);
+    expect(saved.shots[2].values.content).toBeUndefined();
+  });
+});
+
+it("copies the current shot below itself while leaving uploaded images blank", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const first = await gateway.loadProject(project.id);
+  await gateway.saveShot(
+    project.id,
+    {
+      ...first.shots[0],
+      values: {
+        ...first.shots[0].values,
+        content: "导演监看",
+        shotSize: "近景",
+        frame: JSON.stringify([{ path: "frame.png", url: "blob:frame", name: "frame.png", position: 0 }]),
+      },
+    },
+    1,
+  );
+  const user = userEvent.setup();
+
+  render(
+    <ProjectWorkbench
+      gateway={gateway}
+      onBack={vi.fn()}
+      projectId={project.id}
+      user={owner}
+    />,
+  );
+
+  await screen.findByDisplayValue("导演监看");
+  await user.click(screen.getByLabelText("内容-1"));
+  await user.click(screen.getByRole("button", { name: "新增选项" }));
+  await user.click(screen.getByRole("menuitem", { name: "复制当前镜头" }));
+
+  await waitFor(async () => {
+    const saved = await gateway.loadProject(project.id);
+    expect(saved.shots).toHaveLength(2);
+    expect(saved.shots[1].values.content).toBe("导演监看");
+    expect(saved.shots[1].values.shotSize).toBe("近景");
+    expect(saved.shots[1].values.frame).toBeUndefined();
+  });
+});
