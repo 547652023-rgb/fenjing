@@ -308,7 +308,7 @@ it("renders shot size as the restricted six-option dropdown", () => {
 
   const shotSize = screen.getByRole("combobox", { name: "景别-1" });
   expect(shotSize).toHaveAttribute("data-allow-custom", "false");
-  expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
+  expect(within(shotSize).getAllByRole("option").map((option) => option.textContent)).toEqual([
     "",
     "大远景",
     "远景",
@@ -421,4 +421,25 @@ it("groups assigned shots beneath a collapsible scene header while retaining ung
   expect(screen.queryByLabelText("镜号-1")).not.toBeInTheDocument();
   expect(screen.getByLabelText("镜号-2")).toBeVisible();
   expect(screen.getByRole("button", { name: "展开场次 1" })).toBeVisible();
+});
+
+it("filters the workbench to a clicked production status without changing shot order", async () => {
+  const user = userEvent.setup();
+  const project = addShot(createProject());
+  project.shots[0] = {
+    ...project.shots[0],
+    values: { ...project.shots[0].values, productionStatus: "待拍" },
+  };
+  project.shots[1] = {
+    ...project.shots[1],
+    values: { ...project.shots[1].values, productionStatus: "已完成" },
+  };
+
+  render(<StoryboardTable project={project} onChange={vi.fn()} />);
+
+  await user.click(screen.getByRole("button", { name: "待拍 1" }));
+
+  expect(screen.getByLabelText("镜号-1")).toBeVisible();
+  expect(screen.queryByLabelText("镜号-2")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "移除筛选 待拍" })).toBeVisible();
 });

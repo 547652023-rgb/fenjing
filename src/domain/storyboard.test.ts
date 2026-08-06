@@ -8,6 +8,8 @@ import {
   createProject,
   deleteScene,
   deleteShot,
+  ensureProductionStatusField,
+  getProductionSummary,
   moveField,
   moveShot,
   setFieldOptions,
@@ -15,7 +17,60 @@ import {
   toggleFieldVisibility,
 } from "./storyboard";
 
-it("seeds the supplied 14-column storyboard template", () => {
+it("adds the standard production status field once for older projects", () => {
+  const project = createProject();
+  const withoutStatus = {
+    ...project,
+    fields: project.fields.filter((field) => field.id !== "productionStatus"),
+  };
+
+  const upgraded = ensureProductionStatusField(withoutStatus);
+
+  expect(upgraded.fields[upgraded.fields.length - 1]).toMatchObject({
+    id: "productionStatus",
+    label: "制作状态",
+    type: "singleSelect",
+    options: ["待制作", "待拍", "拍摄中", "已完成", "需修改"],
+  });
+  expect(ensureProductionStatusField(upgraded)).toBe(upgraded);
+});
+
+it("summarizes frame coverage, runtime, and production statuses", () => {
+  const project = addShot(createProject());
+  project.scenes = [
+    {
+      id: "scene-1", number: "1", name: "开场", intExt: "", dayNight: "",
+      targetDurationSeconds: "", shootDate: "", notes: "", collapsed: false,
+    },
+  ];
+  project.shots[0] = {
+    ...project.shots[0],
+    sceneId: "scene-1",
+    values: { frame: "frame.png", durationSeconds: "12", productionStatus: "待拍" },
+  };
+  project.shots[1] = {
+    ...project.shots[1],
+    values: { durationSeconds: "8", productionStatus: "已完成" },
+  };
+
+  expect(getProductionSummary(project)).toEqual({
+    sceneCount: 1,
+    shotCount: 2,
+    framesSupplied: 1,
+    estimatedRuntimeSeconds: 20,
+    pendingShotCount: 1,
+    completedShotCount: 1,
+    statusCounts: {
+      "待制作": 0,
+      "待拍": 1,
+      "拍摄中": 0,
+      "已完成": 1,
+      "需修改": 0,
+    },
+  });
+});
+
+it("seeds the supplied production-ready storyboard template", () => {
   expect(DEFAULT_FIELDS.map((field) => field.label)).toEqual([
     "镜号",
     "画面",
@@ -31,6 +86,7 @@ it("seeds the supplied 14-column storyboard template", () => {
     "摄影机装备",
     "镜头焦段",
     "场号",
+    "制作状态",
   ]);
 });
 

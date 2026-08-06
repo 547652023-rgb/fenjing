@@ -5,10 +5,13 @@ import {
   createScene,
   deleteScene as deleteLocalScene,
   deleteShot,
+  getProductionSummary,
   moveShot,
+  PRODUCTION_STATUS_OPTIONS,
   toggleSceneCollapsed,
   updateShotValue,
   type FieldDefinition,
+  type ProductionStatus,
   type ProjectUpdate,
   type StoryboardProject,
 } from "../domain/storyboard";
@@ -129,6 +132,8 @@ export function StoryboardTable({
   const [focusShotId, setFocusShotId] = useState<string | null>(null);
   const [sceneEditorId, setSceneEditorId] = useState<string | null>(null);
   const [rowScenePickerShotId, setRowScenePickerShotId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<ProductionStatus | null>(null);
+  const [coverageFilter, setCoverageFilter] = useState<"frames" | "pending" | "completed" | null>(null);
   const editableCellRefs = useRef(new Map<string, HTMLElement>());
   const visibleFields = project.fields
     .filter((field) => field.visible)
@@ -136,14 +141,23 @@ export function StoryboardTable({
   const batchFields = visibleFields.filter(
     (field) => field.type !== "image" && field.id !== "shotNumber",
   );
+  const summary = getProductionSummary(project);
+  const filteredShots = project.shots.filter((shot) => {
+    const status = shot.values.productionStatus || "待制作";
+    if (statusFilter && status !== statusFilter) return false;
+    if (coverageFilter === "frames") return Boolean(shot.values.frame?.trim());
+    if (coverageFilter === "completed") return status === "已完成";
+    if (coverageFilter === "pending") return status !== "已完成";
+    return true;
+  });
   const allSelected =
-    project.shots.length > 0 && selectedShotIds.length === project.shots.length;
+    filteredShots.length > 0 && filteredShots.every((shot) => selectedShotIds.includes(shot.id));
   const scenesById = new Map(project.scenes.map((scene) => [scene.id, scene]));
   const sceneShotIds = new Map<string, string>();
   const sceneShotCounts = new Map<string, number>();
   let firstUngroupedShotId: string | null = null;
   let ungroupedShotCount = 0;
-  project.shots.forEach((shot) => {
+  filteredShots.forEach((shot) => {
     if (shot.sceneId && scenesById.has(shot.sceneId)) {
       if (!sceneShotIds.has(shot.sceneId)) sceneShotIds.set(shot.sceneId, shot.id);
       sceneShotCounts.set(shot.sceneId, (sceneShotCounts.get(shot.sceneId) ?? 0) + 1);
@@ -155,7 +169,7 @@ export function StoryboardTable({
 
   useEffect(() => {
     setSelectedShotIds((current) =>
-      current.filter((shotId) => project.shots.some((shot) => shot.id === shotId)),
+      current.filter((shotId) => filteredShots.some((shot) => shot.id === shotId)),
     );
   }, [project.shots]);
 
@@ -368,7 +382,7 @@ export function StoryboardTable({
       onKeyDown={handleTableKeyDown}
     >
       <div className="storyboard-toolbar">
-        <p>{project.shots.length} 个镜头</p>
+        <p>{filteredShots.length === project.shots.length ? `${project.shots.length} 个镜头` : `显示 ${filteredShots.length} / ${project.shots.length} 个镜头`}</p>
         <div className="shot-creation-control">
           <button type="button" onClick={() => void createShots({ count: 1 })}>
             新增 1 个镜头
@@ -414,6 +428,52 @@ export function StoryboardTable({
           ) : null}
         </div>
       </div>
+      <section aria-label="制作概览" className="production-summary">
+        <div className="production-summary__metrics">
+          <button type="button" onClick={() => { setStatusFilter(null); setCoverageFilter(null); }}>
+            <span>场次</span><strong>{summary.sceneCount}</strong>
+          </button>
+          <button type="button" onClick={() => { setStatusFilter(null); setCoverageFilter(null); }}>
+            <span>镜头</span><strong>{summary.shotCount}</strong>
+          </button>
+          <button type="button" onClick={() => { setStatusFilter(null); setCoverageFilter("frames"); }}>
+            <span>已供画面</span><strong>{summary.framesSupplied}</strong>
+          </button>
+          <span className="production-summary__metric"><span>预计时长</span><strong>{summary.estimatedRuntimeSeconds} 秒</strong></span>
+          <button type="button" onClick={() => { setStatusFilter(null); setCoverageFilter("pending"); }}>
+            <span>待处理</span><strong>{summary.pendingShotCount}</strong>
+          </button>
+          <button type="button" onClick={() => { setStatusFilter(null); setCoverageFilter("completed"); }}>
+            <span>已完成</span><strong>{summary.completedShotCount}</strong>
+          </button>
+        </div>
+        <div aria-label="制作状态筛选" className="production-summary__statuses">
+          {PRODUCTION_STATUS_OPTIONS.map((status) => (
+            <button
+              aria-pressed={statusFilter === status}
+              className={statusFilter === status ? "is-active" : undefined}
+              key={status}
+              type="button"
+              onClick={() => { setStatusFilter(status); setCoverageFilter(null); }}
+            >
+              {status} {summary.statusCounts[status]}
+            </button>
+          ))}
+        </div>
+      </section>
+      {statusFilter || coverageFilter ? (
+        <div aria-label="当前筛选" className="storyboard-filter-chips">
+          <span>当前筛选</span>
+          <button
+            aria-label={`移除筛选 ${statusFilter ?? (coverageFilter === "frames" ? "已供画面" : coverageFilter === "completed" ? "已完成" : "待处理")}`}
+            type="button"
+            onClick={() => { setStatusFilter(null); setCoverageFilter(null); }}
+          >
+            {statusFilter ?? (coverageFilter === "frames" ? "已供画面" : coverageFilter === "completed" ? "已完成" : "待处理")} ×
+          </button>
+          <button type="button" onClick={() => { setStatusFilter(null); setCoverageFilter(null); }}>清除筛选</button>
+        </div>
+      ) : null}
       {selectedShotIds.length > 0 ? (
         <div aria-label="批量操作" className="storyboard-batch-bar" role="toolbar">
           <strong>已选择 {selectedShotIds.length} 个镜头</strong>
@@ -496,7 +556,7 @@ export function StoryboardTable({
                   type="checkbox"
                   onChange={(event) =>
                     setSelectedShotIds(
-                      event.target.checked ? project.shots.map((shot) => shot.id) : [],
+                      event.target.checked ? filteredShots.map((shot) => shot.id) : [],
                     )
                   }
                 />
@@ -515,7 +575,8 @@ export function StoryboardTable({
             </tr>
           </thead>
           <tbody>
-            {project.shots.map((shot, shotIndex) => {
+            {filteredShots.map((shot) => {
+              const shotIndex = project.shots.findIndex((candidate) => candidate.id === shot.id);
               const scene = shot.sceneId ? scenesById.get(shot.sceneId) : undefined;
               const isUngrouped = !scene;
               const showSceneHeader = scene && sceneShotIds.get(scene.id) === shot.id;
@@ -709,7 +770,15 @@ export function StoryboardTable({
               </Fragment>
               );
             })}
-            {project.scenes
+            {filteredShots.length === 0 ? (
+              <tr className="storyboard-empty-filter-state">
+                <td colSpan={visibleFields.length + 1}>
+                  <strong>没有符合当前筛选的镜头</strong>
+                  <button type="button" onClick={() => { setStatusFilter(null); setCoverageFilter(null); }}>清除筛选</button>
+                </td>
+              </tr>
+            ) : null}
+            {(statusFilter || coverageFilter ? [] : project.scenes)
               .filter((scene) => !sceneShotIds.has(scene.id))
               .map((scene) => renderSceneHeader(`场次 ${scene.number} · ${scene.name}`, 0, scene.id))}
           </tbody>

@@ -71,6 +71,26 @@ export const SHOT_SIZE_OPTIONS = [
   "特写",
 ] as const;
 
+export const PRODUCTION_STATUS_OPTIONS = [
+  "待制作",
+  "待拍",
+  "拍摄中",
+  "已完成",
+  "需修改",
+] as const;
+
+export type ProductionStatus = (typeof PRODUCTION_STATUS_OPTIONS)[number];
+
+export type ProductionSummary = {
+  sceneCount: number;
+  shotCount: number;
+  framesSupplied: number;
+  estimatedRuntimeSeconds: number;
+  pendingShotCount: number;
+  completedShotCount: number;
+  statusCounts: Record<ProductionStatus, number>;
+};
+
 export const DEFAULT_ASPECT_RATIO = "16:9";
 export const ASPECT_RATIO_OPTIONS = ["16:9", "9:16", "4:3", "1:1", "2.35:1"] as const;
 
@@ -106,6 +126,13 @@ const seededFields: Array<
   { id: "cameraGear", label: "摄影机装备", type: "text" },
   { id: "lens", label: "镜头焦段", type: "text" },
   { id: "sceneNumber", label: "场号", type: "text" },
+  {
+    id: "productionStatus",
+    label: "制作状态",
+    type: "singleSelect",
+    options: [...PRODUCTION_STATUS_OPTIONS],
+    allowCustomValue: false,
+  },
 ];
 
 export const DEFAULT_FIELDS: FieldDefinition[] = seededFields.map((field, order) => ({
@@ -143,6 +170,52 @@ export function createProject(): StoryboardProject {
     fields: copyFields(DEFAULT_FIELDS),
     scenes: [],
     shots: [{ id: "1", values: { shotNumber: "1" } }],
+  };
+}
+
+export function ensureProductionStatusField(project: StoryboardProject): StoryboardProject {
+  if (project.fields.some((field) => field.id === "productionStatus")) return project;
+  return {
+    ...project,
+    fields: [
+      ...copyFields(project.fields),
+      {
+        id: "productionStatus",
+        label: "制作状态",
+        type: "singleSelect",
+        options: [...PRODUCTION_STATUS_OPTIONS],
+        allowCustomValue: false,
+        visible: true,
+        order: project.fields.length,
+      },
+    ],
+  };
+}
+
+export function getProductionSummary(project: StoryboardProject): ProductionSummary {
+  const statusCounts = Object.fromEntries(
+    PRODUCTION_STATUS_OPTIONS.map((status) => [status, 0]),
+  ) as Record<ProductionStatus, number>;
+  let framesSupplied = 0;
+  let estimatedRuntimeSeconds = 0;
+
+  project.shots.forEach((shot) => {
+    if (shot.values.frame?.trim()) framesSupplied += 1;
+    const duration = Number(shot.values.durationSeconds);
+    if (Number.isFinite(duration) && duration > 0) estimatedRuntimeSeconds += duration;
+    const status = shot.values.productionStatus as ProductionStatus;
+    if (PRODUCTION_STATUS_OPTIONS.includes(status)) statusCounts[status] += 1;
+    else statusCounts["待制作"] += 1;
+  });
+
+  return {
+    sceneCount: project.scenes.length,
+    shotCount: project.shots.length,
+    framesSupplied,
+    estimatedRuntimeSeconds,
+    pendingShotCount: project.shots.length - statusCounts["已完成"],
+    completedShotCount: statusCounts["已完成"],
+    statusCounts,
   };
 }
 

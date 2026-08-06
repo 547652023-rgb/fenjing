@@ -17,7 +17,7 @@ import type {
   Shot,
   StoryboardProject,
 } from "../domain/storyboard";
-import { updateShotValue } from "../domain/storyboard";
+import { ensureProductionStatusField, updateShotValue } from "../domain/storyboard";
 import type { ProjectEvent } from "../domain/models";
 import { useProjectRealtime } from "./useProjectRealtime";
 import { SaveTemplateDialog } from "./SaveTemplateDialog";
@@ -69,13 +69,17 @@ export function ProjectWorkbench({
         gateway.loadProject(projectId),
         gateway.listProjects(),
       ]);
-      setProject(loaded);
-      projectRef.current = loaded;
-      serverProject.current = loaded;
+      const normalized = ensureProductionStatusField(loaded);
+      if (normalized !== loaded) {
+        await gateway.saveProjectMeta(projectId, { fields: normalized.fields });
+      }
+      setProject(normalized);
+      projectRef.current = normalized;
+      serverProject.current = normalized;
       setRole(
         summaries.find((summary) => summary.id === projectId)?.role ?? "editor",
       );
-      loaded.shots.forEach((shot) => {
+      normalized.shots.forEach((shot) => {
         versions.current.set(shot.id, shot.version ?? 1);
       });
       setError("");

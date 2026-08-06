@@ -45,6 +45,23 @@ it("shows export actions after the selected project loads", async () => {
   expect(screen.getByRole("button", { name: "导出文件" })).toBeVisible();
 });
 
+it("upgrades an older project with the production status field on load", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const loaded = await gateway.loadProject(project.id);
+  await gateway.saveProjectMeta(project.id, {
+    fields: loaded.fields.filter((field) => field.id !== "productionStatus"),
+  });
+
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+
+  expect(await screen.findByRole("combobox", { name: "制作状态-1" })).toBeVisible();
+  await waitFor(async () => {
+    expect((await gateway.loadProject(project.id)).fields).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "productionStatus" })]),
+    );
+  });
+});
+
 it("assigns a shot to a scene using the version loaded from the server", async () => {
   const { gateway, owner, project } = await setupProject();
   const scene = await gateway.createScene(project.id, { name: "开场" });

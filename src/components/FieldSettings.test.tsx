@@ -53,7 +53,7 @@ it("reorders fields and disables unavailable moves", async () => {
 
   const firstField = screen.getByTestId("field-settings-shotNumber");
   const secondField = screen.getByTestId("field-settings-frame");
-  const lastField = screen.getByTestId("field-settings-sceneNumber");
+  const lastField = screen.getByTestId("field-settings-productionStatus");
 
   expect(within(firstField).getByRole("button", { name: "上移" })).toBeDisabled();
   expect(within(lastField).getByRole("button", { name: "下移" })).toBeDisabled();
