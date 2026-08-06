@@ -103,6 +103,7 @@ function rowToPlatformAccount(row: any): PlatformAccount {
 function rowToShot(row: any): Shot {
   return {
     id: row.id,
+    version: row.version ?? 1,
     sceneId: row.scene_id ?? undefined,
     values: { ...(row.values ?? {}) },
   };
@@ -578,6 +579,7 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
     const shots = await Promise.all(
       shotRows.map(async (row) => ({
         id: row.id,
+        version: row.version ?? 1,
         sceneId: row.scene_id ?? undefined,
         values: await refreshImageUrlsInValues(
           { ...(row.values ?? {}) },

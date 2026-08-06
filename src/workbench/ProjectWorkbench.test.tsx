@@ -45,6 +45,30 @@ it("shows export actions after the selected project loads", async () => {
   expect(screen.getByRole("button", { name: "导出文件" })).toBeVisible();
 });
 
+it("assigns a shot to a scene using the version loaded from the server", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const scene = await gateway.createScene(project.id, { name: "开场" });
+  const loaded = await gateway.loadProject(project.id);
+  await gateway.saveShot(
+    project.id,
+    { ...loaded.shots[0], values: { ...loaded.shots[0].values, content: "已更新" } },
+    1,
+  );
+  const user = userEvent.setup();
+  render(
+    <ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />,
+  );
+
+  await screen.findByDisplayValue("广告片");
+  await user.click(screen.getByRole("checkbox", { name: `选择镜头 ${loaded.shots[0].id}` }));
+  await user.selectOptions(screen.getByRole("combobox", { name: "归入场次" }), scene.id);
+  await user.click(screen.getByRole("button", { name: "归入场次" }));
+
+  await waitFor(async () => {
+    expect((await gateway.loadProject(project.id)).shots[0].sceneId).toBe(scene.id);
+  });
+});
+
 it("saves the current project as a template without altering the project", async () => {
   const { gateway, owner, project } = await setupProject();
   const loaded = await gateway.loadProject(project.id);

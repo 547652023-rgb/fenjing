@@ -25,6 +25,7 @@ export type AddFieldInput = Pick<FieldDefinition, "label"> & {
 
 export type Shot = {
   id: string;
+  version?: number;
   sceneId?: string;
   values: Record<string, string>;
 };

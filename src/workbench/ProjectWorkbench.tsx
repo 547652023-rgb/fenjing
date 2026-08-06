@@ -76,9 +76,7 @@ export function ProjectWorkbench({
         summaries.find((summary) => summary.id === projectId)?.role ?? "editor",
       );
       loaded.shots.forEach((shot) => {
-        if (!versions.current.has(shot.id)) {
-          versions.current.set(shot.id, 1);
-        }
+        versions.current.set(shot.id, shot.version ?? 1);
       });
       setError("");
     } catch {
