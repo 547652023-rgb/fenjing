@@ -18,6 +18,11 @@ import type {
   StoryboardProject,
 } from "../domain/storyboard";
 import { ensureProductionStatusField, updateShotValue } from "../domain/storyboard";
+import {
+  createNamedStoryboardView,
+  normalizeColumnPresentation,
+  type ColumnPresentation,
+} from "../domain/storyboardViews";
 import type { ProjectEvent } from "../domain/models";
 import { useProjectRealtime } from "./useProjectRealtime";
 import { SaveTemplateDialog } from "./SaveTemplateDialog";
@@ -32,6 +37,20 @@ type ProjectWorkbenchProps = {
 
 function fieldSignature(project: StoryboardProject): string {
   return JSON.stringify(project.fields);
+}
+
+function personalViewKey(userId: string, projectId: string): string {
+  return `fenjing.storyboard-view.v1:${userId}:${projectId}`;
+}
+
+function readPersonalView(userId: string, projectId: string): ColumnPresentation[] | null {
+  try {
+    const stored = localStorage.getItem(personalViewKey(userId, projectId));
+    const parsed: unknown = stored ? JSON.parse(stored) : null;
+    return Array.isArray(parsed) ? parsed as ColumnPresentation[] : null;
+  } catch {
+    return null;
+  }
 }
 
 function copiedShotValues(shot: Shot, imageFieldIds: Set<string>): Record<string, string> {
@@ -57,6 +76,7 @@ export function ProjectWorkbench({
   const [role, setRole] = useState<ProjectRole>("editor");
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
   const [error, setError] = useState("");
+  const [columnPresentation, setColumnPresentation] = useState<ColumnPresentation[] | null>(null);
   const versions = useRef(new Map<string, number>());
   const serverProject = useRef<StoryboardProject | null>(null);
   const projectRef = useRef<StoryboardProject | null>(null);
@@ -79,6 +99,12 @@ export function ProjectWorkbench({
       setRole(
         summaries.find((summary) => summary.id === projectId)?.role ?? "editor",
       );
+      const projectDefaultView = await gateway.getProjectDefaultView(projectId).catch(() => null);
+      const personalView = readPersonalView(user.id, projectId);
+      setColumnPresentation(normalizeColumnPresentation(
+        normalized.fields,
+        personalView ?? projectDefaultView ?? createNamedStoryboardView("director", normalized.fields).columns,
+      ));
       normalized.shots.forEach((shot) => {
         versions.current.set(shot.id, shot.version ?? 1);
       });
@@ -86,7 +112,16 @@ export function ProjectWorkbench({
     } catch {
       setError("项目加载失败或你已失去访问权限");
     }
-  }, [gateway, projectId]);
+  }, [gateway, projectId, user.id]);
+
+  function handleColumnPresentationChange(nextPresentation: ColumnPresentation[]) {
+    setColumnPresentation(nextPresentation);
+    localStorage.setItem(personalViewKey(user.id, projectId), JSON.stringify(nextPresentation));
+  }
+
+  async function handleSetProjectDefaultView(nextPresentation: ColumnPresentation[]) {
+    await gateway.setProjectDefaultView(projectId, nextPresentation);
+  }
 
   useEffect(() => {
     void reload();
@@ -595,6 +630,10 @@ export function ProjectWorkbench({
         onUpdateScene={updateScene}
         project={project}
         onChange={updateProject}
+        columnPresentation={columnPresentation ?? undefined}
+        onColumnPresentationChange={handleColumnPresentationChange}
+        canSetProjectDefaultView={role === "owner"}
+        onSetProjectDefaultView={handleSetProjectDefaultView}
       />
       {showFieldSettings ? (
         <FieldSettings

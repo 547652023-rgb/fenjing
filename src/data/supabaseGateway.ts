@@ -29,6 +29,7 @@ import {
   type StoryboardGateway,
 } from "./gateway";
 import { DEFAULT_ASPECT_RATIO, type CreateSceneInput } from "../domain/storyboard";
+import type { ColumnPresentation } from "../domain/storyboardViews";
 import {
   BUILT_IN_TEMPLATES,
   templateToProject,
@@ -613,6 +614,22 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
       scenes: sceneRows.map(rowToScene),
       shots,
     };
+  }
+
+  async getProjectDefaultView(projectId: string): Promise<ColumnPresentation[] | null> {
+    const result = await this.client.from("projects").select("default_view").eq("id", projectId).single();
+    const row = requireData<any>(result);
+    return Array.isArray(row.default_view)
+      ? row.default_view.map((column: ColumnPresentation) => ({ ...column }))
+      : null;
+  }
+
+  async setProjectDefaultView(projectId: string, presentation: ColumnPresentation[]): Promise<void> {
+    const result = await this.client.rpc("set_storyboard_project_default_view", {
+      p_project_id: projectId,
+      p_default_view: presentation,
+    });
+    if (result.error) throw mapSupabaseError(result.error);
   }
 
   async saveProjectMeta(projectId: string, patch: ProjectMetaPatch): Promise<void> {

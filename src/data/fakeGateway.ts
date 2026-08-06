@@ -36,6 +36,7 @@ import {
   type DeepReadonly,
 } from "../domain/templates";
 import { GatewayError, type StoryboardGateway } from "./gateway";
+import type { ColumnPresentation } from "../domain/storyboardViews";
 
 type StoredUser = AuthUser & { password: string };
 
@@ -79,6 +80,7 @@ export class FakeStoryboardGateway implements StoryboardGateway {
   >();
   private readonly homeSettingsByUser = new Map<string, ProjectHomeSettings>();
   private readonly projectIcons = new Map<string, string | null>();
+  private readonly projectDefaultViews = new Map<string, ColumnPresentation[] | null>();
   private readonly projectCreatedAt = new Map<string, string>();
   private readonly projectUpdatedAt = new Map<string, string>();
   private readonly projectDeletedAt = new Map<string, string | null>();
@@ -231,6 +233,7 @@ export class FakeStoryboardGateway implements StoryboardGateway {
     this.memberships.set(id, new Map([[user.id, "owner"]]));
     const now = new Date().toISOString();
     this.projectIcons.set(id, null);
+    this.projectDefaultViews.set(id, null);
     this.projectCreatedAt.set(id, now);
     this.projectUpdatedAt.set(id, now);
     this.projectDeletedAt.set(id, null);
@@ -481,6 +484,18 @@ export class FakeStoryboardGateway implements StoryboardGateway {
         version: this.versions.get(shot.id) ?? 1,
       })),
     };
+  }
+
+  async getProjectDefaultView(projectId: string): Promise<ColumnPresentation[] | null> {
+    this.requireProjectMember(projectId);
+    return this.projectDefaultViews.get(projectId)?.map((column) => ({ ...column })) ?? null;
+  }
+
+  async setProjectDefaultView(projectId: string, presentation: ColumnPresentation[]): Promise<void> {
+    this.requireOwner(projectId);
+    this.projectDefaultViews.set(projectId, presentation.map((column) => ({ ...column })));
+    this.touchProject(projectId);
+    this.emit(projectId, { type: "project.changed" });
   }
 
   async saveProjectMeta(

@@ -28,6 +28,20 @@ it("edits a visible storyboard cell and adds a shot", async () => {
   );
 });
 
+it("switches to the cinematography view without mutating storyboard fields", async () => {
+  const user = userEvent.setup();
+  const onChange = vi.fn();
+
+  render(<StoryboardTable project={createProject()} onChange={onChange} />);
+
+  await user.click(screen.getByRole("button", { name: "列设置" }));
+  await user.click(screen.getByRole("button", { name: "摄影视图" }));
+
+  expect(screen.getByRole("columnheader", { name: "摄影机角度" })).toBeVisible();
+  expect(screen.queryByRole("columnheader", { name: "内容" })).not.toBeInTheDocument();
+  expect(onChange).not.toHaveBeenCalled();
+});
+
 it("reads an uploaded image as a data URL", async () => {
   const user = userEvent.setup();
   const onChange = vi.fn();

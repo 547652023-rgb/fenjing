@@ -1,5 +1,6 @@
 import { BUILT_IN_TEMPLATES, projectToTemplateSnapshot } from "../domain/templates";
 import { createProject } from "../domain/storyboard";
+import { createNamedStoryboardView } from "../domain/storyboardViews";
 import { FakeStoryboardGateway } from "./fakeGateway";
 
 it("keeps projects isolated by signed-in membership", async () => {
@@ -33,6 +34,26 @@ it("lets an owner invite a registered editor without exposing other projects", a
   expect(await gateway.listProjects()).toEqual([
     expect.objectContaining({ id: created.id, role: "editor" }),
   ]);
+});
+
+it("keeps the project default view owner-controlled while members can read it", async () => {
+  const gateway = new FakeStoryboardGateway();
+  const owner = await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("广告片");
+  const view = createNamedStoryboardView("producer", (await gateway.loadProject(project.id)).fields);
+  await gateway.setProjectDefaultView(project.id, view.columns);
+
+  await gateway.signOut();
+  const editor = await gateway.signUp("editor@example.com", "password123");
+  await gateway.signOut();
+  await gateway.signIn(owner.email, "password123");
+  await gateway.inviteMember(project.id, editor.email);
+  await gateway.signIn(editor.email, "password123");
+
+  await expect(gateway.getProjectDefaultView(project.id)).resolves.toEqual(view.columns);
+  await expect(gateway.setProjectDefaultView(project.id, view.columns)).rejects.toMatchObject({
+    code: "forbidden",
+  });
 });
 
 it("imports a local project as a new owned project", async () => {

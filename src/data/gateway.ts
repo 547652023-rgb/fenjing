@@ -22,6 +22,7 @@ import type {
   UploadImageInput,
   VersionedShot,
 } from "../domain/models";
+import type { ColumnPresentation } from "../domain/storyboardViews";
 
 export type GatewayErrorCode =
   | "already_registered"
@@ -90,6 +91,8 @@ export interface StoryboardGateway {
   renameProject(projectId: string, title: string): Promise<void>;
   deleteProject(projectId: string): Promise<void>;
   loadProject(projectId: string): Promise<StoryboardProject>;
+  getProjectDefaultView(projectId: string): Promise<ColumnPresentation[] | null>;
+  setProjectDefaultView(projectId: string, presentation: ColumnPresentation[]): Promise<void>;
   createScene(projectId: string, input: CreateSceneInput): Promise<StoryboardScene>;
   updateScene(projectId: string, scene: StoryboardScene): Promise<void>;
   deleteScene(projectId: string, sceneId: string): Promise<void>;

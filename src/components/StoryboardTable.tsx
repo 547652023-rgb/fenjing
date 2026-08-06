@@ -18,6 +18,13 @@ import {
 import { ImageCell } from "./ImageCell";
 import { EditableSelect } from "../workbench/EditableSelect";
 import type { RemoteImage } from "../domain/models";
+import {
+  createNamedStoryboardView,
+  normalizeColumnPresentation,
+  type ColumnPresentation,
+  type ColumnWidth,
+  type StoryboardViewId,
+} from "../domain/storyboardViews";
 
 export type StoryboardImageActions = {
   upload: (
@@ -65,6 +72,10 @@ type StoryboardTableProps = {
     shotIds: string[],
     sceneId: string | null,
   ) => void | Promise<void>;
+  columnPresentation?: ColumnPresentation[];
+  onColumnPresentationChange?: (presentation: ColumnPresentation[]) => void;
+  canSetProjectDefaultView?: boolean;
+  onSetProjectDefaultView?: (presentation: ColumnPresentation[]) => void | Promise<void>;
 };
 
 export function parseRemoteImages(value: string): RemoteImage[] {
@@ -99,13 +110,12 @@ function inputTypeFor(field: FieldDefinition): "date" | "number" | "text" {
   return "text";
 }
 
-function columnWidth(field: FieldDefinition): string {
-  if (field.id === "frame") {
-    return "44rem";
-  }
-
-  const typeMinimum = field.type === "image" ? 18 : field.type === "number" ? 10 : 14;
-  return `${Math.max(typeMinimum, field.label.length * 2 + 4)}rem`;
+function columnWidth(field: FieldDefinition, width: ColumnWidth): string {
+  if (field.id === "frame") return width === "wide" ? "44rem" : width === "standard" ? "28rem" : "18rem";
+  if (field.type === "image") return width === "wide" ? "24rem" : width === "standard" ? "18rem" : "14rem";
+  if (width === "wide") return "24rem";
+  if (width === "compact") return "10rem";
+  return `${Math.max(field.type === "number" ? 10 : 14, field.label.length * 2 + 4)}rem`;
 }
 
 export function StoryboardTable({
@@ -120,6 +130,10 @@ export function StoryboardTable({
   onUpdateScene,
   onDeleteScene,
   onAssignShotsToScene,
+  columnPresentation: suppliedPresentation,
+  onColumnPresentationChange,
+  canSetProjectDefaultView = false,
+  onSetProjectDefaultView,
 }: StoryboardTableProps) {
   const [draggedShotId, setDraggedShotId] = useState<string | null>(null);
   const [selectedShotIds, setSelectedShotIds] = useState<string[]>([]);
@@ -134,12 +148,19 @@ export function StoryboardTable({
   const [rowScenePickerShotId, setRowScenePickerShotId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<ProductionStatus | null>(null);
   const [coverageFilter, setCoverageFilter] = useState<"frames" | "pending" | "completed" | null>(null);
+  const [isColumnSettingsOpen, setIsColumnSettingsOpen] = useState(false);
+  const [columnSettingsMessage, setColumnSettingsMessage] = useState("");
+  const [columnPresentation, setColumnPresentation] = useState<ColumnPresentation[]>(() =>
+    normalizeColumnPresentation(project.fields, suppliedPresentation),
+  );
   const editableCellRefs = useRef(new Map<string, HTMLElement>());
-  const visibleFields = project.fields
-    .filter((field) => field.visible)
-    .sort((left, right) => left.order - right.order);
+  const visibleFields = columnPresentation
+    .filter((column) => column.visible)
+    .sort((left, right) => left.order - right.order)
+    .map((column) => ({ field: project.fields.find((field) => field.id === column.fieldId), column }))
+    .filter((entry): entry is { field: FieldDefinition; column: ColumnPresentation } => Boolean(entry.field));
   const batchFields = visibleFields.filter(
-    (field) => field.type !== "image" && field.id !== "shotNumber",
+    ({ field }) => field.type !== "image" && field.id !== "shotNumber",
   );
   const summary = getProductionSummary(project);
   const filteredShots = project.shots.filter((shot) => {
@@ -174,6 +195,10 @@ export function StoryboardTable({
   }, [project.shots]);
 
   useEffect(() => {
+    setColumnPresentation(normalizeColumnPresentation(project.fields, suppliedPresentation));
+  }, [project.fields, suppliedPresentation]);
+
+  useEffect(() => {
     if (!focusShotId) return;
     editableCellRefs.current.get(focusShotId)?.focus();
     setFocusShotId(null);
@@ -185,6 +210,34 @@ export function StoryboardTable({
         ? [...current, shotId]
         : current.filter((candidate) => candidate !== shotId),
     );
+  }
+
+  function applyColumnPresentation(next: ColumnPresentation[]) {
+    const normalized = normalizeColumnPresentation(project.fields, next);
+    setColumnPresentation(normalized);
+    onColumnPresentationChange?.(normalized);
+  }
+
+  function applyNamedView(viewId: StoryboardViewId) {
+    applyColumnPresentation(createNamedStoryboardView(viewId, project.fields).columns);
+  }
+
+  function updateColumn(fieldId: string, patch: Partial<ColumnPresentation>) {
+    applyColumnPresentation(columnPresentation.map((column) => {
+      if (column.fieldId === fieldId) return { ...column, ...patch };
+      if (patch.pinned && column.fieldId !== "shotNumber") return { ...column, pinned: false };
+      return column;
+    }));
+  }
+
+  function moveColumn(fieldId: string, offset: number) {
+    const currentIndex = columnPresentation.findIndex((column) => column.fieldId === fieldId);
+    const nextIndex = currentIndex + offset;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= columnPresentation.length) return;
+    const next = [...columnPresentation];
+    const [moved] = next.splice(currentIndex, 1);
+    next.splice(nextIndex, 0, moved);
+    applyColumnPresentation(next);
   }
 
   function applyBatchFieldValue() {
@@ -383,6 +436,54 @@ export function StoryboardTable({
     >
       <div className="storyboard-toolbar">
         <p>{filteredShots.length === project.shots.length ? `${project.shots.length} 个镜头` : `显示 ${filteredShots.length} / ${project.shots.length} 个镜头`}</p>
+        <div className="storyboard-toolbar__actions">
+          <div className="column-settings">
+            <button
+              aria-expanded={isColumnSettingsOpen}
+              aria-haspopup="dialog"
+              className="button-quiet"
+              type="button"
+              onClick={() => setIsColumnSettingsOpen((open) => !open)}
+            >
+              列设置
+            </button>
+            {isColumnSettingsOpen ? (
+              <section aria-label="列设置面板" className="column-settings__panel" role="dialog">
+                <div className="column-settings__header">
+                  <div><strong>工作视图</strong><span>仅影响你的当前工作台</span></div>
+                  <button aria-label="关闭列设置" type="button" onClick={() => setIsColumnSettingsOpen(false)}>关闭</button>
+                </div>
+                <div aria-label="预设工作视图" className="column-settings__presets">
+                  {(["director", "producer", "cinematographer"] as const).map((viewId) => {
+                    const view = createNamedStoryboardView(viewId, project.fields);
+                    return <button key={viewId} type="button" onClick={() => applyNamedView(viewId)}>{view.name}</button>;
+                  })}
+                </div>
+                {canSetProjectDefaultView && onSetProjectDefaultView ? (
+                  <button className="column-settings__save-default" type="button" onClick={() => {
+                    void Promise.resolve(onSetProjectDefaultView(columnPresentation)).then(() => setColumnSettingsMessage("已设为项目默认视图"));
+                  }}>设为项目默认</button>
+                ) : null}
+                {columnSettingsMessage ? <p role="status">{columnSettingsMessage}</p> : null}
+                <div className="column-settings__list">
+                  {columnPresentation.map((column, index) => {
+                    const field = project.fields.find((candidate) => candidate.id === column.fieldId);
+                    if (!field) return null;
+                    return (
+                      <div className="column-settings__row" key={column.fieldId}>
+                        <label><input checked={column.visible} type="checkbox" onChange={(event) => updateColumn(column.fieldId, { visible: event.target.checked })} />{field.label}</label>
+                        <select aria-label={`${field.label} 列宽`} value={column.width} onChange={(event) => updateColumn(column.fieldId, { width: event.target.value as ColumnWidth })}>
+                          <option value="compact">窄</option><option value="standard">标准</option><option value="wide">宽</option>
+                        </select>
+                        <label className="column-settings__pin"><input checked={column.pinned} disabled={field.id === "shotNumber"} type="checkbox" onChange={(event) => updateColumn(column.fieldId, { pinned: event.target.checked })} />固定</label>
+                        <span className="column-settings__move"><button aria-label={`上移 ${field.label}`} disabled={index === 0} type="button" onClick={() => moveColumn(column.fieldId, -1)}>↑</button><button aria-label={`下移 ${field.label}`} disabled={index === columnPresentation.length - 1} type="button" onClick={() => moveColumn(column.fieldId, 1)}>↓</button></span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+          </div>
         <div className="shot-creation-control">
           <button type="button" onClick={() => void createShots({ count: 1 })}>
             新增 1 个镜头
@@ -426,6 +527,7 @@ export function StoryboardTable({
               </button>
             </div>
           ) : null}
+        </div>
         </div>
       </div>
       <section aria-label="制作概览" className="production-summary">
@@ -494,7 +596,7 @@ export function StoryboardTable({
               }}
             >
               <option value="">选择字段</option>
-              {batchFields.map((field) => (
+              {batchFields.map(({ field }) => (
                 <option key={field.id} value={field.id}>
                   {field.label}
                 </option>
@@ -561,13 +663,13 @@ export function StoryboardTable({
                   }
                 />
               </th>
-              {visibleFields.map((field) => (
+              {visibleFields.map(({ field, column }) => (
                 <th
-                  className={field.id === "shotNumber" ? "sticky-shot-number" : undefined}
+                  className={field.id === "shotNumber" ? "sticky-shot-number" : column.pinned ? "sticky-project-column" : undefined}
                   data-field-type={field.type}
                   key={field.id}
                   scope="col"
-                  style={{ minWidth: columnWidth(field) }}
+                  style={{ minWidth: columnWidth(field, column.width) }}
                 >
                   {field.label}
                 </th>
@@ -684,11 +786,13 @@ export function StoryboardTable({
                     </div>
                   ) : null}
                 </td>
-                {visibleFields.map((field) => (
+                {visibleFields.map(({ field, column }) => (
                   <td
                     className={
                       field.id === "shotNumber"
                         ? "sticky-shot-number"
+                        : column.pinned
+                          ? "sticky-project-column"
                         : field.type === "image"
                           ? "image-table-cell"
                           : undefined
