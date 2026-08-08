@@ -445,3 +445,34 @@ it("persists a row-menu reorder through the project gateway", async () => {
     ]);
   });
 });
+
+it("restores a personal storyboard view after the workbench remounts", async () => {
+  localStorage.clear();
+  const { gateway, owner, project } = await setupProject();
+  const user = userEvent.setup();
+  const firstMount = render(
+    <ProjectWorkbench
+      gateway={gateway}
+      onBack={vi.fn()}
+      projectId={project.id}
+      user={owner}
+    />,
+  );
+
+  await screen.findByDisplayValue("广告片");
+  await user.click(screen.getByRole("button", { name: "列设置" }));
+  await user.click(screen.getByRole("button", { name: "摄影视图" }));
+  expect(screen.getByRole("columnheader", { name: "摄影机角度" })).toBeVisible();
+
+  firstMount.unmount();
+  render(
+    <ProjectWorkbench
+      gateway={gateway}
+      onBack={vi.fn()}
+      projectId={project.id}
+      user={owner}
+    />,
+  );
+
+  expect(await screen.findByRole("columnheader", { name: "摄影机角度" })).toBeVisible();
+});
