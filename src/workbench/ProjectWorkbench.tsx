@@ -127,6 +127,32 @@ export function ProjectWorkbench({
     localStorage.setItem(personalViewKey(user.id, projectId), JSON.stringify(nextPresentation));
   }
 
+  function handleFieldSettingsChange(nextProject: StoryboardProject) {
+    const previousVisibility = new Map(
+      (project?.fields ?? []).map((field) => [field.id, field.visible]),
+    );
+    const changedVisibility = new Set(
+      nextProject.fields
+        .filter((field) => previousVisibility.get(field.id) !== field.visible)
+        .map((field) => field.id),
+    );
+
+    setColumnPresentation((current) => {
+      const fieldsById = new Map(nextProject.fields.map((field) => [field.id, field]));
+      const next = normalizeColumnPresentation(
+        nextProject.fields,
+        current?.map((column) => {
+          const field = fieldsById.get(column.fieldId);
+          if (!field || !changedVisibility.has(column.fieldId)) return column;
+          return { ...column, visible: field.visible };
+        }),
+      );
+      localStorage.setItem(personalViewKey(user.id, projectId), JSON.stringify(next));
+      return next;
+    });
+    updateProject(nextProject);
+  }
+
   async function handleSetProjectDefaultView(nextPresentation: ColumnPresentation[]) {
     await gateway.setProjectDefaultView(projectId, nextPresentation);
   }
@@ -743,7 +769,7 @@ export function ProjectWorkbench({
       {showFieldSettings ? (
         <FieldSettings
           project={project}
-          onChange={updateProject}
+          onChange={handleFieldSettingsChange}
           onClose={() => setShowFieldSettings(false)}
         />
       ) : null}

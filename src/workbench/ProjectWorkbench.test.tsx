@@ -69,6 +69,22 @@ it("shows export actions after the selected project loads", async () => {
   expect(screen.getByRole("button", { name: "导出文件" })).toBeVisible();
 });
 
+it("applies field visibility changes to the active storyboard columns after saving", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const user = userEvent.setup();
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+
+  await screen.findByDisplayValue("广告片");
+  expect(screen.getByRole("columnheader", { name: "内容" })).toBeVisible();
+
+  await user.click(screen.getByRole("button", { name: "字段设置" }));
+  await user.click(screen.getByLabelText("显示-内容"));
+  await user.click(screen.getByRole("button", { name: "保存更改" }));
+
+  expect(screen.queryByRole("columnheader", { name: "内容" })).not.toBeInTheDocument();
+  localStorage.clear();
+});
+
 it("upgrades an older project with the production status field on load", async () => {
   const { gateway, owner, project } = await setupProject();
   const loaded = await gateway.loadProject(project.id);
