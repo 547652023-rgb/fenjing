@@ -128,22 +128,13 @@ export function ProjectWorkbench({
   }
 
   function handleFieldSettingsChange(nextProject: StoryboardProject) {
-    const previousVisibility = new Map(
-      (project?.fields ?? []).map((field) => [field.id, field.visible]),
-    );
-    const changedVisibility = new Set(
-      nextProject.fields
-        .filter((field) => previousVisibility.get(field.id) !== field.visible)
-        .map((field) => field.id),
-    );
-
     setColumnPresentation((current) => {
       const fieldsById = new Map(nextProject.fields.map((field) => [field.id, field]));
       const next = normalizeColumnPresentation(
         nextProject.fields,
         current?.map((column) => {
           const field = fieldsById.get(column.fieldId);
-          if (!field || !changedVisibility.has(column.fieldId)) return column;
+          if (!field) return column;
           return { ...column, visible: field.visible };
         }),
       );
@@ -667,6 +658,16 @@ export function ProjectWorkbench({
   const callSheetDeliveryLabel = workspaceView === "call-sheet" && callSheetDate && callSheetVersions[0]
     ? `拍摄通告 · ${callSheetDate} · V${callSheetVersions[0].versionNumber}`
     : undefined;
+  const fieldSettingsProject = columnPresentation
+    ? {
+        ...project,
+        fields: project.fields.map((field) => ({
+          ...field,
+          visible: columnPresentation.find((column) => column.fieldId === field.id)?.visible
+            ?? field.visible,
+        })),
+      }
+    : project;
 
   if (isReadOnlyReview) {
     return (
@@ -768,7 +769,7 @@ export function ProjectWorkbench({
       ) : workspaceView === "shoot-plan" ? <ShootPlan project={project} onUpdateScene={updateScene} /> : <CallSheet project={project} versions={callSheetVersions} onPublish={publishCallSheet} onDateChange={(shootDate) => setCallSheetDate(shootDate)} />}
       {showFieldSettings ? (
         <FieldSettings
-          project={project}
+          project={fieldSettingsProject}
           onChange={handleFieldSettingsChange}
           onClose={() => setShowFieldSettings(false)}
         />

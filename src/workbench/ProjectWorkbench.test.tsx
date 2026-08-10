@@ -1,8 +1,13 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { vi } from "vitest";
+import { afterEach, vi } from "vitest";
 import { FakeStoryboardGateway } from "../data/fakeGateway";
+import { createNamedStoryboardView } from "../domain/storyboardViews";
 import { ProjectWorkbench } from "./ProjectWorkbench";
+
+afterEach(() => {
+  localStorage.clear();
+});
 
 async function setupProject() {
   const gateway = new FakeStoryboardGateway();
@@ -83,6 +88,51 @@ it("applies field visibility changes to the active storyboard columns after savi
 
   expect(screen.queryByRole("columnheader", { name: "内容" })).not.toBeInTheDocument();
   localStorage.clear();
+});
+
+it("replaces an older personal column view with the saved field visibility", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const loaded = await gateway.loadProject(project.id);
+  await gateway.saveProjectMeta(project.id, {
+    fields: loaded.fields.map((field) =>
+      field.id === "cameraGear" ? { ...field, visible: false } : field,
+    ),
+  });
+  localStorage.setItem(
+    `fenjing.storyboard-view.v1:${owner.id}:${project.id}`,
+    JSON.stringify(createNamedStoryboardView("cinematographer", loaded.fields).columns),
+  );
+  const user = userEvent.setup();
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+
+  expect(await screen.findByRole("columnheader", { name: "摄影机装备" })).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "字段设置" }));
+  await user.click(screen.getByLabelText("显示-摄影机装备"));
+  await user.click(screen.getByRole("button", { name: "保存更改" }));
+
+  expect(screen.queryByRole("columnheader", { name: "摄影机装备" })).not.toBeInTheDocument();
+  localStorage.clear();
+});
+
+it("shows the active column visibility in field settings when an older view differs", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const loaded = await gateway.loadProject(project.id);
+  await gateway.saveProjectMeta(project.id, {
+    fields: loaded.fields.map((field) =>
+      field.id === "cameraGear" ? { ...field, visible: false } : field,
+    ),
+  });
+  localStorage.setItem(
+    `fenjing.storyboard-view.v1:${owner.id}:${project.id}`,
+    JSON.stringify(createNamedStoryboardView("cinematographer", loaded.fields).columns),
+  );
+  const user = userEvent.setup();
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+
+  await screen.findByRole("columnheader", { name: "摄影机装备" });
+  await user.click(screen.getByRole("button", { name: "字段设置" }));
+
+  expect(screen.getByLabelText("显示-摄影机装备")).toBeChecked();
 });
 
 it("upgrades an older project with the production status field on load", async () => {
