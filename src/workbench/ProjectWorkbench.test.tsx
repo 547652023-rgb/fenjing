@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { FakeStoryboardGateway } from "../data/fakeGateway";
@@ -27,6 +27,30 @@ it("loads the selected project and returns to the dashboard", async () => {
   expect(await screen.findByDisplayValue("广告片")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "返回项目" }));
   expect(onBack).toHaveBeenCalledOnce();
+});
+
+it("coalesces structural realtime events into one workspace reload", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const loadProject = vi.spyOn(gateway, "loadProject");
+  render(
+    <ProjectWorkbench
+      gateway={gateway}
+      onBack={vi.fn()}
+      projectId={project.id}
+      user={owner}
+    />,
+  );
+
+  await screen.findByDisplayValue("广告片");
+  loadProject.mockClear();
+
+  await act(async () => {
+    for (let index = 0; index < 5; index += 1) {
+      gateway.emit(project.id, { type: "structure.changed" });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 180));
+  });
+  expect(loadProject).toHaveBeenCalledTimes(1);
 });
 
 it("shows export actions after the selected project loads", async () => {

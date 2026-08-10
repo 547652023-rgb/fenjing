@@ -89,6 +89,7 @@ export function ProjectWorkbench({
   const projectRef = useRef<StoryboardProject | null>(null);
   const dirtyFields = useRef(new Set<string>());
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -133,9 +134,18 @@ export function ProjectWorkbench({
   useEffect(() => {
     void reload();
     return () => {
+      if (reloadTimer.current) clearTimeout(reloadTimer.current);
       saveTimers.current.forEach(clearTimeout);
       saveTimers.current.clear();
     };
+  }, [reload]);
+
+  const scheduleReload = useCallback(() => {
+    if (reloadTimer.current) clearTimeout(reloadTimer.current);
+    reloadTimer.current = setTimeout(() => {
+      reloadTimer.current = null;
+      void reload();
+    }, 100);
   }, [reload]);
 
   const loadCallSheetVersions = useCallback(async (shootDate: string) => {
@@ -168,7 +178,7 @@ export function ProjectWorkbench({
 
   function handleProjectEvent(event: ProjectEvent) {
     if (event.type === "project.changed" || event.type === "structure.changed") {
-      void reload();
+      scheduleReload();
       return;
     }
     if (event.type === "shot.deleted") {
