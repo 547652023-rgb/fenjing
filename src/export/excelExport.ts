@@ -27,6 +27,7 @@ type EmbeddedImage = LoadedImage & {
 type CellAnchor = {
   column: number;
   row: number;
+  heightEmu: number;
   images: EmbeddedImage[];
 };
 
@@ -176,7 +177,7 @@ function rootRelationshipsXml(): string {
 
 function workbookXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="分镜表" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="分镜表" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">'分镜表'!$1:$4</definedName></definedNames></workbook>`;
 }
 
 function workbookRelationshipsXml(): string {
@@ -239,8 +240,8 @@ function drawingXml(anchors: CellAnchor[]): string {
   let imageNumber = 0;
   const drawings = anchors.flatMap((anchor) => anchor.images.map((image, slot) => {
     imageNumber += 1;
-    const start = Math.floor(ROW_HEIGHT_EMU * slot / anchor.images.length);
-    const end = Math.floor(ROW_HEIGHT_EMU * (slot + 1) / anchor.images.length);
+    const start = Math.floor(anchor.heightEmu * slot / anchor.images.length);
+    const end = Math.floor(anchor.heightEmu * (slot + 1) / anchor.images.length);
     return `<xdr:twoCellAnchor editAs="oneCell"><xdr:from><xdr:col>${anchor.column}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${anchor.row}</xdr:row><xdr:rowOff>${start}</xdr:rowOff></xdr:from><xdr:to><xdr:col>${anchor.column + 1}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${anchor.row}</xdr:row><xdr:rowOff>${end}</xdr:rowOff></xdr:to><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${imageNumber}" name="Image ${imageNumber}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="${image.relationshipId}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>`;
   })).join("");
 
@@ -296,7 +297,8 @@ export async function buildXlsxPackage(
         cellImages.push(embedded);
       }
       if (cellImages.length > 0) {
-        anchors.push({ column: columnIndex, row: rowIndex + 4, images: cellImages });
+        const imageCount = Math.max(1, cellImages.length);
+        anchors.push({ column: columnIndex, row: rowIndex + 4, heightEmu: Math.min(400, imageCount * 80) * 12_700, images: cellImages });
       }
     }
   }
