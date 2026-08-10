@@ -126,6 +126,50 @@ it("draws an image failure marker and still returns JPEG page bytes", async () =
     .toBe(true);
 });
 
+it("fits exported images inside their PDF slots without stretching", async () => {
+  const drawImage = vi.fn();
+  const context = {
+    fillStyle: "", strokeStyle: "", lineWidth: 1, font: "", textAlign: "start", textBaseline: "alphabetic",
+    fillRect: vi.fn(), strokeRect: vi.fn(), fillText: vi.fn(), drawImage,
+    measureText: (text: string) => ({ width: text.length * 8 }),
+  };
+  const jpeg = Uint8Array.from([255, 216, 255, 217]);
+  const createCanvas = vi.fn(() => ({
+    getContext: () => context,
+    toBlob: (callback: BlobCallback) => callback(new Blob([jpeg], { type: "image/jpeg" })),
+  }) as unknown as HTMLCanvasElement);
+  const model = {
+    title: "图片比例",
+    aspectRatio: "16:9",
+    shotCount: 1,
+    fields: [{ id: "frame", label: "画面", type: "image" as const, visible: true, order: 0 }],
+    rows: [{
+      shotId: "shot-1",
+      cells: [{
+        fieldId: "frame",
+        fieldType: "image" as const,
+        text: "",
+        images: [
+          { path: "landscape.jpg", url: "https://example.com/landscape.jpg", name: "landscape.jpg", position: 0 },
+          { path: "portrait.jpg", url: "https://example.com/portrait.jpg", name: "portrait.jpg", position: 1 },
+        ],
+      }],
+    }],
+  };
+  const landscape = { width: 1600, height: 900 } as CanvasImageSource;
+  const portrait = { width: 900, height: 1600 } as CanvasImageSource;
+
+  await renderPdfPages(model, {
+    createCanvas,
+    loadImage: async (url) => url.includes("landscape") ? landscape : portrait,
+  });
+
+  const imageCalls = drawImage.mock.calls.filter(([image]) => image === landscape || image === portrait);
+  expect(imageCalls).toHaveLength(2);
+  expect(imageCalls[0].slice(3)).toEqual([Math.round(96 * 16 / 9), 96]);
+  expect(imageCalls[1].slice(3)).toEqual([54, 96]);
+});
+
 it("renders every line of a long text cell across variable-height pages", async () => {
   const sourceLines = Array.from(
     { length: 80 },
