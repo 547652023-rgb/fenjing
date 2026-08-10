@@ -231,6 +231,36 @@ function drawTextLines(
   });
 }
 
+function fitImageIntoSlot(
+  image: CanvasImageSource,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): { x: number; y: number; width: number; height: number } {
+  const source = image as CanvasImageSource & {
+    naturalWidth?: number;
+    naturalHeight?: number;
+    videoWidth?: number;
+    videoHeight?: number;
+    width?: number;
+    height?: number;
+  };
+  const sourceWidth = source.naturalWidth ?? source.videoWidth ?? source.width;
+  const sourceHeight = source.naturalHeight ?? source.videoHeight ?? source.height;
+  if (!sourceWidth || !sourceHeight) return { x, y, width, height };
+
+  const scale = Math.min(width / sourceWidth, height / sourceHeight);
+  const fittedWidth = Math.max(1, Math.round(sourceWidth * scale));
+  const fittedHeight = Math.max(1, Math.round(sourceHeight * scale));
+  return {
+    x: x + Math.round((width - fittedWidth) / 2),
+    y: y + Math.round((height - fittedHeight) / 2),
+    width: fittedWidth,
+    height: fittedHeight,
+  };
+}
+
 async function drawImageCell(
   context: CanvasRenderingContext2D,
   images: ExportRow["cells"][number]["images"],
@@ -253,7 +283,8 @@ async function drawImageCell(
   loaded.forEach(({ image }, index) => {
     const slotY = y + slotHeight * index;
     if (image) {
-      context.drawImage(image, x, slotY, width, slotHeight);
+      const fitted = fitImageIntoSlot(image, x, slotY, width, slotHeight);
+      context.drawImage(image, fitted.x, fitted.y, fitted.width, fitted.height);
       return;
     }
     context.fillStyle = "#b91c1c";
