@@ -31,6 +31,24 @@ describe("ImageCell online mode", () => {
     expect(screen.getAllByRole("img", { name: /画面-1-图片/ })).toHaveLength(5);
   });
 
+  it("uses the same five-image thumbnail layout for reference previews", () => {
+    render(
+      <ImageCell
+        images={[{ path: "project/shot/reference/0.png", url: "blob:reference", name: "0.png", position: 0 }]}
+        label="参考-1"
+        maxImages={5}
+        onRemove={vi.fn()}
+        onUpload={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("image-cell")).toHaveClass("image-cell--multiple");
+    expect(screen.getByTestId("image-cell-previews")).toHaveClass("image-cell__previews--vertical");
+    expect(screen.getByRole("img", { name: "参考-1-图片1" }).parentElement).toHaveClass(
+      "image-cell__item--thumbnail",
+    );
+  });
+
   it("uploads dropped image files", async () => {
     const onUpload = vi.fn().mockResolvedValue([
       {
