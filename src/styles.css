@@ -1972,6 +1972,17 @@ button:disabled {
   background: #1f5a3d;
 }
 
+.field-settings__move .field-settings__delete {
+  border-color: #c97068;
+  color: #8e302b;
+}
+
+.field-settings__move .field-settings__delete:hover:not(:disabled) {
+  border-color: #9f332d;
+  color: #fff;
+  background: #9f332d;
+}
+
 .member-manager {
   position: fixed;
   inset: 1.5rem 0 auto;

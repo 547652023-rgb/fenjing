@@ -6,6 +6,7 @@ import {
   assignShotsToScene,
   createScene,
   createProject,
+  deleteField,
   deleteScene,
   deleteShot,
   ensureProductionStatusField,
@@ -118,6 +119,25 @@ it("adds, hides and reorders a project field", () => {
     id: "actor",
     visible: false,
   });
+});
+
+it("deletes a custom field and its shot values while protecting built-in fields", () => {
+  const project = addField(createProject(), { label: "服装备注", type: "text" });
+  const withValue = {
+    ...project,
+    shots: project.shots.map((shot) => ({
+      ...shot,
+      values: { ...shot.values, "服装备注": "黑色风衣" },
+    })),
+  };
+
+  const deleted = deleteField(withValue, "服装备注");
+
+  expect(deleted.fields).not.toEqual(
+    expect.arrayContaining([expect.objectContaining({ id: "服装备注" })]),
+  );
+  expect(deleted.shots[0].values).not.toHaveProperty("服装备注");
+  expect(() => deleteField(withValue, "shotNumber")).toThrow("cannot be deleted");
 });
 
 it("derives a deterministic nonempty id from a Chinese field label", () => {

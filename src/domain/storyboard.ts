@@ -142,6 +142,8 @@ export const DEFAULT_FIELDS: FieldDefinition[] = seededFields.map((field, order)
   order,
 }));
 
+const BUILT_IN_FIELD_IDS = new Set(DEFAULT_FIELDS.map((field) => field.id));
+
 function copyFields(fields: FieldDefinition[]): FieldDefinition[] {
   return fields.map((field) => ({
     ...field,
@@ -335,6 +337,28 @@ export function addField(
       ...copyFields(project.fields),
       { id, label: field.label, type: field.type, visible: true, order: project.fields.length },
     ],
+  };
+}
+
+export function deleteField(
+  project: StoryboardProject,
+  fieldId: string,
+): StoryboardProject {
+  if (BUILT_IN_FIELD_IDS.has(fieldId)) {
+    throw new Error("Built-in fields cannot be deleted");
+  }
+
+  return {
+    ...project,
+    fields: withFieldOrder(
+      project.fields
+        .filter((field) => field.id !== fieldId)
+        .map((field) => ({ ...field, options: field.options ? [...field.options] : undefined })),
+    ),
+    shots: project.shots.map((shot) => {
+      const { [fieldId]: _deletedValue, ...values } = shot.values;
+      return { ...shot, values };
+    }),
   };
 }
 

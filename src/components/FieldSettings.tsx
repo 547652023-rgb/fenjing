@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from "react";
 import {
+  DEFAULT_FIELDS,
   addField,
+  deleteField,
   moveField,
   setFieldOptions,
   toggleFieldVisibility,
@@ -22,6 +24,8 @@ const CUSTOM_FIELD_TYPES: CustomFieldType[] = [
   "multiSelect",
   "person",
 ];
+
+const BUILT_IN_FIELD_IDS = new Set(DEFAULT_FIELDS.map((field) => field.id));
 
 export function FieldSettings({ project, onChange, onClose }: FieldSettingsProps) {
   const [draft, setDraft] = useState<StoryboardProject>(() => structuredClone(project));
@@ -174,6 +178,24 @@ export function FieldSettings({ project, onChange, onClose }: FieldSettingsProps
               >
                 下移
               </button>
+              {!BUILT_IN_FIELD_IDS.has(field.id) ? (
+                <button
+                  aria-label={`删除${field.label}字段`}
+                  className="field-settings__delete"
+                  type="button"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `确定删除字段“${field.label}”？该字段的镜头数据也会被删除。`,
+                      )
+                    ) {
+                      updateDraft(deleteField(draft, field.id));
+                    }
+                  }}
+                >
+                  删除字段
+                </button>
+              ) : null}
             </div>
             {field.type === "singleSelect" && field.id !== "shotSize" ? (
               <div className="field-settings__options">

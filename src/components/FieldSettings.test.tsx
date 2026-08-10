@@ -79,6 +79,34 @@ it("keeps field edits as a draft until saved, and cancels without changing the p
   expect(onClose).toHaveBeenCalledTimes(2);
 });
 
+it("deletes a custom field only after confirmation and saving", async () => {
+  const user = userEvent.setup();
+  const project = createProject();
+  const withWardrobe = {
+    ...project,
+    fields: [
+      ...project.fields,
+      { id: "服装备注", label: "服装备注", type: "text" as const, visible: true, order: project.fields.length },
+    ],
+  };
+  const onChange = vi.fn();
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+  render(<FieldSettings project={withWardrobe} onChange={onChange} onClose={vi.fn()} />);
+
+  expect(screen.queryByRole("button", { name: "删除镜号字段" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "删除服装备注字段" }));
+
+  expect(confirm).toHaveBeenCalledWith("确定删除字段“服装备注”？该字段的镜头数据也会被删除。");
+  expect(screen.queryByText("显示-服装备注")).not.toBeInTheDocument();
+  expect(onChange).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole("button", { name: "保存更改" }));
+  expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+    fields: expect.not.arrayContaining([expect.objectContaining({ id: "服装备注" })]),
+  }));
+});
+
 it("reorders fields and disables unavailable moves", async () => {
   const user = userEvent.setup();
   const project = createProject();
