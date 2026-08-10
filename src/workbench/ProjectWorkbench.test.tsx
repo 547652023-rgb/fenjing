@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { FakeStoryboardGateway } from "../data/fakeGateway";
@@ -84,6 +84,24 @@ it("assigns a shot to a scene using the version loaded from the server", async (
   await waitFor(async () => {
     expect((await gateway.loadProject(project.id)).shots[0].sceneId).toBe(scene.id);
   });
+});
+
+it("saves a shoot-day assignment without changing storyboard shot order", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const scene = await gateway.createScene(project.id, { name: "拍摄验证" });
+  const before = (await gateway.loadProject(project.id)).shots.map((shot) => shot.id);
+  const user = userEvent.setup();
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+
+  await screen.findByDisplayValue("广告片");
+  await user.click(screen.getByRole("button", { name: "拍摄计划" }));
+  fireEvent.change(screen.getByLabelText(`设置场次 ${scene.number} 拍摄日`), { target: { value: "2026-08-13" } });
+
+  await waitFor(async () => {
+    expect((await gateway.loadProject(project.id)).scenes[0].shootDate).toBe("2026-08-13");
+  });
+  expect((await gateway.loadProject(project.id)).shots.map((shot) => shot.id)).toEqual(before);
+  expect(await screen.findByRole("heading", { name: "2026-08-13" })).toBeVisible();
 });
 
 it("saves the current project as a template without altering the project", async () => {
