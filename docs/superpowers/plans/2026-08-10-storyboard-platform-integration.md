@@ -76,3 +76,15 @@
 - [ ] Run fresh full tests and build; record exact pass counts and build result in the inventory.
 - [ ] Compare migration ledger with the target Supabase project before deploying.
 - [ ] Push and deploy only this integration branch after a human-visible summary of accepted and excluded work.
+
+### Task 6: Branch conformance audit
+
+**Files:**
+- Create: `docs/integration/2026-08-10-conformance-matrix.md`
+- Test: every source worktree with `pnpm test --run` and `pnpm build`
+
+- [x] Run the test suite and production build in each frozen source and the integration worktree; record exact outcomes.
+- [ ] Map each feature to its source commit, automated test, and integration presence.
+- [ ] Reproduce each feature gap before changing production code.
+- [ ] Write a failing regression test for every confirmed integration defect, then implement the minimal fix.
+- [ ] Re-run all tests, build, and relevant browser workflows before accepting the final merge.
