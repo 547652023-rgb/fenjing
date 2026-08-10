@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FieldSettings } from "../components/FieldSettings";
 import { ProjectHeader } from "../components/ProjectHeader";
 import { StoryboardReview } from "../components/StoryboardReview";
+import { ShootPlan } from "../components/ShootPlan";
 import {
   StoryboardTable,
   type ShotCreationOptions,
@@ -78,7 +79,7 @@ export function ProjectWorkbench({
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
   const [error, setError] = useState("");
   const [columnPresentation, setColumnPresentation] = useState<ColumnPresentation[] | null>(null);
-  const [workspaceView, setWorkspaceView] = useState<"table" | "review">("table");
+  const [workspaceView, setWorkspaceView] = useState<"table" | "review" | "shoot-plan">("table");
   const [isReadOnlyReview, setIsReadOnlyReview] = useState(false);
   const versions = useRef(new Map<string, number>());
   const serverProject = useRef<StoryboardProject | null>(null);
@@ -643,6 +644,7 @@ export function ProjectWorkbench({
         >
           故事板
         </button>
+        <button aria-pressed={workspaceView === "shoot-plan"} type="button" onClick={() => setWorkspaceView("shoot-plan")}>拍摄计划</button>
       </nav>
       {templateMessage ? (
         <p
@@ -671,7 +673,7 @@ export function ProjectWorkbench({
           canSetProjectDefaultView={role === "owner"}
           onSetProjectDefaultView={handleSetProjectDefaultView}
         />
-      ) : (
+      ) : workspaceView === "review" ? (
         <StoryboardReview
           project={project}
           onReviewStateChange={(shotId, state) => {
@@ -685,7 +687,7 @@ export function ProjectWorkbench({
             }));
           }}
         />
-      )}
+      ) : <ShootPlan project={project} onUpdateScene={updateScene} />}
       {showFieldSettings ? (
         <FieldSettings
           project={project}
