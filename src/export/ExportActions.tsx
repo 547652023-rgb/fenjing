@@ -3,6 +3,13 @@ import type { StoryboardProject } from "../domain/storyboard";
 import { exportStoryboardExcel } from "./excelExport";
 import { exportStoryboardPdf } from "./pdfExport";
 import type { ExportLogo, ExportOptions } from "./storyboardExport";
+import defaultLogoUrl from "../assets/dapaidang-logo.png";
+
+const defaultLogo: ExportLogo = {
+  name: "大拍档logo.png",
+  url: defaultLogoUrl,
+  type: "image/png",
+};
 
 type ExportActionsProps = {
   project: StoryboardProject;
@@ -52,7 +59,8 @@ export function ExportActions({
     setActive(format);
     setError("");
     try {
-      await (format === "excel" ? exportExcel(project, { logo, documentLabel }) : exportPdf(project, { logo, documentLabel }));
+      const exportOptions = { logo: logo ?? defaultLogo, documentLabel };
+      await (format === "excel" ? exportExcel(project, exportOptions) : exportPdf(project, exportOptions));
       close();
     } catch {
       setError("导出失败，请稍后重试");
@@ -83,13 +91,13 @@ export function ExportActions({
             <span>本次导出 Logo</span>
             <input aria-label="本次导出 Logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => chooseLogo(event.currentTarget.files?.[0])} />
           </label>
-          {logo ? <div className="export-dialog__logo-preview"><img src={logo.url} alt="Logo 预览" /><span>{logo.name}</span><button className="button-quiet" type="button" onClick={() => setLogo(undefined)}>移除</button></div> : null}
+          <div className="export-dialog__logo-preview"><img src={logo?.url ?? defaultLogo.url} alt="Logo 预览" /><span>{logo?.name ?? defaultLogo.name}</span>{logo ? <button className="button-quiet" type="button" onClick={() => setLogo(undefined)}>恢复默认 Logo</button> : null}</div>
           {error ? <p className="export-actions__error" role="alert">{error}</p> : null}
           <div className="export-dialog__formats">
-            <button className="export-format-option" disabled={active !== null} type="button" onClick={() => void run("excel")}>
+            <button aria-label="导出 Excel" className="export-format-option" disabled={active !== null} type="button" onClick={() => void run("excel")}>
               <span>Excel</span><strong>可编辑镜头清单</strong><small>{active === "excel" ? "正在生成文件…" : "供制片、排期与现场协作使用"}</small>
             </button>
-            <button className="export-format-option export-format-option--dark" disabled={active !== null} type="button" onClick={() => void run("pdf")}>
+            <button aria-label="导出 PDF" className="export-format-option export-format-option--dark" disabled={active !== null} type="button" onClick={() => void run("pdf")}>
               <span>PDF</span><strong>审阅用制片稿</strong><small>{active === "pdf" ? "正在生成文件…" : "供导演、客户与团队确认使用"}</small>
             </button>
           </div>

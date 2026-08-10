@@ -40,7 +40,7 @@ export function buildExportModel(project: StoryboardProject): ExportModel {
       shotId: shot.id,
       cells: fields.map((field) => {
         const value = shot.values[field.id] ?? "";
-        const maxImages = field.id === "frame" ? 5 : 1;
+        const maxImages = field.id === "frame" || field.id === "reference" ? 5 : 1;
         return {
           fieldId: field.id,
           fieldType: field.type,

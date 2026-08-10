@@ -118,6 +118,10 @@ function columnWidth(field: FieldDefinition, width: ColumnWidth): string {
   return `${Math.max(field.type === "number" ? 10 : 14, field.label.length * 2 + 4)}rem`;
 }
 
+function maxImagesFor(field: FieldDefinition): number {
+  return field.id === "frame" || field.id === "reference" ? 5 : 1;
+}
+
 export function StoryboardTable({
   project,
   onChange,
@@ -804,7 +808,7 @@ export function StoryboardTable({
                       <ImageCell
                         images={parseRemoteImages(shot.values[field.id] ?? "")}
                         label={`${field.label}-${shot.id}`}
-                        maxImages={field.id === "frame" ? 5 : 1}
+                        maxImages={maxImagesFor(field)}
                         onUpload={(files) =>
                           imageActions.upload(
                             shot.id,
@@ -825,7 +829,7 @@ export function StoryboardTable({
                     ) : field.type === "image" ? (
                       <ImageCell
                         label={`${field.label}-${shot.id}`}
-                        maxImages={field.id === "frame" ? 5 : 1}
+                        maxImages={maxImagesFor(field)}
                         value={shot.values[field.id] ?? ""}
                         onChange={(value) =>
                           onChange((latestProject) =>

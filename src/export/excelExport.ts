@@ -27,12 +27,14 @@ type EmbeddedImage = LoadedImage & {
 type CellAnchor = {
   column: number;
   row: number;
+  heightEmu: number;
   images: EmbeddedImage[];
 };
 
 const encoder = new TextEncoder();
 const CELL_WIDTH_EMU = 2_181_225;
-const ROW_HEIGHT_EMU = 1_270_000;
+const POINT_TO_EMU = 12_700;
+const HEADER_ROWS = 4;
 
 function spreadsheetText(value: string): string {
   return value
@@ -176,7 +178,7 @@ function rootRelationshipsXml(): string {
 
 function workbookXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="分镜表" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="分镜表" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">'分镜表'!$1:$4</definedName></definedNames></workbook>`;
 }
 
 function workbookRelationshipsXml(): string {
@@ -186,22 +188,22 @@ function workbookRelationshipsXml(): string {
 
 function stylesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF70AD47"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="4"><font><sz val="10"/><name val="Microsoft YaHei"/><family val="2"/></font><font><b/><sz val="18"/><name val="Microsoft YaHei"/><family val="2"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="10"/><name val="Microsoft YaHei"/><family val="2"/></font><font><sz val="10"/><name val="Microsoft YaHei"/><family val="2"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF000000"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FF8C8C8C"/></left><right style="thin"><color rgb="FF8C8C8C"/></right><top style="thin"><color rgb="FF8C8C8C"/></top><bottom style="thin"><color rgb="FF8C8C8C"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
 }
 
 function worksheetXml(model: ExportModel, failedCells: Set<string>, hasLogo: boolean): string {
   const lastColumn = columnName(Math.max(0, model.fields.length - 1));
-  const metadataRows = 3;
+  const metadataRows = HEADER_ROWS - 1;
   const lastRow = Math.max(metadataRows + 1, model.rows.length + metadataRows + 1);
   const columns = model.fields.map((field, index) =>
     `<col min="${index + 1}" max="${index + 1}" width="${field.type === "image" ? 32 : 18}" customWidth="1"/>`,
   ).join("");
   const header = model.fields.map((field, index) => inlineCell(index, metadataRows + 1, field.label, 1)).join("");
   const metadata = [
-    inlineCell(0, 1, `项目名称：${model.title}`),
-    inlineCell(0, 2, `画幅比例：${model.aspectRatio}`),
-    inlineCell(0, 3, `镜头总数：${model.shotCount}`),
-  ].join("");
+    inlineCell(0, 1, `项目名称：${model.title}`, 2),
+    inlineCell(0, 2, `画幅比例：${model.aspectRatio}`, 0),
+    inlineCell(0, 3, `镜头总数：${model.shotCount}`, 0),
+  ];
   const rows = model.rows.map((row, rowIndex) => {
     const excelRow = rowIndex + metadataRows + 2;
     const hasImageCell = row.cells.some((cell) => cell.fieldType === "image");
@@ -210,16 +212,16 @@ function worksheetXml(model: ExportModel, failedCells: Set<string>, hasLogo: boo
       const cell = row.cells.find((candidate) => candidate.fieldId === field.id);
       if (field.type === "image") {
         const failed = failedCells.has(`${rowIndex}:${columnIndex}`);
-        return inlineCell(columnIndex, excelRow, failed ? "图片加载失败" : "");
+        return inlineCell(columnIndex, excelRow, failed ? "图片加载失败" : "", 3);
       }
-      return inlineCell(columnIndex, excelRow, cell?.text ?? "");
+      return inlineCell(columnIndex, excelRow, cell?.text ?? "", 3);
     }).join("");
     const height = hasImageCell ? ` ht="${Math.min(400, imageCount * 80)}" customHeight="1"` : "";
     return `<row r="${excelRow}"${height}>${cells}</row>`;
   }).join("");
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:${lastColumn}${lastRow}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A5" sqref="A5"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>${columns}</cols><sheetData>${metadata}<row r="4">${header}</row>${rows}</sheetData><pageMargins left="0.3" right="0.3" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup orientation="landscape"/><drawing r:id="rId1"/>${hasLogo ? '<headerFooter><oddHeader>&amp;R&amp;G</oddHeader></headerFooter><legacyDrawingHF r:id="rId2"/>' : ""}</worksheet>`;
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:${lastColumn}${lastRow}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A5" sqref="A5"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>${columns}</cols><sheetData><row r="1" ht="30" customHeight="1">${metadata[0]}</row><row r="2">${metadata[1]}</row><row r="3">${metadata[2]}</row><row r="4" ht="34" customHeight="1">${header}</row>${rows}</sheetData><pageMargins left="0.3" right="0.3" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup orientation="landscape" paperSize="9" fitToWidth="1" fitToHeight="0"/><drawing r:id="rId1"/>${hasLogo ? '<headerFooter><oddHeader>&amp;R&amp;G</oddHeader></headerFooter><legacyDrawingHF r:id="rId2"/>' : ""}</worksheet>`;
 }
 
 function worksheetRelationshipsXml(hasLogo: boolean): string {
@@ -239,8 +241,8 @@ function drawingXml(anchors: CellAnchor[]): string {
   let imageNumber = 0;
   const drawings = anchors.flatMap((anchor) => anchor.images.map((image, slot) => {
     imageNumber += 1;
-    const start = Math.floor(ROW_HEIGHT_EMU * slot / anchor.images.length);
-    const end = Math.floor(ROW_HEIGHT_EMU * (slot + 1) / anchor.images.length);
+    const start = Math.floor(anchor.heightEmu * slot / anchor.images.length);
+    const end = Math.floor(anchor.heightEmu * (slot + 1) / anchor.images.length);
     return `<xdr:twoCellAnchor editAs="oneCell"><xdr:from><xdr:col>${anchor.column}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${anchor.row}</xdr:row><xdr:rowOff>${start}</xdr:rowOff></xdr:from><xdr:to><xdr:col>${anchor.column + 1}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${anchor.row}</xdr:row><xdr:rowOff>${end}</xdr:rowOff></xdr:to><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${imageNumber}" name="Image ${imageNumber}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="${image.relationshipId}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>`;
   })).join("");
 
@@ -296,7 +298,8 @@ export async function buildXlsxPackage(
         cellImages.push(embedded);
       }
       if (cellImages.length > 0) {
-        anchors.push({ column: columnIndex, row: rowIndex + 4, images: cellImages });
+        const imageCount = Math.max(1, cellImages.length);
+        anchors.push({ column: columnIndex, row: rowIndex + 4, heightEmu: Math.min(400, imageCount * 80) * POINT_TO_EMU, images: cellImages });
       }
     }
   }

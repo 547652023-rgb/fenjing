@@ -193,11 +193,11 @@ it("wires seeded image fields to shot updates", async () => {
   expect(screen.getByLabelText("参考-1")).toHaveAttribute("accept", "image/*");
 });
 
-it("allows five frame images while reference remains single image", () => {
+it("allows five images in both frame and reference columns", () => {
   render(<StoryboardTable project={createProject()} onChange={vi.fn()} />);
 
   expect(screen.getByLabelText("画面-1")).toHaveAttribute("multiple");
-  expect(screen.getByLabelText("参考-1")).not.toHaveAttribute("multiple");
+  expect(screen.getByLabelText("参考-1")).toHaveAttribute("multiple");
 });
 
 function StoryboardHarness() {

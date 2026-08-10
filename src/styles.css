@@ -1474,22 +1474,24 @@ button:disabled {
 }
 
 .storyboard-table td.image-table-cell {
-  min-height: 160px;
+  min-height: 0;
+  vertical-align: top;
 }
 
 .image-cell {
   position: relative;
   width: 100%;
-  height: 100%;
   overflow: hidden;
 }
 
+.image-cell--single,
 .image-cell--multiple {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 0.5rem;
   padding: 0.75rem;
+  min-height: 0;
   overflow: visible;
 }
 
@@ -1521,7 +1523,6 @@ button:disabled {
   width: 100%;
   max-width: 16rem;
   aspect-ratio: 16 / 9;
-  min-height: 0;
   border: 1px solid #cad8ce;
   border-radius: 0.5rem;
 }
@@ -1558,9 +1559,9 @@ button:disabled {
 }
 
 .image-cell--multiple .image-cell__upload {
-  flex: 0 0 6rem;
+  flex: 0 0 5rem;
   width: 100%;
-  height: 6rem;
+  height: 5rem;
   border: 1px dashed #9db5a5;
   border-radius: 0.5rem;
 }

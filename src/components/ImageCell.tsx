@@ -1,5 +1,7 @@
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type DragEvent } from "react";
+import { GatewayError } from "../data/gateway";
 import type { RemoteImage } from "../domain/models";
+import { prepareStoryboardFrame } from "../images/prepareStoryboardImage";
 
 type SharedImageCellProps = {
   label: string;
@@ -66,6 +68,21 @@ function readImage(file: File): Promise<string> {
   });
 }
 
+function droppedImageFiles(event: DragEvent<HTMLElement>): File[] {
+  event.preventDefault();
+  event.stopPropagation();
+  return Array.from(event.dataTransfer.files ?? []);
+}
+
+function uploadErrorMessage(error: unknown): string {
+  if (!(error instanceof GatewayError)) return "上传失败，请检查网络后重试";
+  if (error.code === "forbidden") return "没有上传权限，请联系项目主管";
+  if (error.code === "not_authenticated") return "登录已失效，请重新登录后上传";
+  if (error.code === "network") return "网络连接失败，请检查网络后重试";
+  if (error.code === "upload_failed") return "图片存储拒绝上传，请联系主管检查图片存储权限";
+  return "上传失败，请重试";
+}
+
 function LocalImageCell({
   value,
   label,
@@ -104,6 +121,24 @@ function LocalImageCell({
     }
   }
 
+  async function handleDrop(event: DragEvent<HTMLElement>) {
+    const selected = droppedImageFiles(event);
+    if (selected.length === 0) return;
+    const valid = selected.filter((file) => file.type.startsWith("image/"));
+    if (valid.length !== selected.length) {
+      setError("请选择图片文件");
+      return;
+    }
+    const accepted = valid.slice(0, Math.max(0, maxImages - images.length));
+    setError(accepted.length < valid.length ? `每行最多 ${maxImages} 张图片` : "");
+    try {
+      const loaded = await Promise.all(accepted.map(readImage));
+      onChange(serializeImageValues([...images, ...loaded], maxImages));
+    } catch {
+      setError("读取图片失败");
+    }
+  }
+
   function removeImage(index: number) {
     const nextImages = images.filter((_, imageIndex) => imageIndex !== index);
     onChange(serializeImageValues(nextImages, maxImages));
@@ -119,6 +154,7 @@ function LocalImageCell({
       label={label}
       maxImages={maxImages}
       onFileChange={handleFileChange}
+      onDrop={handleDrop}
       onRemove={(index) => removeImage(index)}
     />
   );
@@ -140,21 +176,31 @@ function OnlineImageCell({
     setVisibleImages(images.slice(0, maxImages));
   }, [images, maxImages]);
 
-  async function uploadFile(file: File) {
-    setPendingNames((current) => [...current, file.name]);
+  async function uploadFiles(files: File[]) {
+    setPendingNames((current) => [...current, ...files.map((file) => file.name)]);
     setError("");
     try {
-      const uploaded = await onUpload([file]);
+      const uploaded = await onUpload(files);
       setVisibleImages((current) => [...current, ...uploaded].slice(0, maxImages));
-      setFailedFiles((current) => current.filter((candidate) => candidate !== file));
-    } catch {
-      setError("上传失败");
       setFailedFiles((current) =>
-        current.includes(file) ? current : [...current, file],
+        current.filter((candidate) => !files.includes(candidate)),
+      );
+    } catch (error) {
+      setError(uploadErrorMessage(error));
+      setFailedFiles((current) =>
+        [...current, ...files].filter(
+          (candidate, index, all) => all.indexOf(candidate) === index,
+        ),
       );
     } finally {
-      setPendingNames((current) => current.filter((name) => name !== file.name));
+      setPendingNames((current) =>
+        current.filter((name) => !files.some((file) => file.name === name)),
+      );
     }
+  }
+
+  async function uploadFile(file: File) {
+    await uploadFiles([file]);
   }
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -175,7 +221,28 @@ function OnlineImageCell({
     if (accepted.length < selected.length) {
       setError(`每行最多 ${maxImages} 张图片`);
     }
-    await Promise.all(accepted.map(uploadFile));
+    const prepared = await Promise.all(
+      accepted.map((file) => maxImages > 1 ? prepareStoryboardFrame(file) : file),
+    );
+    await uploadFiles(prepared);
+  }
+
+  async function handleDrop(event: DragEvent<HTMLElement>) {
+    const selected = droppedImageFiles(event);
+    if (selected.length === 0) return;
+    if (selected.some((file) => !file.type.startsWith("image/"))) {
+      setError("请选择图片文件");
+      return;
+    }
+    const remaining = Math.max(0, maxImages - visibleImages.length - pendingNames.length);
+    const accepted = selected.slice(0, remaining);
+    if (accepted.length < selected.length) {
+      setError(`每行最多 ${maxImages} 张图片`);
+    }
+    const prepared = await Promise.all(
+      accepted.map((file) => maxImages > 1 ? prepareStoryboardFrame(file) : file),
+    );
+    await uploadFiles(prepared);
   }
 
   async function removeImage(index: number) {
@@ -196,6 +263,7 @@ function OnlineImageCell({
       label={label}
       maxImages={maxImages}
       onFileChange={handleFileChange}
+      onDrop={handleDrop}
       onRemove={removeImage}
       pendingNames={pendingNames}
       retryFiles={failedFiles}
@@ -210,6 +278,7 @@ type ImageCellLayoutProps = {
   label: string;
   maxImages: number;
   onFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onDrop: (event: DragEvent<HTMLElement>) => void;
   onRemove: (index: number) => void;
   onRetry?: (file: File) => void;
   pendingNames?: string[];
@@ -222,6 +291,7 @@ function ImageCellLayout({
   label,
   maxImages,
   onFileChange,
+  onDrop,
   onRemove,
   onRetry,
   pendingNames = [],
@@ -233,6 +303,9 @@ function ImageCellLayout({
       className={`image-cell ${
         maxImages > 1 ? "image-cell--multiple" : "image-cell--single"
       }`}
+      data-testid="image-cell"
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={onDrop}
     >
       {images.length > 0 ? (
         <div
@@ -242,7 +315,10 @@ function ImageCellLayout({
           {images.map((image, index) => {
             const imageLabel = `${label}-图片${index + 1}`;
             return (
-              <div className="image-cell__item" key={image.key}>
+              <div
+                className={`image-cell__item ${maxImages > 1 ? "image-cell__item--frame image-cell__item--thumbnail" : ""}`}
+                key={image.key}
+              >
                 <img alt={imageLabel} className="image-cell__preview" src={image.url} />
                 <button
                   aria-label={`移除${imageLabel}`}
@@ -275,7 +351,11 @@ function ImageCellLayout({
       ))}
 
       {occupiedCount < maxImages ? (
-        <label className="image-cell__upload">
+        <label
+          className="image-cell__upload"
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={onDrop}
+        >
           <span>选择图片</span>
           <input
             aria-label={label}
