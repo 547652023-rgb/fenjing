@@ -32,10 +32,10 @@ it("keeps storyboard frame and reference previews in a 16:9 box without stretchi
 
 it("packs multiple storyboard images into a compact grid aligned to the top of the row", () => {
   expect(styles).toMatch(
-    /\.image-cell--multiple \.image-cell__previews\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s,
+    /\.image-cell--multiple \.image-cell__previews\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*16rem\)\)/s,
   );
   expect(styles).toMatch(
-    /\.image-cell--multiple \.image-cell__item\s*\{[^}]*max-width:\s*none/s,
+    /\.image-cell--multiple \.image-cell__item\s*\{[^}]*max-width:\s*16rem/s,
   );
   expect(styles).toMatch(/\.storyboard-table td\s*\{[^}]*vertical-align:\s*top/s);
 });
