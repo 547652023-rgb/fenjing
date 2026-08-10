@@ -1507,6 +1507,12 @@ button:disabled {
   flex-direction: column;
 }
 
+.image-cell--multiple .image-cell__previews {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
 .image-cell__item {
   position: relative;
   overflow: hidden;
@@ -1521,10 +1527,14 @@ button:disabled {
 
 .image-cell--multiple .image-cell__item {
   width: 100%;
-  max-width: 16rem;
+  max-width: none;
   aspect-ratio: 16 / 9;
   border: 1px solid #cad8ce;
   border-radius: 0.5rem;
+}
+
+.storyboard-table td {
+  vertical-align: top;
 }
 
 .image-cell__preview {
