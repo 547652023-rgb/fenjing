@@ -57,6 +57,11 @@ it("builds a workbook with inline text and embedded images", async () => {
   expect(files.has("xl/media/image2.png")).toBe(true);
   expect(new TextDecoder().decode(files.get("xl/drawings/drawing1.xml")))
     .toContain("xdr:twoCellAnchor");
+  expect(new TextDecoder().decode(files.get("xl/workbook.xml")))
+    .toContain("_xlnm.Print_Titles");
+  expect(sheet).toContain('fitToWidth="1"');
+  expect(new TextDecoder().decode(files.get("xl/styles.xml")))
+    .toContain('fgColor rgb="FF000000"');
 });
 
 it("keeps the workbook usable when an image fails to load", async () => {
