@@ -1509,7 +1509,7 @@ button:disabled {
 
 .image-cell--multiple .image-cell__previews {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 16rem));
+  grid-template-columns: minmax(0, 16rem);
   align-items: start;
 }
 
