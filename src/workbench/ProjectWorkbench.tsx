@@ -3,6 +3,7 @@ import { FieldSettings } from "../components/FieldSettings";
 import { ProjectHeader } from "../components/ProjectHeader";
 import { StoryboardReview } from "../components/StoryboardReview";
 import { ShootPlan } from "../components/ShootPlan";
+import { CallSheet } from "../components/CallSheet";
 import {
   StoryboardTable,
   type ShotCreationOptions,
@@ -79,7 +80,7 @@ export function ProjectWorkbench({
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
   const [error, setError] = useState("");
   const [columnPresentation, setColumnPresentation] = useState<ColumnPresentation[] | null>(null);
-  const [workspaceView, setWorkspaceView] = useState<"table" | "review" | "shoot-plan">("table");
+  const [workspaceView, setWorkspaceView] = useState<"table" | "review" | "shoot-plan" | "call-sheet">("table");
   const [isReadOnlyReview, setIsReadOnlyReview] = useState(false);
   const versions = useRef(new Map<string, number>());
   const serverProject = useRef<StoryboardProject | null>(null);
@@ -649,6 +650,7 @@ export function ProjectWorkbench({
           故事板
         </button>
         <button aria-pressed={workspaceView === "shoot-plan"} type="button" onClick={() => setWorkspaceView("shoot-plan")}>拍摄计划</button>
+        <button aria-pressed={workspaceView === "call-sheet"} type="button" onClick={() => setWorkspaceView("call-sheet")}>拍摄通告</button>
       </nav>
       {templateMessage ? (
         <p
@@ -691,7 +693,7 @@ export function ProjectWorkbench({
             }));
           }}
         />
-      ) : <ShootPlan project={project} onUpdateScene={updateScene} />}
+      ) : workspaceView === "shoot-plan" ? <ShootPlan project={project} onUpdateScene={updateScene} /> : <CallSheet project={project} />}
       {showFieldSettings ? (
         <FieldSettings
           project={project}
