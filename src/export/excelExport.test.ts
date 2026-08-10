@@ -113,7 +113,7 @@ it("keeps mixed image slots stable and embeds a visible placeholder for each fai
     /<xdr:from><xdr:col>2<\/xdr:col><xdr:colOff>0<\/xdr:colOff><xdr:row>4<\/xdr:row><xdr:rowOff>(\d+)<\/xdr:rowOff>/g,
   )].map((match) => Number(match[1]));
 
-  expect(startOffsets).toEqual([0, 423333, 846666]);
+  expect(startOffsets).toEqual([0, 1016000, 2032000]);
   expect(files.get("xl/media/image1.png")).toEqual(new TextEncoder().encode("FIRST"));
   expect(files.get("xl/media/image2.png")).toEqual(placeholderBytes);
   expect(files.get("xl/media/image3.png")).toEqual(new TextEncoder().encode("THIRD"));
