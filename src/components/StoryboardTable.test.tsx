@@ -198,6 +198,10 @@ it("allows five images in both frame and reference columns", () => {
 
   expect(screen.getByLabelText("画面-1")).toHaveAttribute("multiple");
   expect(screen.getByLabelText("参考-1")).toHaveAttribute("multiple");
+  expect(screen.getByRole("columnheader", { name: "画面" })).toHaveAttribute(
+    "style",
+    expect.stringContaining("min-width: 16rem"),
+  );
 });
 
 function StoryboardHarness() {

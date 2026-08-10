@@ -111,7 +111,7 @@ function inputTypeFor(field: FieldDefinition): "date" | "number" | "text" {
 }
 
 function columnWidth(field: FieldDefinition, width: ColumnWidth): string {
-  if (field.id === "frame") return width === "wide" ? "44rem" : width === "standard" ? "28rem" : "18rem";
+  if (field.id === "frame") return "16rem";
   if (field.type === "image") return width === "wide" ? "24rem" : width === "standard" ? "18rem" : "14rem";
   if (width === "wide") return "24rem";
   if (width === "compact") return "10rem";
