@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FieldSettings } from "../components/FieldSettings";
 import { ProjectHeader } from "../components/ProjectHeader";
+import { StoryboardReview } from "../components/StoryboardReview";
 import {
   StoryboardTable,
   type ShotCreationOptions,
@@ -77,6 +78,8 @@ export function ProjectWorkbench({
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
   const [error, setError] = useState("");
   const [columnPresentation, setColumnPresentation] = useState<ColumnPresentation[] | null>(null);
+  const [workspaceView, setWorkspaceView] = useState<"table" | "review">("table");
+  const [isReadOnlyReview, setIsReadOnlyReview] = useState(false);
   const versions = useRef(new Map<string, number>());
   const serverProject = useRef<StoryboardProject | null>(null);
   const projectRef = useRef<StoryboardProject | null>(null);
@@ -587,6 +590,21 @@ export function ProjectWorkbench({
     return <main className="centered-state" role="status">正在加载项目…</main>;
   }
 
+  if (isReadOnlyReview) {
+    return (
+      <main aria-label="只读故事板审阅" className="workbench-shell studio-shell storyboard-review-shell">
+        <header className="storyboard-review-shell__header">
+          <div>
+            <p>只读审阅</p>
+            <h1>{project.title}</h1>
+          </div>
+          <button type="button" onClick={() => setIsReadOnlyReview(false)}>退出审阅模式</button>
+        </header>
+        <StoryboardReview project={project} />
+      </main>
+    );
+  }
+
   return (
     <main className="workbench-shell studio-shell">
       <ProjectHeader
@@ -606,9 +624,26 @@ export function ProjectWorkbench({
           <button type="button" onClick={() => setShowFieldSettings(true)}>字段设置</button>
           <button type="button" onClick={() => setShowProjectSettings(true)}>项目设置</button>
           <button type="button" onClick={() => { setTemplateMessage(""); setShowSaveTemplate(true); }}>保存为模板</button>
+          <button type="button" onClick={() => setIsReadOnlyReview(true)}>进入审阅模式</button>
         </div>
         <div className="workbench-actions__group workbench-actions__group--delivery"><ExportActions project={project} /></div>
       </div>
+      <nav aria-label="工作台视图" className="workspace-view-switcher">
+        <button
+          aria-pressed={workspaceView === "table"}
+          type="button"
+          onClick={() => setWorkspaceView("table")}
+        >
+          工作台
+        </button>
+        <button
+          aria-pressed={workspaceView === "review"}
+          type="button"
+          onClick={() => setWorkspaceView("review")}
+        >
+          故事板
+        </button>
+      </nav>
       {templateMessage ? (
         <p
           aria-label="模板保存状态"
@@ -618,23 +653,39 @@ export function ProjectWorkbench({
           {templateMessage}
         </p>
       ) : null}
-      <StoryboardTable
-        imageActions={imageActions}
-        onBatchCopy={copySelectedShots}
-        onBatchDelete={deleteSelectedShots}
-        onBatchUpdate={updateSelectedShots}
-        onAssignShotsToScene={assignShotsToScene}
-        onCreateScene={createScene}
-        onCreateShots={createShots}
-        onDeleteScene={deleteScene}
-        onUpdateScene={updateScene}
-        project={project}
-        onChange={updateProject}
-        columnPresentation={columnPresentation ?? undefined}
-        onColumnPresentationChange={handleColumnPresentationChange}
-        canSetProjectDefaultView={role === "owner"}
-        onSetProjectDefaultView={handleSetProjectDefaultView}
-      />
+      {workspaceView === "table" ? (
+        <StoryboardTable
+          imageActions={imageActions}
+          onBatchCopy={copySelectedShots}
+          onBatchDelete={deleteSelectedShots}
+          onBatchUpdate={updateSelectedShots}
+          onAssignShotsToScene={assignShotsToScene}
+          onCreateScene={createScene}
+          onCreateShots={createShots}
+          onDeleteScene={deleteScene}
+          onUpdateScene={updateScene}
+          project={project}
+          onChange={updateProject}
+          columnPresentation={columnPresentation ?? undefined}
+          onColumnPresentationChange={handleColumnPresentationChange}
+          canSetProjectDefaultView={role === "owner"}
+          onSetProjectDefaultView={handleSetProjectDefaultView}
+        />
+      ) : (
+        <StoryboardReview
+          project={project}
+          onReviewStateChange={(shotId, state) => {
+            updateProject((current) => ({
+              ...current,
+              shots: current.shots.map((shot) => (
+                shot.id === shotId
+                  ? { ...shot, values: { ...shot.values, productionStatus: state } }
+                  : shot
+              )),
+            }));
+          }}
+        />
+      )}
       {showFieldSettings ? (
         <FieldSettings
           project={project}

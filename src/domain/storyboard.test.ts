@@ -30,7 +30,7 @@ it("adds the standard production status field once for older projects", () => {
     id: "productionStatus",
     label: "制作状态",
     type: "singleSelect",
-    options: ["待制作", "待拍", "拍摄中", "已完成", "需修改"],
+    options: ["待制作", "待拍", "拍摄中", "已确认", "已完成", "需修改"],
   });
   expect(ensureProductionStatusField(upgraded)).toBe(upgraded);
 });
@@ -64,6 +64,7 @@ it("summarizes frame coverage, runtime, and production statuses", () => {
       "待制作": 0,
       "待拍": 1,
       "拍摄中": 0,
+      "已确认": 0,
       "已完成": 1,
       "需修改": 0,
     },

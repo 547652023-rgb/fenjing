@@ -476,3 +476,47 @@ it("restores a personal storyboard view after the workbench remounts", async () 
 
   expect(await screen.findByRole("columnheader", { name: "摄影机角度" })).toBeVisible();
 });
+
+it("switches from the workbench table to the storyboard review cards", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const user = userEvent.setup();
+  render(
+    <ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />,
+  );
+
+  await screen.findByDisplayValue("广告片");
+  await user.click(screen.getByRole("button", { name: "故事板" }));
+
+  expect(await screen.findByRole("region", { name: "故事板审阅" })).toBeVisible();
+  expect(screen.queryByRole("region", { name: "分镜表格区域" })).not.toBeInTheDocument();
+});
+
+it("saves a storyboard approval into the production status shown in the workbench", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const user = userEvent.setup();
+  render(
+    <ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />,
+  );
+
+  await screen.findByDisplayValue("广告片");
+  await user.click(screen.getByRole("button", { name: "故事板" }));
+  await user.click(screen.getByRole("button", { name: "确认镜头 1" }));
+  await user.click(screen.getByRole("button", { name: "工作台" }));
+
+  expect(await screen.findByRole("combobox", { name: "制作状态-1" })).toHaveValue("已确认");
+});
+
+it("enters a read-only storyboard review without project editing controls", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const user = userEvent.setup();
+  render(
+    <ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />,
+  );
+
+  await screen.findByDisplayValue("广告片");
+  await user.click(screen.getByRole("button", { name: "进入审阅模式" }));
+
+  expect(await screen.findByRole("main", { name: "只读故事板审阅" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "字段设置" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "确认镜头 1" })).not.toBeInTheDocument();
+});

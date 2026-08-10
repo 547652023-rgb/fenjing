@@ -75,6 +75,7 @@ export const PRODUCTION_STATUS_OPTIONS = [
   "待制作",
   "待拍",
   "拍摄中",
+  "已确认",
   "已完成",
   "需修改",
 ] as const;
