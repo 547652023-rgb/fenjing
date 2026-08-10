@@ -6,12 +6,14 @@ import type { ExportLogo, ExportOptions } from "./storyboardExport";
 
 type ExportActionsProps = {
   project: StoryboardProject;
+  documentLabel?: string;
   exportExcel?: (project: StoryboardProject, options?: ExportOptions) => Promise<void>;
   exportPdf?: (project: StoryboardProject, options?: ExportOptions) => Promise<void>;
 };
 
 export function ExportActions({
   project,
+  documentLabel,
   exportExcel = exportStoryboardExcel,
   exportPdf = exportStoryboardPdf,
 }: ExportActionsProps) {
@@ -50,7 +52,7 @@ export function ExportActions({
     setActive(format);
     setError("");
     try {
-      await (format === "excel" ? exportExcel(project, { logo }) : exportPdf(project, { logo }));
+      await (format === "excel" ? exportExcel(project, { logo, documentLabel }) : exportPdf(project, { logo, documentLabel }));
       close();
     } catch {
       setError("导出失败，请稍后重试");
@@ -73,6 +75,7 @@ export function ExportActions({
           </header>
           <dl className="export-dialog__summary">
             <div><dt>项目</dt><dd>{project.title}</dd></div>
+            {documentLabel ? <div><dt>交付版本</dt><dd>{documentLabel}</dd></div> : null}
             <div><dt>画幅</dt><dd>{project.aspectRatio || "16:9"}</dd></div>
             <div><dt>镜头</dt><dd>{project.shots.length} 个</dd></div>
           </dl>

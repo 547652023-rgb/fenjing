@@ -161,6 +161,24 @@ it("persists independent scene records alongside the project shots", async () =>
   expect(loaded.scenes).toEqual([scene]);
 });
 
+it("publishes immutable call-sheet versions in newest-first order", async () => {
+  const gateway = new FakeStoryboardGateway();
+  await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("广告片");
+  const source = { projectTitle: "广告片", scenes: [{ name: "天台" }] };
+
+  const first = await gateway.publishCallSheet(project.id, "2026-08-13", source);
+  source.scenes[0].name = "被调用方改动";
+  const second = await gateway.publishCallSheet(project.id, "2026-08-13", { projectTitle: "广告片", scenes: [] });
+
+  expect(first).toMatchObject({ versionNumber: 1, shootDate: "2026-08-13" });
+  expect(second).toMatchObject({ versionNumber: 2 });
+  await expect(gateway.listCallSheetVersions(project.id, "2026-08-13")).resolves.toEqual([
+    expect.objectContaining({ versionNumber: 2 }),
+    expect.objectContaining({ versionNumber: 1, snapshot: { projectTitle: "广告片", scenes: [{ name: "天台" }] } }),
+  ]);
+});
+
 it("keeps folders, assignments, and home settings personal", async () => {
   const gateway = new FakeStoryboardGateway();
   const owner = await gateway.signUp("owner@example.com", "password123");

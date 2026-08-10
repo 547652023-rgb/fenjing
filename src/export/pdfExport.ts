@@ -482,9 +482,10 @@ export async function exportStoryboardPdf(
   options: ExportOptions = {},
   render: PdfRenderer = (model, exportOptions) => renderPdfPages(model, {}, exportOptions),
 ): Promise<void> {
-  const pages = await render(buildExportModel(project), options);
+  const exportProject = options.documentLabel ? { ...project, title: `${project.title} · ${options.documentLabel}` } : project;
+  const pages = await render(buildExportModel(exportProject), options);
   downloadBlob(
     new Blob([new Uint8Array(encodePdfPages(pages))], { type: "application/pdf" }),
-    exportFilename(project, "pdf"),
+    exportFilename(project, "pdf", new Date(), options.documentLabel),
   );
 }

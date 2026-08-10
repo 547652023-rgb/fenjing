@@ -12,6 +12,7 @@ import {
 } from "../domain/storyboard";
 import type {
   AuthUser,
+  CallSheetVersion,
   ProjectEvent,
   ProjectEventListener,
   ProjectFolder,
@@ -86,6 +87,7 @@ export class FakeStoryboardGateway implements StoryboardGateway {
   private readonly projectDeletedAt = new Map<string, string | null>();
   private readonly permanentDeleteRequestedAt = new Map<string, string | null>();
   private readonly versions = new Map<string, number>();
+  private readonly callSheetVersions = new Map<string, CallSheetVersion[]>();
   private readonly authListeners = new Set<(user: AuthUser | null) => void>();
   private readonly platformAccounts = new Map<string, PlatformAccount>();
   private readonly projectListeners = new Map<
@@ -496,6 +498,24 @@ export class FakeStoryboardGateway implements StoryboardGateway {
     this.projectDefaultViews.set(projectId, presentation.map((column) => ({ ...column })));
     this.touchProject(projectId);
     this.emit(projectId, { type: "project.changed" });
+  }
+
+  async listCallSheetVersions(projectId: string, shootDate: string): Promise<CallSheetVersion[]> {
+    this.requireProjectMember(projectId);
+    return (this.callSheetVersions.get(`${projectId}:${shootDate}`) ?? [])
+      .slice()
+      .sort((left, right) => right.versionNumber - left.versionNumber)
+      .map((version) => ({ ...version, snapshot: structuredClone(version.snapshot) }));
+  }
+
+  async publishCallSheet(projectId: string, shootDate: string, snapshot: Record<string, unknown>): Promise<CallSheetVersion> {
+    this.requireProjectMember(projectId);
+    if (!this.currentUser) throw new GatewayError("not_authenticated");
+    const key = `${projectId}:${shootDate}`;
+    const versions = this.callSheetVersions.get(key) ?? [];
+    const version: CallSheetVersion = { id: `call-sheet-${versions.length + 1}`, projectId, shootDate, versionNumber: versions.length + 1, snapshot: structuredClone(snapshot), publishedBy: this.currentUser.id, publishedAt: new Date().toISOString() };
+    this.callSheetVersions.set(key, [...versions, version]);
+    return { ...version, snapshot: structuredClone(version.snapshot) };
   }
 
   async saveProjectMeta(

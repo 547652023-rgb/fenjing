@@ -100,6 +100,16 @@ export type SaveState =
   | "error"
   | "conflict";
 
+export type CallSheetVersion = {
+  id: string;
+  projectId: string;
+  shootDate: string;
+  versionNumber: number;
+  snapshot: Record<string, unknown>;
+  publishedBy: string;
+  publishedAt: string;
+};
+
 export type ProjectEvent =
   | { type: "project.changed" }
   | { type: "shot.updated"; shot: VersionedShot }

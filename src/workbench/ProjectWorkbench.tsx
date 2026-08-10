@@ -10,7 +10,7 @@ import {
   type StoryboardImageActions,
 } from "../components/StoryboardTable";
 import type { StoryboardGateway } from "../data/gateway";
-import type { AuthUser, RemoteImage, SaveState } from "../domain/models";
+import type { AuthUser, CallSheetVersion, RemoteImage, SaveState } from "../domain/models";
 import type { ProjectRole } from "../domain/models";
 import { ExportActions } from "../export/ExportActions";
 import { MemberManager } from "../projects/MemberManager";
@@ -81,6 +81,8 @@ export function ProjectWorkbench({
   const [error, setError] = useState("");
   const [columnPresentation, setColumnPresentation] = useState<ColumnPresentation[] | null>(null);
   const [workspaceView, setWorkspaceView] = useState<"table" | "review" | "shoot-plan" | "call-sheet">("table");
+  const [callSheetDate, setCallSheetDate] = useState("");
+  const [callSheetVersions, setCallSheetVersions] = useState<CallSheetVersion[]>([]);
   const [isReadOnlyReview, setIsReadOnlyReview] = useState(false);
   const versions = useRef(new Map<string, number>());
   const serverProject = useRef<StoryboardProject | null>(null);
@@ -135,6 +137,25 @@ export function ProjectWorkbench({
       saveTimers.current.clear();
     };
   }, [reload]);
+
+  const loadCallSheetVersions = useCallback(async (shootDate: string) => {
+    if (!shootDate) {
+      setCallSheetVersions([]);
+      return;
+    }
+    try {
+      setCallSheetVersions(await gateway.listCallSheetVersions(projectId, shootDate));
+    } catch {
+      setCallSheetVersions([]);
+    }
+  }, [gateway, projectId]);
+
+  useEffect(() => {
+    if (workspaceView !== "call-sheet" || !project) return;
+    const shootDate = callSheetDate || project.scenes.find((scene) => scene.shootDate)?.shootDate || "";
+    if (shootDate !== callSheetDate) setCallSheetDate(shootDate);
+    void loadCallSheetVersions(shootDate);
+  }, [callSheetDate, loadCallSheetVersions, project, workspaceView]);
 
   function replaceServerShot(server: StoryboardProject, shot: Shot) {
     return {
@@ -462,6 +483,17 @@ export function ProjectWorkbench({
     }
   }
 
+  async function publishCallSheet(shootDate: string, snapshot: Record<string, unknown>) {
+    setSaveStatus("saving");
+    try {
+      const published = await gateway.publishCallSheet(projectId, shootDate, snapshot);
+      setCallSheetVersions((current) => [published, ...current]);
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("error");
+    }
+  }
+
   async function assignShotsToScene(shotIds: string[], sceneId: string | null) {
     const current = projectRef.current;
     if (!current || shotIds.length === 0) return;
@@ -596,6 +628,10 @@ export function ProjectWorkbench({
     return <main className="centered-state" role="status">正在加载项目…</main>;
   }
 
+  const callSheetDeliveryLabel = workspaceView === "call-sheet" && callSheetDate && callSheetVersions[0]
+    ? `拍摄通告 · ${callSheetDate} · V${callSheetVersions[0].versionNumber}`
+    : undefined;
+
   if (isReadOnlyReview) {
     return (
       <main aria-label="只读故事板审阅" className="workbench-shell studio-shell storyboard-review-shell">
@@ -632,7 +668,7 @@ export function ProjectWorkbench({
           <button type="button" onClick={() => { setTemplateMessage(""); setShowSaveTemplate(true); }}>保存为模板</button>
           <button type="button" onClick={() => setIsReadOnlyReview(true)}>进入审阅模式</button>
         </div>
-        <div className="workbench-actions__group workbench-actions__group--delivery"><ExportActions project={project} /></div>
+        <div className="workbench-actions__group workbench-actions__group--delivery"><ExportActions project={project} documentLabel={callSheetDeliveryLabel} /></div>
       </div>
       <nav aria-label="工作台视图" className="workspace-view-switcher">
         <button
@@ -693,7 +729,7 @@ export function ProjectWorkbench({
             }));
           }}
         />
-      ) : workspaceView === "shoot-plan" ? <ShootPlan project={project} onUpdateScene={updateScene} /> : <CallSheet project={project} />}
+      ) : workspaceView === "shoot-plan" ? <ShootPlan project={project} onUpdateScene={updateScene} /> : <CallSheet project={project} versions={callSheetVersions} onPublish={publishCallSheet} onDateChange={(shootDate) => setCallSheetDate(shootDate)} />}
       {showFieldSettings ? (
         <FieldSettings
           project={project}

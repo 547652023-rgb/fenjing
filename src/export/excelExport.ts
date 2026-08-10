@@ -323,12 +323,13 @@ export async function buildXlsxPackage(
 }
 
 export async function exportStoryboardExcel(project: StoryboardProject, options: ExportOptions = {}): Promise<void> {
-  const files = await buildXlsxPackage(buildExportModel(project), undefined, createFailurePlaceholderImage, {}, options);
+  const exportProject = options.documentLabel ? { ...project, title: `${project.title} · ${options.documentLabel}` } : project;
+  const files = await buildXlsxPackage(buildExportModel(exportProject), undefined, createFailurePlaceholderImage, {}, options);
   const bytes = createZip([...files].map(([name, data]) => ({ name, data })));
   downloadBlob(
     new Blob([new Uint8Array(bytes)], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     }),
-    exportFilename(project, "xlsx"),
+    exportFilename(project, "xlsx", new Date(), options.documentLabel),
   );
 }

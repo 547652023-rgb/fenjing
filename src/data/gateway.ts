@@ -6,6 +6,7 @@ import type {
 } from "../domain/storyboard";
 import type {
   AuthUser,
+  CallSheetVersion,
   ProjectEventListener,
   ProjectFolder,
   ProjectHomeSettings,
@@ -93,6 +94,8 @@ export interface StoryboardGateway {
   loadProject(projectId: string): Promise<StoryboardProject>;
   getProjectDefaultView(projectId: string): Promise<ColumnPresentation[] | null>;
   setProjectDefaultView(projectId: string, presentation: ColumnPresentation[]): Promise<void>;
+  listCallSheetVersions(projectId: string, shootDate: string): Promise<CallSheetVersion[]>;
+  publishCallSheet(projectId: string, shootDate: string, snapshot: Record<string, unknown>): Promise<CallSheetVersion>;
   createScene(projectId: string, input: CreateSceneInput): Promise<StoryboardScene>;
   updateScene(projectId: string, scene: StoryboardScene): Promise<void>;
   deleteScene(projectId: string, sceneId: string): Promise<void>;

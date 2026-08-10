@@ -104,6 +104,26 @@ it("saves a shoot-day assignment without changing storyboard shot order", async 
   expect(await screen.findByRole("heading", { name: "2026-08-13" })).toBeVisible();
 });
 
+it("publishes a call-sheet snapshot through the active project gateway", async () => {
+  const { gateway, owner, project } = await setupProject();
+  await gateway.createScene(project.id, { name: "夜景", shootDate: "2026-08-13" });
+  const user = userEvent.setup();
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+
+  await screen.findByDisplayValue("广告片");
+  await user.click(screen.getByRole("button", { name: "拍摄通告" }));
+  await user.click(screen.getByRole("button", { name: "发布 V1" }));
+
+  await waitFor(async () => {
+    await expect(gateway.listCallSheetVersions(project.id, "2026-08-13")).resolves.toEqual([
+      expect.objectContaining({ versionNumber: 1, snapshot: expect.objectContaining({ projectTitle: "广告片" }) }),
+    ]);
+  });
+  expect(await screen.findByText("V1 · 当前版本")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "导出文件" }));
+  expect(screen.getByText("拍摄通告 · 2026-08-13 · V1")).toBeVisible();
+});
+
 it("saves the current project as a template without altering the project", async () => {
   const { gateway, owner, project } = await setupProject();
   const loaded = await gateway.loadProject(project.id);

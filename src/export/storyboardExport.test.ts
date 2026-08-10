@@ -62,3 +62,11 @@ it("uses the local calendar date rather than the UTC date in export filenames", 
   expect(exportFilename(project, "pdf", date))
     .toBe("本地日期-分镜表-2026-01-02.pdf");
 });
+
+it("includes a call-sheet date and version in delivery filenames", () => {
+  const project = createProject();
+  project.title = "夜景广告";
+
+  expect(exportFilename(project, "pdf", new Date("2026-08-10T00:00:00Z"), "拍摄通告-2026-08-13-V2"))
+    .toBe("夜景广告-拍摄通告-2026-08-13-V2-2026-08-10.pdf");
+});

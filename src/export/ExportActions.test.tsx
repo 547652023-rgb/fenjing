@@ -81,3 +81,15 @@ it("keeps settings open after an export error and clears the temporary logo when
   await user.click(screen.getByRole("button", { name: "导出文件" }));
   expect(screen.queryByText("logo.png")).not.toBeInTheDocument();
 });
+
+it("identifies a call-sheet delivery in the export dialog and exporter options", async () => {
+  const project = createProject();
+  const exportExcel = vi.fn(async () => {});
+  const user = userEvent.setup();
+  render(<ExportActions project={project} documentLabel="拍摄通告 · 2026-08-13 · V2" exportExcel={exportExcel} exportPdf={async () => {}} />);
+
+  await user.click(screen.getByRole("button", { name: "导出文件" }));
+  expect(screen.getByText("拍摄通告 · 2026-08-13 · V2")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: /可编辑镜头清单/ }));
+  expect(exportExcel).toHaveBeenCalledWith(project, expect.objectContaining({ documentLabel: "拍摄通告 · 2026-08-13 · V2" }));
+});

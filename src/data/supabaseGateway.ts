@@ -7,6 +7,7 @@ import type {
 } from "../domain/storyboard";
 import type {
   AuthUser,
+  CallSheetVersion,
   ProjectEventListener,
   ProjectFolder,
   ProjectHomeSettings,
@@ -630,6 +631,19 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
       p_default_view: presentation,
     });
     if (result.error) throw mapSupabaseError(result.error);
+  }
+
+  async listCallSheetVersions(projectId: string, shootDate: string): Promise<CallSheetVersion[]> {
+    const rows = requireData<any[]>(await this.client.from("call_sheet_versions").select("id,project_id,shoot_date,version_number,snapshot,published_by,published_at").eq("project_id", projectId).eq("shoot_date", shootDate).order("version_number", { ascending: false }));
+    return rows.map((row) => ({ id: row.id, projectId: row.project_id, shootDate: row.shoot_date, versionNumber: row.version_number, snapshot: row.snapshot, publishedBy: row.published_by, publishedAt: row.published_at }));
+  }
+
+  async publishCallSheet(projectId: string, shootDate: string, snapshot: Record<string, unknown>): Promise<CallSheetVersion> {
+    const user = await this.getSession();
+    if (!user) throw new GatewayError("not_authenticated");
+    const existing = await this.listCallSheetVersions(projectId, shootDate);
+    const rows = requireData<any[]>(await this.client.from("call_sheet_versions").insert({ project_id: projectId, shoot_date: shootDate, version_number: (existing[0]?.versionNumber ?? 0) + 1, snapshot, published_by: user.id }).select("id,project_id,shoot_date,version_number,snapshot,published_by,published_at"));
+    const row = rows[0]; return { id: row.id, projectId: row.project_id, shootDate: row.shoot_date, versionNumber: row.version_number, snapshot: row.snapshot, publishedBy: row.published_by, publishedAt: row.published_at };
   }
 
   async saveProjectMeta(projectId: string, patch: ProjectMetaPatch): Promise<void> {

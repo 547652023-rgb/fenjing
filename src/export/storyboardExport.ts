@@ -24,7 +24,7 @@ export type ExportLogo = {
   type: "image/png" | "image/jpeg" | "image/webp";
 };
 
-export type ExportOptions = { logo?: ExportLogo };
+export type ExportOptions = { logo?: ExportLogo; documentLabel?: string };
 
 export function buildExportModel(project: StoryboardProject): ExportModel {
   const fields = project.fields
@@ -56,14 +56,17 @@ export function exportFilename(
   project: Pick<StoryboardProject, "title">,
   extension: "xlsx" | "pdf",
   date = new Date(),
+  documentLabel = "分镜表",
 ): string {
-  const safeTitle = project.title.normalize("NFKC").trim()
+  const sanitize = (value: string, fallback: string) => value.normalize("NFKC").trim()
     .replace(/[\\\\/:*?"<>|]+/g, "-").replace(/-+/g, "-")
-    .replace(/^-|-$/g, "") || "未命名项目";
+    .replace(/^-|-$/g, "") || fallback;
+  const safeTitle = sanitize(project.title, "未命名项目");
+  const safeDocumentLabel = sanitize(documentLabel, "分镜表");
   const localDate = [
     String(date.getFullYear()).padStart(4, "0"),
     String(date.getMonth() + 1).padStart(2, "0"),
     String(date.getDate()).padStart(2, "0"),
   ].join("-");
-  return `${safeTitle}-分镜表-${localDate}.${extension}`;
+  return `${safeTitle}-${safeDocumentLabel}-${localDate}.${extension}`;
 }
