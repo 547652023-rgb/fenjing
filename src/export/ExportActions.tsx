@@ -3,6 +3,13 @@ import type { StoryboardProject } from "../domain/storyboard";
 import { exportStoryboardExcel } from "./excelExport";
 import { exportStoryboardPdf } from "./pdfExport";
 import type { ExportLogo, ExportOptions } from "./storyboardExport";
+import defaultLogoUrl from "../assets/dapaidang-logo.png";
+
+const defaultLogo: ExportLogo = {
+  name: "大拍档logo.png",
+  url: defaultLogoUrl,
+  type: "image/png",
+};
 
 type ExportActionsProps = {
   project: StoryboardProject;
@@ -50,7 +57,8 @@ export function ExportActions({
     setActive(format);
     setError("");
     try {
-      await (format === "excel" ? exportExcel(project, { logo }) : exportPdf(project, { logo }));
+      const exportOptions = { logo: logo ?? defaultLogo };
+      await (format === "excel" ? exportExcel(project, exportOptions) : exportPdf(project, exportOptions));
       close();
     } catch {
       setError("导出失败，请稍后重试");
@@ -68,10 +76,10 @@ export function ExportActions({
         <p>画幅比例：{project.aspectRatio || "16:9"}</p>
         <p>镜头总数：{project.shots.length}</p>
         <label>
-          本次导出 Logo
+          本次导出 Logo（默认使用大拍档 Logo，可替换）
           <input aria-label="本次导出 Logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => chooseLogo(event.currentTarget.files?.[0])} />
         </label>
-        {logo ? <div><img src={logo.url} alt="Logo 预览" /><span>{logo.name}</span><button type="button" onClick={() => setLogo(undefined)}>移除 Logo</button></div> : null}
+        <div><img src={logo?.url ?? defaultLogo.url} alt="Logo 预览" /><span>{logo?.name ?? defaultLogo.name}</span>{logo ? <button type="button" onClick={() => setLogo(undefined)}>恢复默认 Logo</button> : null}</div>
         {error ? <p className="export-actions__error" role="alert">{error}</p> : null}
         <div className="export-dialog__buttons">
           <button disabled={active !== null} type="button" onClick={() => void run("excel")}>{active === "excel" ? "正在导出 Excel…" : "导出 Excel"}</button>

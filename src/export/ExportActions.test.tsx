@@ -52,6 +52,21 @@ it("opens export settings and passes a temporary logo to the selected exporter",
   expect(await screen.findByRole("button", { name: "导出文件" })).toBeEnabled();
 });
 
+it("uses the built-in 大拍档 logo when no temporary logo is selected", async () => {
+  const project = createProject();
+  const exportExcel = vi.fn(async () => {});
+  const user = userEvent.setup();
+
+  render(<ExportActions exportExcel={exportExcel} exportPdf={async () => {}} project={project} />);
+  await user.click(screen.getByRole("button", { name: "导出文件" }));
+  expect(screen.getByText("大拍档logo.png")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "导出 Excel" }));
+
+  expect(exportExcel).toHaveBeenCalledWith(project, expect.objectContaining({
+    logo: expect.objectContaining({ name: "大拍档logo.png", type: "image/png" }),
+  }));
+});
+
 it("keeps settings open after an export error and clears the temporary logo when closed", async () => {
   const project = createProject();
   const pending = deferred<void>();
