@@ -25,4 +25,10 @@ it("keeps storyboard frame and reference previews in a 16:9 box without stretchi
   expect(styles).toMatch(
     /\.image-cell__preview\s*\{[^}]*object-fit:\s*contain/s,
   );
+  expect(styles).toMatch(
+    /\.image-cell--single \.image-cell__previews,[\s\S]*?\.image-cell--single \.image-cell__item\s*\{[^}]*max-width:\s*16rem/s,
+  );
+  expect(styles).toMatch(
+    /\.image-cell--multiple \.image-cell__item\s*\{[^}]*max-width:\s*16rem/s,
+  );
 });
