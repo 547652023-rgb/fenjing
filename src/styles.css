@@ -1513,6 +1513,10 @@ button:disabled {
   align-items: start;
 }
 
+.image-cell--multiple {
+  padding: 0;
+}
+
 .image-cell__item {
   position: relative;
   overflow: hidden;

@@ -37,5 +37,6 @@ it("stacks multiple storyboard images in one capped-width column aligned to the 
   expect(styles).toMatch(
     /\.image-cell--multiple \.image-cell__item\s*\{[^}]*max-width:\s*16rem/s,
   );
+  expect(styles).toMatch(/\.image-cell--multiple\s*\{[^}]*padding:\s*0(?:;|\s)/s);
   expect(styles).toMatch(/\.storyboard-table td\s*\{[^}]*vertical-align:\s*top/s);
 });
