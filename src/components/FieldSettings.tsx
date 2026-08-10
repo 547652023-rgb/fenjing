@@ -24,17 +24,22 @@ const CUSTOM_FIELD_TYPES: CustomFieldType[] = [
 ];
 
 export function FieldSettings({ project, onChange, onClose }: FieldSettingsProps) {
+  const [draft, setDraft] = useState<StoryboardProject>(() => structuredClone(project));
   const [fieldName, setFieldName] = useState("");
   const [fieldType, setFieldType] = useState<CustomFieldType>("text");
   const [error, setError] = useState("");
   const [optionDrafts, setOptionDrafts] = useState<Record<string, string>>({});
-  const orderedFields = [...project.fields].sort((left, right) => left.order - right.order);
+  const orderedFields = [...draft.fields].sort((left, right) => left.order - right.order);
+
+  function updateDraft(next: StoryboardProject) {
+    setDraft(next);
+  }
 
   function handleAddField(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const label = fieldName.trim();
     const normalizedLabel = label.normalize("NFKC").toLocaleLowerCase();
-    const duplicateName = project.fields.some(
+    const duplicateName = draft.fields.some(
       (field) => field.label.trim().normalize("NFKC").toLocaleLowerCase() === normalizedLabel,
     );
 
@@ -44,7 +49,7 @@ export function FieldSettings({ project, onChange, onClose }: FieldSettingsProps
     }
 
     try {
-      onChange(addField(project, { label, type: fieldType }));
+      updateDraft(addField(draft, { label, type: fieldType }));
       setFieldName("");
       setError("");
     } catch (addError) {
@@ -135,7 +140,7 @@ export function FieldSettings({ project, onChange, onClose }: FieldSettingsProps
               <input
                 checked={field.visible}
                 onChange={(event) =>
-                  onChange(toggleFieldVisibility(project, field.id, event.target.checked))
+                  updateDraft(toggleFieldVisibility(draft, field.id, event.target.checked))
                 }
                 type="checkbox"
               />
@@ -149,7 +154,7 @@ export function FieldSettings({ project, onChange, onClose }: FieldSettingsProps
                 aria-label={`设置${field.label}下拉选项`}
                 className="field-settings__dropdown-toggle"
                 type="button"
-                onClick={() => onChange(setFieldOptions(project, field.id, []))}
+                onClick={() => updateDraft(setFieldOptions(draft, field.id, []))}
               >
                 设为下拉
               </button>
@@ -157,14 +162,14 @@ export function FieldSettings({ project, onChange, onClose }: FieldSettingsProps
             <div className="field-settings__move">
               <button
                 disabled={index === 0}
-                onClick={() => onChange(moveField(project, field.id, index - 1))}
+                onClick={() => updateDraft(moveField(draft, field.id, index - 1))}
                 type="button"
               >
                 上移
               </button>
               <button
                 disabled={index === orderedFields.length - 1}
-                onClick={() => onChange(moveField(project, field.id, index + 1))}
+                onClick={() => updateDraft(moveField(draft, field.id, index + 1))}
                 type="button"
               >
                 下移
@@ -180,7 +185,7 @@ export function FieldSettings({ project, onChange, onClose }: FieldSettingsProps
                       onChange={(event) => {
                         const nextOptions = [...(field.options ?? [])];
                         nextOptions[optionIndex] = event.target.value;
-                        onChange(setFieldOptions(project, field.id, nextOptions));
+                        updateDraft(setFieldOptions(draft, field.id, nextOptions));
                       }}
                     />
                     <button
@@ -193,7 +198,7 @@ export function FieldSettings({ project, onChange, onClose }: FieldSettingsProps
                           nextOptions[optionIndex],
                           nextOptions[optionIndex - 1],
                         ];
-                        onChange(setFieldOptions(project, field.id, nextOptions));
+                        updateDraft(setFieldOptions(draft, field.id, nextOptions));
                       }}
                     >
                       ↑
@@ -208,7 +213,7 @@ export function FieldSettings({ project, onChange, onClose }: FieldSettingsProps
                           nextOptions[optionIndex + 1],
                           nextOptions[optionIndex],
                         ];
-                        onChange(setFieldOptions(project, field.id, nextOptions));
+                        updateDraft(setFieldOptions(draft, field.id, nextOptions));
                       }}
                     >
                       ↓
@@ -217,9 +222,9 @@ export function FieldSettings({ project, onChange, onClose }: FieldSettingsProps
                       aria-label={`删除${field.label}选项${option}`}
                       type="button"
                       onClick={() =>
-                        onChange(
+                        updateDraft(
                           setFieldOptions(
-                            project,
+                            draft,
                             field.id,
                             (field.options ?? []).filter((_, index) => index !== optionIndex),
                           ),
@@ -247,8 +252,8 @@ export function FieldSettings({ project, onChange, onClose }: FieldSettingsProps
                     disabled={!optionDrafts[field.id]?.trim()}
                     type="button"
                     onClick={() => {
-                      onChange(
-                        setFieldOptions(project, field.id, [
+                      updateDraft(
+                        setFieldOptions(draft, field.id, [
                           ...(field.options ?? []),
                           optionDrafts[field.id] ?? "",
                         ]),
@@ -263,6 +268,21 @@ export function FieldSettings({ project, onChange, onClose }: FieldSettingsProps
             ) : null}
           </div>
         ))}
+      </div>
+      <div className="field-settings__actions">
+        <button onClick={onClose} type="button">
+          取消
+        </button>
+        <button
+          className="field-settings__save"
+          onClick={() => {
+            onChange(draft);
+            onClose();
+          }}
+          type="button"
+        >
+          保存更改
+        </button>
       </div>
     </dialog>
   );

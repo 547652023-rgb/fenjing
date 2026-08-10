@@ -25,6 +25,11 @@ it("adds a person field and hides an existing field", async () => {
   await user.type(screen.getByLabelText("字段名称"), "演员");
   await user.selectOptions(typeSelect, "person");
   await user.click(screen.getByRole("button", { name: "添加字段" }));
+  expect(screen.getByText("显示-演员")).toBeVisible();
+  expect(onChange).not.toHaveBeenCalled();
+
+  await user.click(screen.getByLabelText("显示-摄影机装备"));
+  await user.click(screen.getByRole("button", { name: "保存更改" }));
 
   expect(onChange).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -33,8 +38,6 @@ it("adds a person field and hides an existing field", async () => {
       ]),
     }),
   );
-
-  await user.click(screen.getByLabelText("显示-摄影机装备"));
   expect(onChange).toHaveBeenLastCalledWith(
     expect.objectContaining({
       fields: expect.arrayContaining([
@@ -42,6 +45,38 @@ it("adds a person field and hides an existing field", async () => {
       ]),
     }),
   );
+});
+
+it("keeps field edits as a draft until saved, and cancels without changing the project", async () => {
+  const user = userEvent.setup();
+  const project = createProject();
+  const onChange = vi.fn();
+  const onClose = vi.fn();
+
+  const firstRender = render(<FieldSettings project={project} onChange={onChange} onClose={onClose} />);
+
+  await user.type(screen.getByLabelText("字段名称"), "服装备注");
+  await user.click(screen.getByRole("button", { name: "添加字段" }));
+
+  expect(screen.getByText("显示-服装备注")).toBeVisible();
+  expect(onChange).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole("button", { name: "取消" }));
+  expect(onChange).not.toHaveBeenCalled();
+  expect(onClose).toHaveBeenCalledOnce();
+
+  firstRender.unmount();
+  render(<FieldSettings project={project} onChange={onChange} onClose={onClose} />);
+  await user.type(screen.getByLabelText("字段名称"), "服装备注");
+  await user.click(screen.getByRole("button", { name: "添加字段" }));
+  await user.click(screen.getByRole("button", { name: "保存更改" }));
+
+  expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+    fields: expect.arrayContaining([
+      expect.objectContaining({ id: "服装备注", label: "服装备注", type: "text" }),
+    ]),
+  }));
+  expect(onClose).toHaveBeenCalledTimes(2);
 });
 
 it("reorders fields and disables unavailable moves", async () => {
@@ -59,6 +94,7 @@ it("reorders fields and disables unavailable moves", async () => {
   expect(within(lastField).getByRole("button", { name: "下移" })).toBeDisabled();
 
   await user.click(within(secondField).getByRole("button", { name: "上移" }));
+  await user.click(screen.getByRole("button", { name: "保存更改" }));
   expect(onChange).toHaveBeenCalledWith(
     expect.objectContaining({
       fields: expect.arrayContaining([

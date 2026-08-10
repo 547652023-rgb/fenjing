@@ -218,6 +218,7 @@ it("persists a title edit and project-specific notes options", async () => {
   await user.click(screen.getByRole("button", { name: "添加备注选项" }));
 
   expect(await screen.findByDisplayValue("补拍")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "保存更改" }));
   expect(await gateway.loadProject(project.id)).toMatchObject({
     title: "新版广告片",
     fields: expect.arrayContaining([

@@ -1859,6 +1859,28 @@ button:disabled {
   padding: 0 1.25rem 1.25rem;
 }
 
+.field-settings__actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid #dfe6df;
+  background: #fff;
+  box-shadow: 0 -10px 24px rgb(38 31 22 / 7%);
+}
+
+.field-settings__actions button {
+  min-width: 5.5rem;
+}
+
+.field-settings__save {
+  border-color: var(--copper-bright);
+  color: var(--ink);
+  background: var(--copper-bright);
+}
+
 .field-settings__row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 100px auto auto;
