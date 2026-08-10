@@ -178,21 +178,38 @@ export function createProject(): StoryboardProject {
 
 export function ensureProductionStatusField(project: StoryboardProject): StoryboardProject {
   const statusField = project.fields.find((field) => field.id === "productionStatus");
-  if (statusField) {
-    const includesAllStandardStatuses = PRODUCTION_STATUS_OPTIONS.every((status) => statusField.options?.includes(status));
-    if (includesAllStandardStatuses) return project;
-    return {
-      ...project,
-      fields: project.fields.map((field) => field.id === "productionStatus" ? {
+  const shotSizeField = project.fields.find((field) => field.id === "shotSize");
+  const hasStandardStatuses = statusField && PRODUCTION_STATUS_OPTIONS.every(
+    (status) => statusField.options?.includes(status),
+  );
+  const hasStandardShotSizes =
+    shotSizeField?.type === "singleSelect" &&
+    shotSizeField.allowCustomValue === false &&
+    SHOT_SIZE_OPTIONS.every((option) => shotSizeField.options?.includes(option));
+
+  if (hasStandardStatuses && hasStandardShotSizes) return project;
+
+  const fields = project.fields.map((field) => {
+    if (field.id === "productionStatus" && !hasStandardStatuses) {
+      return { ...field, options: [...PRODUCTION_STATUS_OPTIONS] };
+    }
+    if (field.id === "shotSize" && !hasStandardShotSizes) {
+      return {
         ...field,
-        options: [...PRODUCTION_STATUS_OPTIONS],
-      } : field),
-    };
-  }
+        type: "singleSelect" as const,
+        options: [...SHOT_SIZE_OPTIONS],
+        allowCustomValue: false,
+      };
+    }
+    return field;
+  });
+
+  if (statusField) return { ...project, fields };
+
   return {
     ...project,
     fields: [
-      ...copyFields(project.fields),
+      ...copyFields(fields),
       {
         id: "productionStatus",
         label: "制作状态",

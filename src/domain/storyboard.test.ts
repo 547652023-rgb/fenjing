@@ -183,6 +183,30 @@ it("seeds the six restricted shot-size options", () => {
   });
 });
 
+it("repairs a legacy shot-size field without changing other project fields", () => {
+  const project = createProject();
+  const legacyProject = {
+    ...project,
+    fields: project.fields.map((field) => field.id === "shotSize" ? {
+      ...field,
+      type: "text" as const,
+      options: [],
+      allowCustomValue: true,
+    } : field),
+  };
+
+  const upgraded = ensureProductionStatusField(legacyProject);
+
+  expect(upgraded.fields.find((field) => field.id === "shotSize")).toMatchObject({
+    type: "singleSelect",
+    options: [...SHOT_SIZE_OPTIONS],
+    allowCustomValue: false,
+  });
+  expect(upgraded.fields.find((field) => field.id === "content")).toEqual(
+    legacyProject.fields.find((field) => field.id === "content"),
+  );
+});
+
 it("moves, deletes, and continuously renumbers shots", () => {
   const project = addShot(addShot(createProject()));
 
