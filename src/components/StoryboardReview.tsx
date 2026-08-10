@@ -9,13 +9,28 @@ type StoryboardReviewProps = {
 
 export function StoryboardReview({ project, onReviewStateChange }: StoryboardReviewProps) {
   const [activeShotId, setActiveShotId] = useState<string | null>(null);
-  const activeShot = project.shots.find((shot) => shot.id === activeShotId) ?? null;
+  const reviewableShots = project.shots.filter((shot) => readFrames(shot.values.frame).length > 0);
+  const activeShot = reviewableShots.find((shot) => shot.id === activeShotId) ?? null;
   const activeFrame = activeShot ? readFrames(activeShot.values.frame)[0] : null;
-  const activeShotIndex = activeShot ? project.shots.findIndex((shot) => shot.id === activeShot.id) : -1;
+  const activeShotIndex = activeShot ? reviewableShots.findIndex((shot) => shot.id === activeShot.id) : -1;
+  const sceneGroups = [
+    ...project.scenes.map((scene) => ({
+      id: scene.id,
+      label: `场次 ${scene.number || "未编号"} · ${scene.name || "未命名场景"}`,
+      shots: project.shots.filter((shot) => shot.sceneId === scene.id),
+    })).filter((group) => group.shots.length > 0),
+    {
+      id: "ungrouped",
+      label: "未分组镜头",
+      shots: project.shots.filter((shot) => !shot.sceneId || !project.scenes.some((scene) => scene.id === shot.sceneId)),
+    },
+  ].filter((group) => group.shots.length > 0);
 
   return (
     <section aria-label="故事板审阅" className="storyboard-review">
-      {project.shots.map((shot) => {
+      {sceneGroups.flatMap((group) => [
+        <h2 className="storyboard-review__scene-heading" key={`${group.id}-heading`}>{group.label}</h2>,
+        ...group.shots.map((shot) => {
         const values = shot.values;
         const shotNumber = values.shotNumber || "未编号";
         const frame = readFrames(values.frame)[0];
@@ -49,7 +64,8 @@ export function StoryboardReview({ project, onReviewStateChange }: StoryboardRev
             ) : null}
           </article>
         );
-      })}
+      }),
+      ])}
       {activeShot && activeFrame ? (
         <div aria-label={`镜头 ${activeShot.values.shotNumber || "未编号"} 画面审阅`} className="storyboard-review__lightbox" role="dialog">
           <button aria-label="关闭画面审阅" type="button" onClick={() => setActiveShotId(null)}>关闭</button>
@@ -57,15 +73,15 @@ export function StoryboardReview({ project, onReviewStateChange }: StoryboardRev
             aria-label="上一镜头"
             disabled={activeShotIndex <= 0}
             type="button"
-            onClick={() => setActiveShotId(project.shots[activeShotIndex - 1]?.id ?? null)}
+            onClick={() => setActiveShotId(reviewableShots[activeShotIndex - 1]?.id ?? null)}
           >
             上一镜头
           </button>
           <button
             aria-label="下一镜头"
-            disabled={activeShotIndex >= project.shots.length - 1}
+            disabled={activeShotIndex >= reviewableShots.length - 1}
             type="button"
-            onClick={() => setActiveShotId(project.shots[activeShotIndex + 1]?.id ?? null)}
+            onClick={() => setActiveShotId(reviewableShots[activeShotIndex + 1]?.id ?? null)}
           >
             下一镜头
           </button>

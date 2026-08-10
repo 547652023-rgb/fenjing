@@ -175,7 +175,18 @@ export function createProject(): StoryboardProject {
 }
 
 export function ensureProductionStatusField(project: StoryboardProject): StoryboardProject {
-  if (project.fields.some((field) => field.id === "productionStatus")) return project;
+  const statusField = project.fields.find((field) => field.id === "productionStatus");
+  if (statusField) {
+    const includesAllStandardStatuses = PRODUCTION_STATUS_OPTIONS.every((status) => statusField.options?.includes(status));
+    if (includesAllStandardStatuses) return project;
+    return {
+      ...project,
+      fields: project.fields.map((field) => field.id === "productionStatus" ? {
+        ...field,
+        options: [...PRODUCTION_STATUS_OPTIONS],
+      } : field),
+    };
+  }
   return {
     ...project,
     fields: [

@@ -35,6 +35,24 @@ it("adds the standard production status field once for older projects", () => {
   expect(ensureProductionStatusField(upgraded)).toBe(upgraded);
 });
 
+it("upgrades legacy production status choices without removing existing project fields", () => {
+  const project = createProject();
+  const legacyProject = {
+    ...project,
+    fields: project.fields.map((field) => field.id === "productionStatus" ? {
+      ...field,
+      options: ["待制作", "待拍", "拍摄中", "已完成", "需修改"],
+    } : field),
+  };
+
+  const upgraded = ensureProductionStatusField(legacyProject);
+
+  expect(upgraded).not.toBe(legacyProject);
+  expect(upgraded.fields.find((field) => field.id === "productionStatus")?.options).toEqual([
+    "待制作", "待拍", "拍摄中", "已确认", "已完成", "需修改",
+  ]);
+});
+
 it("summarizes frame coverage, runtime, and production statuses", () => {
   const project = addShot(createProject());
   project.scenes = [

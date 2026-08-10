@@ -85,6 +85,27 @@ it("moves the lightbox to the next storyboard frame", async () => {
   expect(screen.getByRole("dialog", { name: "镜头 2 画面审阅" })).toBeVisible();
 });
 
+it("groups cards by scene and skips shots without frames during lightbox navigation", async () => {
+  const project = createProject();
+  project.scenes = [
+    { id: "scene-1", number: "01", name: "酒馆内景", intExt: "INT", dayNight: "NIGHT", targetDurationSeconds: "", shootDate: "", notes: "", collapsed: false },
+  ];
+  project.shots = [
+    { id: "1", sceneId: "scene-1", values: { shotNumber: "1", frame: JSON.stringify([{ path: "1.png", url: "https://example.com/1.png", name: "1.png", position: 0 }]) } },
+    { id: "2", sceneId: "scene-1", values: { shotNumber: "2" } },
+    { id: "3", values: { shotNumber: "3", frame: JSON.stringify([{ path: "3.png", url: "https://example.com/3.png", name: "3.png", position: 0 }]) } },
+  ];
+  const user = userEvent.setup();
+
+  render(<StoryboardReview project={project} />);
+  expect(screen.getByRole("heading", { name: "场次 01 · 酒馆内景" })).toBeVisible();
+  expect(screen.getByRole("heading", { name: "未分组镜头" })).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "查看镜头 1 画面" }));
+  await user.click(screen.getByRole("button", { name: "下一镜头" }));
+
+  expect(screen.getByRole("dialog", { name: "镜头 3 画面审阅" })).toBeVisible();
+});
+
 it("reports an approved review state for the selected shot", async () => {
   const project = createProject();
   const onReviewStateChange = vi.fn();
