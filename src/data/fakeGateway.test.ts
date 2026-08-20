@@ -161,6 +161,29 @@ it("persists independent scene records alongside the project shots", async () =>
   expect(loaded.scenes).toEqual([scene]);
 });
 
+it("schedules, reorders, and releases individual shots without changing storyboard order", async () => {
+  const gateway = new FakeStoryboardGateway() as FakeStoryboardGateway & {
+    createShootDay: (projectId: string, input: { title: string; shootDate: string }) => Promise<{ id: string }>;
+    assignShotsToShootDay: (projectId: string, shotIds: string[], shootDayId: string | null) => Promise<void>;
+    reorderShootDayShots: (projectId: string, shootDayId: string, orderedShotIds: string[]) => Promise<void>;
+    deleteShootDay: (projectId: string, shootDayId: string) => Promise<void>;
+  };
+  await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("广告片");
+  const loaded = await gateway.loadProject(project.id);
+  await gateway.addShot(project.id);
+  const shootDay = await gateway.createShootDay(project.id, { title: "首日", shootDate: "2026-08-21" });
+
+  await gateway.assignShotsToShootDay(project.id, ["2", "1"], shootDay.id);
+  await gateway.reorderShootDayShots(project.id, shootDay.id, ["1", "2"]);
+  const scheduled = await gateway.loadProject(project.id);
+
+  expect(scheduled.shots.map((shot) => shot.id)).toEqual(loaded.shots.map((shot) => shot.id).concat("2"));
+  expect(scheduled.shots.filter((shot) => shot.shootDayId === shootDay.id).map((shot) => shot.id)).toEqual(["1", "2"]);
+  await gateway.deleteShootDay(project.id, shootDay.id);
+  expect((await gateway.loadProject(project.id)).shots.every((shot) => !shot.shootDayId)).toBe(true);
+});
+
 it("publishes immutable call-sheet versions in newest-first order", async () => {
   const gateway = new FakeStoryboardGateway();
   await gateway.signUp("owner@example.com", "password123");

@@ -1,6 +1,8 @@
 import type {
   CreateSceneInput,
+  CreateShootDayInput,
   Shot,
+  ShootDay,
   StoryboardProject,
   StoryboardScene,
 } from "../domain/storyboard";
@@ -96,6 +98,11 @@ export interface StoryboardGateway {
   setProjectDefaultView(projectId: string, presentation: ColumnPresentation[]): Promise<void>;
   listCallSheetVersions(projectId: string, shootDate: string): Promise<CallSheetVersion[]>;
   publishCallSheet(projectId: string, shootDate: string, snapshot: Record<string, unknown>): Promise<CallSheetVersion>;
+  createShootDay(projectId: string, input: CreateShootDayInput): Promise<ShootDay>;
+  updateShootDay(projectId: string, shootDay: ShootDay): Promise<void>;
+  deleteShootDay(projectId: string, shootDayId: string): Promise<void>;
+  assignShotsToShootDay(projectId: string, shotIds: string[], shootDayId: string | null): Promise<void>;
+  reorderShootDayShots(projectId: string, shootDayId: string, orderedShotIds: string[]): Promise<void>;
   createScene(projectId: string, input: CreateSceneInput): Promise<StoryboardScene>;
   updateScene(projectId: string, scene: StoryboardScene): Promise<void>;
   deleteScene(projectId: string, sceneId: string): Promise<void>;
