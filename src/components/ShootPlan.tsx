@@ -1,37 +1,21 @@
-import type { StoryboardProject, StoryboardScene } from "../domain/storyboard";
+import { useState } from "react";
+import type { ShootDay, Shot, StoryboardProject, StoryboardScene } from "../domain/storyboard";
 
-type ShootPlanProps = { project: StoryboardProject; onUpdateScene: (scene: StoryboardScene) => void | Promise<void> };
+type Props = { project: StoryboardProject; onUpdateScene: (scene: StoryboardScene) => void | Promise<void>; onCreateShootDay?: (input: Pick<ShootDay, "title" | "shootDate">) => void | Promise<void>; onAssignShots?: (ids: string[], shootDayId: string | null) => void | Promise<void>; onReorderShots?: (shootDayId: string, ids: string[]) => void | Promise<void> };
+const duration = (shot: Shot) => Number(shot.values.durationSeconds) || 0;
+function Card({ shot, children }: { shot: Shot; children?: React.ReactNode }) { return <article className="shoot-plan__card"><div><strong>镜头 {shot.values.shotNumber || "—"}</strong><p>{shot.values.content || "未填写内容"}</p><span>{shot.values.shotSize || "景别待定"} · {duration(shot) || "未填"} 秒 · {shot.values.productionStatus || "待制作"}</span></div>{children}</article>; }
 
-export function ShootPlan({ project, onUpdateScene }: ShootPlanProps) {
-  const groups = new Map<string, StoryboardScene[]>();
-  const sceneIds = new Set(project.scenes.map((scene) => scene.id));
-  const unassignedShots = project.shots.filter((shot) => !shot.sceneId || !sceneIds.has(shot.sceneId));
-  project.scenes.forEach((scene) => {
-    const key = scene.shootDate || "待排期";
-    groups.set(key, [...(groups.get(key) ?? []), scene]);
-  });
-  if (groups.size === 0 || unassignedShots.length > 0) groups.set("待排期", groups.get("待排期") ?? []);
-  return <section aria-label="拍摄计划" className="shoot-plan">
-    <header><p>PRODUCTION SCHEDULE</p><h2>拍摄计划</h2><span>按拍摄日排程，不改变故事板镜头顺序</span></header>
-    {[...groups.entries()].sort(([a], [b]) => a === "待排期" ? 1 : b === "待排期" ? -1 : a.localeCompare(b)).map(([date, scenes]) => (
-      <section key={date} className="shoot-plan__day" aria-label={`${date} 拍摄日`}>
-        <h3>{date}</h3>
-        {scenes.length ? scenes.map((scene) => {
-          const shots = project.shots.filter((shot) => shot.sceneId === scene.id);
-          const confirmed = shots.filter((shot) => shot.values.productionStatus === "已确认").length;
-          return <article key={scene.id} className="shoot-plan__scene">
-            <div><strong>场次 {scene.number} · {scene.name}</strong><p>{[scene.intExt, scene.dayNight, scene.notes || "未填写制作备注"].filter(Boolean).join(" · ")}</p></div>
-            <div className="shoot-plan__metrics"><span>{shots.length} 个镜头 · {scene.targetDurationSeconds || "0"} 秒</span><span>{confirmed}/{shots.length} 已确认</span></div>
-            <label>拍摄日<input aria-label={`设置场次 ${scene.number} 拍摄日`} type="date" value={scene.shootDate} onChange={(event) => void onUpdateScene({ ...scene, shootDate: event.currentTarget.value })} /></label>
-          </article>;
-        }) : date === "待排期" && unassignedShots.length ? <section className="shoot-plan__unassigned" aria-label="未分组镜头">
-          <div><strong>未分组镜头</strong><p>请在工作台创建场次并归入镜头，再安排拍摄日。</p></div>
-          {unassignedShots.map((shot) => <article key={shot.id} className="shoot-plan__shot">
-            <strong>镜头 {shot.values.shotNumber || "—"} · {shot.values.content || "未填写内容"}</strong>
-            <span>{shot.values.durationSeconds || "0"} 秒 · {shot.values.productionStatus || "待制作"}</span>
-          </article>)}
-        </section> : <p className="shoot-plan__empty">尚未安排场次</p>}
-      </section>
-    ))}
-  </section>;
+export function ShootPlan({ project, onUpdateScene: _onUpdateScene, onCreateShootDay, onAssignShots, onReorderShots }: Props) {
+  const days = project.shootDays ?? [];
+  const [dayId, setDayId] = useState(days[0]?.id ?? ""); const [title, setTitle] = useState(""); const [shootDate, setShootDate] = useState(""); const [picked, setPicked] = useState<string[]>([]);
+  const day = days.find((item) => item.id === dayId);
+  const queued = project.shots.filter((shot) => !shot.shootDayId);
+  const scheduled = project.shots.filter((shot) => shot.shootDayId === dayId).sort((a, b) => (a.shootOrder ?? 0) - (b.shootOrder ?? 0));
+  const total = project.shots.reduce((sum, shot) => sum + duration(shot), 0); const confirmed = project.shots.filter((shot) => shot.values.productionStatus === "已确认").length;
+  const shift = (id: string, direction: -1 | 1) => { const index = scheduled.findIndex((shot) => shot.id === id); const to = index + direction; if (!day || !onReorderShots || to < 0 || to >= scheduled.length) return; const next = [...scheduled]; [next[index], next[to]] = [next[to], next[index]]; void onReorderShots(day.id, next.map((shot) => shot.id)); };
+  return <section aria-label="拍摄计划" className="shoot-plan"><header><p>PRODUCTION SCHEDULE</p><h2>拍摄日工作台</h2><span>按镜头排程，场次归属与故事板顺序保持不变。</span></header><div className="shoot-plan__workbench">
+    <aside className="shoot-plan__pool"><h3>待排镜头 <span>{queued.length}</span></h3>{queued.map((shot) => <Card key={shot.id} shot={shot}><label><input aria-label={`选择镜头 ${shot.values.shotNumber || shot.id}`} type="checkbox" checked={picked.includes(shot.id)} onChange={() => setPicked((current) => current.includes(shot.id) ? current.filter((id) => id !== shot.id) : [...current, shot.id])} /></label></Card>)}</aside>
+    <section className="shoot-plan__timeline"><h3>拍摄日</h3><label>名称<input aria-label="拍摄日名称" value={title} onChange={(event) => setTitle(event.currentTarget.value)} /></label><label>日期<input aria-label="拍摄日日期" type="date" value={shootDate} onChange={(event) => setShootDate(event.currentTarget.value)} /></label><button type="button" onClick={() => { if (title.trim()) { void onCreateShootDay?.({ title, shootDate }); setTitle(""); setShootDate(""); } }}>新建拍摄日</button><select aria-label="选择拍摄日" value={dayId} onChange={(event) => setDayId(event.currentTarget.value)}><option value="">选择拍摄日</option>{days.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select>{day ? <><h4>{day.title} · {day.shootDate || "日期待定"}</h4><button type="button" disabled={!picked.length} onClick={() => { void onAssignShots?.(picked, day.id); setPicked([]); }}>加入所选镜头</button>{scheduled.length ? scheduled.map((shot) => <Card key={shot.id} shot={shot}><button type="button" onClick={() => shift(shot.id, -1)}>↑</button><button type="button" onClick={() => shift(shot.id, 1)}>↓</button><button type="button" onClick={() => void onAssignShots?.([shot.id], null)}>移出</button></Card>) : <p className="shoot-plan__empty">从左侧选择镜头并加入当前拍摄日。</p>}</> : <p className="shoot-plan__empty">先创建或选择一个拍摄日。</p>}</section>
+    <aside className="shoot-plan__summary"><h3>当日摘要</h3><strong>{day?.title || "未选择拍摄日"}</strong><p>{day?.shootDate || "日期待定"} · {day?.location || "地点待定"}</p><p>{project.shots.length} 个镜头 · {total} 秒</p><p>{confirmed}/{project.shots.length} 已确认</p><p>集合 / 收工：{day?.callTime || "待定"} / {day?.wrapTime || "待定"}</p><p>负责人：{day?.coordinator || "待确认"}</p></aside>
+  </div></section>;
 }
