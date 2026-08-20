@@ -252,6 +252,13 @@ it("keeps scene records independent from their assigned shots", () => {
   });
 });
 
+it("initializes projects with an empty shoot-day schedule", () => {
+  const project = createProject();
+
+  expect(project).toHaveProperty("shootDays", []);
+  expect(project.shots[0]).not.toHaveProperty("shootDayId");
+});
+
 it("collapses a scene without changing its shots and can ungroup it safely", () => {
   const withScene = createScene(createProject(), { name: "开场" });
   const sceneId = withScene.scenes[0].id;
