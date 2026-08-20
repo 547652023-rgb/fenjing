@@ -23,3 +23,23 @@ it("groups scenes by planned shooting day and changes only the scene schedule", 
 
   expect(onUpdateScene).toHaveBeenCalledWith(expect.objectContaining({ id: "scene-2", shootDate: "2026-08-13" }));
 });
+
+it("renders unassigned shots so a new project does not have an empty shoot plan", () => {
+  const project = createProject();
+  project.shots = [{
+    id: "shot-1",
+    values: {
+      shotNumber: "1",
+      content: "演员走入咖啡馆",
+      durationSeconds: "6",
+      productionStatus: "待拍",
+    },
+  }];
+
+  render(<ShootPlan project={project} onUpdateScene={vi.fn()} />);
+
+  expect(screen.getByRole("heading", { name: "待排期" })).toBeVisible();
+  expect(screen.getByText("未分组镜头")).toBeVisible();
+  expect(screen.getByText("镜头 1 · 演员走入咖啡馆")).toBeVisible();
+  expect(screen.getByText("6 秒 · 待拍")).toBeVisible();
+});
