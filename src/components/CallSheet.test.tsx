@@ -116,3 +116,19 @@ it("shows scheduled shots with their scene, shooting details, and duration summa
   expect(within(scheduled).getByText("中景 · 12 秒 · 待拍 · 留出收声时间")).toBeVisible();
   expect(within(scheduled).getByText("特写 · 8 秒 · 拍摄中 · 备注待补充")).toBeVisible();
 });
+
+it("warns when the current call-sheet has changes that were not published", () => {
+  const project = createProject();
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "滨江路", callTime: "07:00", wrapTime: "18:00", coordinator: "小李", notes: "", order: 0 }];
+  project.shots = [{ id: "shot-1", shootDayId: "day-1", shootOrder: 0, values: { shotNumber: "1", content: "原始画面", durationSeconds: "8" } }];
+  const snapshot = buildCallSheetSnapshot(project, "2026-08-13");
+  const version = { id: "v1", projectId: project.id, shootDate: "2026-08-13", versionNumber: 1, snapshot, publishedBy: "producer@example.com", publishedAt: "2026-08-10T08:00:00.000Z" };
+  const { rerender } = render(<CallSheet project={project} versions={[version]} />);
+
+  expect(screen.getByRole("status")).toHaveTextContent("已发布 V1，内容已同步");
+
+  const changedProject = { ...project, shots: [{ ...project.shots[0], values: { ...project.shots[0].values, content: "修改后的画面" } }] };
+  rerender(<CallSheet project={changedProject} versions={[version]} />);
+
+  expect(screen.getByRole("status")).toHaveTextContent("存在未发布变更");
+});

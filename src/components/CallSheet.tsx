@@ -37,6 +37,11 @@ export function buildCallSheetSnapshot(project: StoryboardProject, shootDate: st
   };
 }
 
+function comparableSnapshot(snapshot: Record<string, unknown>): string {
+  const { generatedAt: _generatedAt, ...content } = snapshot;
+  return JSON.stringify(content);
+}
+
 export function CallSheet({ project, versions = [], onPublish, onDateChange, onCreateShootDay, onDeleteShootDay, onUpdateShootDay }: CallSheetProps) {
   const dates = useMemo(() => [...new Set([...(project.shootDays ?? []).flatMap((day) => day.shootDate ? [day.shootDate] : []), ...project.scenes.flatMap((scene) => scene.shootDate ? [scene.shootDate] : [])])], [project.scenes, project.shootDays]);
   const [selectedDate, setSelectedDate] = useState(dates[0] ?? "");
@@ -53,7 +58,13 @@ export function CallSheet({ project, versions = [], onPublish, onDateChange, onC
   const scheduledDurationSeconds = scheduledShots.reduce((total, shot) => total + (Number(shot.values.durationSeconds) || 0), 0);
   const latestVersion = versions.reduce((latest, version) => Math.max(latest, version.versionNumber), 0);
   const activeVersions = versions.filter((version) => !version.withdrawnAt);
+  const currentVersion = activeVersions.reduce<CallSheetVersion | undefined>((latest, version) => !latest || version.versionNumber > latest.versionNumber ? version : latest, undefined);
   const isPublished = activeVersions.length > 0;
+  const callSheetStatus = !currentVersion
+    ? versions.length ? "已撤销，需重新发布" : "草稿待发布"
+    : comparableSnapshot(currentVersion.snapshot) === comparableSnapshot(buildCallSheetSnapshot(project, selectedDate))
+      ? `已发布 V${currentVersion.versionNumber}，内容已同步`
+      : "存在未发布变更";
   const publish = () => {
     if (!selectedDate || !onPublish) return;
     void onPublish(selectedDate, buildCallSheetSnapshot(project, selectedDate));
@@ -98,6 +109,7 @@ export function CallSheet({ project, versions = [], onPublish, onDateChange, onC
       <h2>{selectedDate || "待选择拍摄日"} 拍摄通告</h2>
       <span>{project.title} · 通告时间待制片确认</span>
       {shootDay ? <span>{shootDay.location || "地点待定"} · 集合 {shootDay.callTime || "待定"} · 收工 {shootDay.wrapTime || "待定"} · {shootDay.coordinator || "负责人待确认"}</span> : null}
+      <strong role="status" className="call-sheet__status">{callSheetStatus}</strong>
       {dates.length > 1 ? <label className="call-sheet__date"><span>拍摄日</span><select aria-label="选择拍摄日" value={selectedDate} onChange={(event) => chooseDate(event.currentTarget.value)}>{dates.map((date) => <option key={date} value={date}>{date}</option>)}</select></label> : null}
     </header>
     {onCreateShootDay ? <form className="call-sheet__create" onSubmit={createDraft}>
