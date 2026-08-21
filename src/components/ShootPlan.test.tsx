@@ -64,6 +64,13 @@ it("creates a shoot day without a typed title and exposes its production details
   expect(onCreateShootDay).toHaveBeenCalledWith({ title: "", shootDate: "" });
 });
 
+it("keeps the delete control visible but disabled until a shoot day is selected", () => {
+  const project = createProject();
+  render(<ShootPlan project={project} onUpdateScene={vi.fn()} />);
+
+  expect(screen.getByRole("button", { name: "删除拍摄日" })).toBeDisabled();
+});
+
 it("saves editable production details for the selected shoot day", () => {
   const project = createProject();
   project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-21", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", order: 0 }];
