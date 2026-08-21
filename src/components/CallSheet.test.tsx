@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it } from "vitest";
 import { createProject } from "../domain/storyboard";
 import { buildCallSheetSnapshot, CallSheet } from "./CallSheet";
@@ -96,4 +96,23 @@ it("saves call-sheet production details without leaving the call-sheet view", ()
     coordinator: "小李",
     notes: "备雨具",
   }));
+});
+
+it("shows scheduled shots with their scene, shooting details, and duration summary", () => {
+  const project = createProject();
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "滨江路", callTime: "07:00", wrapTime: "18:00", coordinator: "小李", notes: "", order: 0 }];
+  project.scenes = [{ id: "scene-1", number: "3", name: "天台对话", intExt: "EXT", dayNight: "NIGHT", targetDurationSeconds: "20", shootDate: "2026-08-13", notes: "", collapsed: false }];
+  project.shots = [
+    { id: "shot-1", sceneId: "scene-1", shootDayId: "day-1", shootOrder: 0, values: { shotNumber: "7", content: "主角走向栏杆", shotSize: "中景", durationSeconds: "12", productionStatus: "待拍", notes: "留出收声时间" } },
+    { id: "shot-2", sceneId: "scene-1", shootDayId: "day-1", shootOrder: 1, values: { shotNumber: "8", content: "回望城市", shotSize: "特写", durationSeconds: "8", productionStatus: "拍摄中", notes: "" } },
+  ];
+
+  render(<CallSheet project={project} />);
+
+  expect(screen.getByRole("heading", { name: "镜头清单 · 2 个镜头 · 20 秒" })).toBeVisible();
+  const scheduled = screen.getByRole("region", { name: "排程镜头" });
+  expect(within(scheduled).getAllByText("场次 3 · 天台对话")).toHaveLength(2);
+  expect(within(scheduled).getByText("镜头 7 · 主角走向栏杆")).toBeVisible();
+  expect(within(scheduled).getByText("中景 · 12 秒 · 待拍 · 留出收声时间")).toBeVisible();
+  expect(within(scheduled).getByText("特写 · 8 秒 · 拍摄中 · 备注待补充")).toBeVisible();
 });

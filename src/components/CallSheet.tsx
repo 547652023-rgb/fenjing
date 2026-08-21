@@ -49,6 +49,8 @@ export function CallSheet({ project, versions = [], onPublish, onDateChange, onC
   const scenes = project.scenes.filter((scene) => scene.shootDate === selectedDate);
   const shootDay = (project.shootDays ?? []).find((day) => day.shootDate === selectedDate);
   const scheduledShots = shootDay ? project.shots.filter((shot) => shot.shootDayId === shootDay.id).sort((left, right) => (left.shootOrder ?? 0) - (right.shootOrder ?? 0)) : [];
+  const scenesById = new Map(project.scenes.map((scene) => [scene.id, scene]));
+  const scheduledDurationSeconds = scheduledShots.reduce((total, shot) => total + (Number(shot.values.durationSeconds) || 0), 0);
   const latestVersion = versions.reduce((latest, version) => Math.max(latest, version.versionNumber), 0);
   const activeVersions = versions.filter((version) => !version.withdrawnAt);
   const isPublished = activeVersions.length > 0;
@@ -108,7 +110,10 @@ export function CallSheet({ project, versions = [], onPublish, onDateChange, onC
         const shots = project.shots.filter((shot) => shot.sceneId === scene.id);
         return <article key={scene.id}><div><strong>场次 {scene.number} · {scene.name}</strong><p>{scene.intExt} · {scene.dayNight} · {scene.notes || "制作备注待补充"}</p></div><span>{shots.length} 个镜头 · {scene.targetDurationSeconds || "0"} 秒</span></article>;
       })}
-      {scheduledShots.length ? <section className="call-sheet__scheduled" aria-label="排程镜头"><h3>镜头清单</h3>{scheduledShots.map((shot) => <article key={shot.id}><strong>镜头 {shot.values.shotNumber || "—"} · {shot.values.content || "未填写内容"}</strong><span>{shot.values.durationSeconds || "0"} 秒 · {shot.values.productionStatus || "待制作"}</span></article>)}</section> : null}
+      {scheduledShots.length ? <section className="call-sheet__scheduled" aria-label="排程镜头"><h3>镜头清单 · {scheduledShots.length} 个镜头 · {scheduledDurationSeconds} 秒</h3>{scheduledShots.map((shot) => {
+        const scene = shot.sceneId ? scenesById.get(shot.sceneId) : undefined;
+        return <article key={shot.id}><div><strong>镜头 {shot.values.shotNumber || "—"} · {shot.values.content || "未填写内容"}</strong><p>场次 {scene?.number || shot.values.sceneNumber || "待定"} · {scene?.name || shot.values.scene || "未填写场景"}</p></div><span>{shot.values.shotSize || "景别待定"} · {shot.values.durationSeconds || "0"} 秒 · {shot.values.productionStatus || "待制作"} · {shot.values.notes || "备注待补充"}</span></article>;
+      })}</section> : null}
     </> : <p className="call-sheet__empty">先在拍摄计划中为场次安排拍摄日，即可生成通告。</p>}
     {shootDay && onDeleteShootDay ? <section className="call-sheet__delete"><p>{confirmingDelete ? "已发布通告将被撤销，是否继续？" : isPublished ? "删除后将撤销已发布版本，并保留撤销记录。" : "草稿尚未发布，可直接删除。"}</p><button type="button" onClick={deleteCallSheet}>{confirmingDelete ? "确认删除并撤销" : "删除通告"}</button>{confirmingDelete ? <button type="button" onClick={() => setConfirmingDelete(false)}>取消</button> : null}</section> : null}
     {versions.length ? <section className="call-sheet__history" aria-label="通告发布历史"><h3>发布历史</h3>{versions.map((version) => <div key={version.id}><strong>V{version.versionNumber}{version.withdrawnAt ? " · 已撤销" : version.versionNumber < latestVersion ? ` · 已被 V${latestVersion} 替代` : " · 当前版本"}</strong><span>{version.publishedBy} · {new Date(version.publishedAt).toLocaleString("zh-CN", { hour12: false })}</span></div>)}</section> : null}
