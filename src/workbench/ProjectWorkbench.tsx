@@ -797,7 +797,7 @@ export function ProjectWorkbench({
             }));
           }}
         />
-      ) : workspaceView === "shoot-plan" ? <ShootPlan project={project} saveStatus={saveStatus} onUpdateScene={updateScene} onCreateShootDay={createShootDay} onUpdateShootDay={updateShootDay} onDeleteShootDay={deleteShootDay} onAssignShots={assignShotsToShootDay} onReorderShots={reorderShootDayShots} /> : <CallSheet project={project} versions={callSheetVersions} onPublish={publishCallSheet} onDateChange={(shootDate) => setCallSheetDate(shootDate)} onCreateShootDay={createShootDay} onUpdateShootDay={updateShootDay} onDeleteShootDay={deleteShootDay} />}
+      ) : workspaceView === "shoot-plan" ? <ShootPlan project={project} saveStatus={saveStatus} onUpdateScene={updateScene} onCreateShootDay={createShootDay} onUpdateShootDay={updateShootDay} onDeleteShootDay={deleteShootDay} onAssignShots={assignShotsToShootDay} onReorderShots={reorderShootDayShots} /> : <CallSheet project={project} versions={callSheetVersions} onPublish={publishCallSheet} onDateChange={(shootDate) => setCallSheetDate(shootDate)} onCreateShootDay={createShootDay} onUpdateShootDay={updateShootDay} onDeleteShootDay={deleteShootDay} onUpdateShot={(shotId, values) => updateProject((current) => updateShotValue(updateShotValue(current, shotId, "productionStatus", values.productionStatus), shotId, "notes", values.notes), true)} />}
       {showFieldSettings ? (
         <FieldSettings
           project={fieldSettingsProject}

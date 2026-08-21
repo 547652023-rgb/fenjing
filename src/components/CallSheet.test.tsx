@@ -157,3 +157,18 @@ it("saves call-sheet safety details", () => {
     emergencyContactPhone: "13800000000",
   }));
 });
+
+it("writes a scheduled shot's on-set status and note back to the project", () => {
+  const project = createProject();
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", weather: "", rainPlan: "", safetyNotes: "", emergencyContactName: "", emergencyContactRole: "", emergencyContactPhone: "", order: 0 }];
+  project.shots = [{ id: "shot-1", shootDayId: "day-1", shootOrder: 0, values: { shotNumber: "7", content: "主角走向栏杆", productionStatus: "待拍", notes: "" } }];
+  const onUpdateShot = vi.fn();
+
+  render(<CallSheet project={project} onUpdateShot={onUpdateShot} />);
+
+  fireEvent.change(screen.getByLabelText("通告镜头 7 现场状态"), { target: { value: "已完成" } });
+  fireEvent.change(screen.getByLabelText("通告镜头 7 现场备注"), { target: { value: "补拍一条侧面" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存镜头 7 现场回写" }));
+
+  expect(onUpdateShot).toHaveBeenCalledWith("shot-1", { productionStatus: "已完成", notes: "补拍一条侧面" });
+});

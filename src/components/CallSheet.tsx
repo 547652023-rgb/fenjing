@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CallSheetVersion } from "../domain/models";
-import type { StoryboardProject } from "../domain/storyboard";
+import { PRODUCTION_STATUS_OPTIONS, type StoryboardProject } from "../domain/storyboard";
 
 type CallSheetProps = {
   project: StoryboardProject;
@@ -10,6 +10,7 @@ type CallSheetProps = {
   onCreateShootDay?: (input: { title: string; shootDate: string }) => void | Promise<void>;
   onDeleteShootDay?: (shootDayId: string, shootDate: string, withdrawPublished: boolean) => void | Promise<void>;
   onUpdateShootDay?: (shootDay: NonNullable<StoryboardProject["shootDays"]>[number]) => void | Promise<void>;
+  onUpdateShot?: (shotId: string, values: { productionStatus: string; notes: string }) => void | Promise<void>;
 };
 
 export function buildCallSheetSnapshot(project: StoryboardProject, shootDate: string): Record<string, unknown> {
@@ -42,7 +43,7 @@ function comparableSnapshot(snapshot: Record<string, unknown>): string {
   return JSON.stringify(content);
 }
 
-export function CallSheet({ project, versions = [], onPublish, onDateChange, onCreateShootDay, onDeleteShootDay, onUpdateShootDay }: CallSheetProps) {
+export function CallSheet({ project, versions = [], onPublish, onDateChange, onCreateShootDay, onDeleteShootDay, onUpdateShootDay, onUpdateShot }: CallSheetProps) {
   const dates = useMemo(() => [...new Set([...(project.shootDays ?? []).flatMap((day) => day.shootDate ? [day.shootDate] : []), ...project.scenes.flatMap((scene) => scene.shootDate ? [scene.shootDate] : [])])], [project.scenes, project.shootDays]);
   const [selectedDate, setSelectedDate] = useState(dates[0] ?? "");
   const [draftTitle, setDraftTitle] = useState("");
@@ -116,6 +117,15 @@ export function CallSheet({ project, versions = [], onPublish, onDateChange, onC
       emergencyContactPhone: String(form.get("emergencyContactPhone")),
     });
   };
+  const saveScheduledShot = (event: React.FormEvent<HTMLFormElement>, shotId: string) => {
+    event.preventDefault();
+    if (!onUpdateShot) return;
+    const form = new FormData(event.currentTarget);
+    void onUpdateShot(shotId, {
+      productionStatus: String(form.get("productionStatus")),
+      notes: String(form.get("notes")),
+    });
+  };
 
   return <section aria-label="拍摄通告" className="call-sheet">
     <header>
@@ -139,7 +149,8 @@ export function CallSheet({ project, versions = [], onPublish, onDateChange, onC
       })}
       {scheduledShots.length ? <section className="call-sheet__scheduled" aria-label="排程镜头"><h3>镜头清单 · {scheduledShots.length} 个镜头 · {scheduledDurationSeconds} 秒</h3>{scheduledShots.map((shot) => {
         const scene = shot.sceneId ? scenesById.get(shot.sceneId) : undefined;
-        return <article key={shot.id}><div><strong>镜头 {shot.values.shotNumber || "—"} · {shot.values.content || "未填写内容"}</strong><p>场次 {scene?.number || shot.values.sceneNumber || "待定"} · {scene?.name || shot.values.scene || "未填写场景"}</p></div><span>{shot.values.shotSize || "景别待定"} · {shot.values.durationSeconds || "0"} 秒 · {shot.values.productionStatus || "待制作"} · {shot.values.notes || "备注待补充"}</span></article>;
+        const shotNumber = shot.values.shotNumber || "—";
+        return <article key={shot.id}><div><strong>镜头 {shotNumber} · {shot.values.content || "未填写内容"}</strong><p>场次 {scene?.number || shot.values.sceneNumber || "待定"} · {scene?.name || shot.values.scene || "未填写场景"}</p></div><span>{shot.values.shotSize || "景别待定"} · {shot.values.durationSeconds || "0"} 秒 · {shot.values.productionStatus || "待制作"} · {shot.values.notes || "备注待补充"}</span>{onUpdateShot ? <form className="call-sheet__shot-update" onSubmit={(event) => saveScheduledShot(event, shot.id)}><label>现场状态<select aria-label={`通告镜头 ${shotNumber} 现场状态`} name="productionStatus" defaultValue={shot.values.productionStatus || "待制作"}>{PRODUCTION_STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}</select></label><label>现场备注<input aria-label={`通告镜头 ${shotNumber} 现场备注`} name="notes" defaultValue={shot.values.notes} /></label><button type="submit">保存镜头 {shotNumber} 现场回写</button></form> : null}</article>;
       })}</section> : null}
     </> : <p className="call-sheet__empty">先在拍摄计划中为场次安排拍摄日，即可生成通告。</p>}
     {shootDay && onDeleteShootDay ? <section className="call-sheet__delete"><p>{confirmingDelete ? "已发布通告将被撤销，是否继续？" : isPublished ? "删除后将撤销已发布版本，并保留撤销记录。" : "草稿尚未发布，可直接删除。"}</p><button type="button" onClick={deleteCallSheet}>{confirmingDelete ? "确认删除并撤销" : "删除通告"}</button>{confirmingDelete ? <button type="button" onClick={() => setConfirmingDelete(false)}>取消</button> : null}</section> : null}
