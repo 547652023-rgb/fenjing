@@ -269,3 +269,35 @@ it("counts acknowledgements only for current project members", () => {
 
   expect(screen.getByText("已确认 1 / 1")).toBeInTheDocument();
 });
+
+it("warns about unacknowledged members within three days of the shoot", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-08-10T08:00:00Z"));
+  const project = createProject();
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", weather: "", rainPlan: "", safetyNotes: "", emergencyContactName: "", emergencyContactRole: "", emergencyContactPhone: "", order: 0 }];
+  const owner = { userId: "owner", email: "owner@example.com", role: "owner" as const };
+  const editor = { userId: "editor", email: "editor@example.com", role: "editor" as const };
+  const version = { id: "v1", projectId: project.id, shootDate: "2026-08-13", versionNumber: 1, snapshot: {}, publishedBy: owner.email, publishedAt: "2026-08-10T00:00:00Z" };
+
+  try {
+    render(<CallSheet project={project} versions={[version]} members={[owner, editor]} acknowledgements={[]} />);
+    expect(screen.getByRole("status")).toHaveTextContent("距离拍摄 3 天，2 位成员尚未确认");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("groups scheduled shots by production status when selected", async () => {
+  const project = createProject();
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", weather: "", rainPlan: "", safetyNotes: "", emergencyContactName: "", emergencyContactRole: "", emergencyContactPhone: "", order: 0 }];
+  project.shots = [
+    { id: "shot-1", shootDayId: "day-1", shootOrder: 0, values: { shotNumber: "1", content: "开机", productionStatus: "待拍" } },
+    { id: "shot-2", shootDayId: "day-1", shootOrder: 1, values: { shotNumber: "2", content: "收工", productionStatus: "已完成" } },
+  ];
+
+  render(<CallSheet project={project} />);
+  await userEvent.click(screen.getByRole("button", { name: "按现场状态" }));
+
+  expect(screen.getByRole("heading", { name: "待拍" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "已完成" })).toBeInTheDocument();
+});

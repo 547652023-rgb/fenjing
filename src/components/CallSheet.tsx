@@ -55,6 +55,7 @@ export function CallSheet({ project, versions = [], members = [], acknowledgemen
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [isAcknowledging, setIsAcknowledging] = useState(false);
   const [acknowledgementError, setAcknowledgementError] = useState("");
+  const [shotGrouping, setShotGrouping] = useState<"scene" | "status">("scene");
   useEffect(() => {
     if (!dates.includes(selectedDate)) setSelectedDate(dates[0] ?? "");
   }, [dates, selectedDate]);
@@ -71,6 +72,17 @@ export function CallSheet({ project, versions = [], members = [], acknowledgemen
   const currentAcknowledged = currentAcknowledgements.some((row) => row.userId === currentUserId);
   const acknowledgementRows = members.map((member) => ({ member, acknowledgement: currentAcknowledgements.find((row) => row.userId === member.userId) }));
   const currentAcknowledgementCount = currentAcknowledgements.length;
+  const unacknowledgedCount = acknowledgementRows.filter((row) => !row.acknowledgement).length;
+  const daysUntilShoot = Math.ceil((Date.parse(`${selectedDate}T00:00:00`) - Date.now()) / 86_400_000);
+  const showDueReminder = Boolean(currentVersion && !currentVersion.withdrawnAt && daysUntilShoot >= 0 && daysUntilShoot <= 3 && unacknowledgedCount > 0);
+  const scheduledShotGroups = scheduledShots.reduce<{ key: string; shots: typeof scheduledShots }[]>((groups, shot) => {
+    const scene = shot.sceneId ? scenesById.get(shot.sceneId) : undefined;
+    const groupKey = shotGrouping === "scene" ? (scene?.name || "未分配场次") : (shot.values.productionStatus || "待制作");
+    const group = groups.find((candidate) => candidate.key === groupKey);
+    if (group) group.shots.push(shot);
+    else groups.push({ key: groupKey, shots: [shot] });
+    return groups;
+  }, []);
   const isPublished = activeVersions.length > 0;
   const callSheetStatus = !currentVersion
     ? versions.length ? "已撤销，需重新发布" : "草稿待发布"
@@ -156,7 +168,7 @@ export function CallSheet({ project, versions = [], members = [], acknowledgemen
       <h2>{selectedDate || "待选择拍摄日"} 拍摄通告</h2>
       <span>{project.title} · 通告时间待制片确认</span>
       {shootDay ? <span>{shootDay.location || "地点待定"} · 集合 {shootDay.callTime || "待定"} · 收工 {shootDay.wrapTime || "待定"} · {shootDay.coordinator || "负责人待确认"}</span> : null}
-      <strong role="status" className="call-sheet__status">{callSheetStatus}</strong>
+      <strong role="status" className="call-sheet__status">{callSheetStatus}{showDueReminder ? <span className="call-sheet__due-reminder">距离拍摄 {daysUntilShoot} 天，{unacknowledgedCount} 位成员尚未确认</span> : null}</strong>
       {dates.length > 1 ? <label className="call-sheet__date"><span>拍摄日</span><select aria-label="选择拍摄日" value={selectedDate} onChange={(event) => chooseDate(event.currentTarget.value)}>{dates.map((date) => <option key={date} value={date}>{date}</option>)}</select></label> : null}
     </header>
     {onCreateShootDay ? <form className="call-sheet__create" onSubmit={createDraft}>
@@ -170,11 +182,11 @@ export function CallSheet({ project, versions = [], members = [], acknowledgemen
         const shots = project.shots.filter((shot) => shot.sceneId === scene.id);
         return <article key={scene.id}><div><strong>场次 {scene.number} · {scene.name}</strong><p>{scene.intExt} · {scene.dayNight} · {scene.notes || "制作备注待补充"}</p></div><span>{shots.length} 个镜头 · {scene.targetDurationSeconds || "0"} 秒</span></article>;
       })}
-      {scheduledShots.length ? <section className="call-sheet__scheduled" aria-label="排程镜头"><h3>镜头清单 · {scheduledShots.length} 个镜头 · {scheduledDurationSeconds} 秒</h3>{scheduledShots.map((shot) => {
+      {scheduledShots.length ? <section className="call-sheet__scheduled" aria-label="排程镜头"><div className="call-sheet__scheduled-heading"><h3>镜头清单 · {scheduledShots.length} 个镜头 · {scheduledDurationSeconds} 秒</h3><div className="call-sheet__grouping" aria-label="镜头分组方式"><button type="button" aria-pressed={shotGrouping === "scene"} onClick={() => setShotGrouping("scene")}>按场次</button><button type="button" aria-pressed={shotGrouping === "status"} onClick={() => setShotGrouping("status")}>按现场状态</button></div></div>{scheduledShotGroups.map((group) => <section key={group.key} className="call-sheet__shot-group" aria-label={`${group.key} 镜头`}><h4>{group.key}</h4>{group.shots.map((shot) => {
         const scene = shot.sceneId ? scenesById.get(shot.sceneId) : undefined;
         const shotNumber = shot.values.shotNumber || "—";
         return <article key={shot.id}><div><strong>镜头 {shotNumber} · {shot.values.content || "未填写内容"}</strong><p>场次 {scene?.number || shot.values.sceneNumber || "待定"} · {scene?.name || shot.values.scene || "未填写场景"}</p></div><span>{shot.values.shotSize || "景别待定"} · {shot.values.durationSeconds || "0"} 秒 · {shot.values.productionStatus || "待制作"} · {shot.values.notes || "备注待补充"}</span>{onUpdateShot ? <form className="call-sheet__shot-update" onSubmit={(event) => saveScheduledShot(event, shot.id)}><label>现场状态<select aria-label={`通告镜头 ${shotNumber} 现场状态`} name="productionStatus" defaultValue={shot.values.productionStatus || "待制作"}>{PRODUCTION_STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}</select></label><label>现场备注<input aria-label={`通告镜头 ${shotNumber} 现场备注`} name="notes" defaultValue={shot.values.notes} /></label><button type="submit">保存镜头 {shotNumber} 现场回写</button></form> : null}</article>;
-      })}</section> : null}
+      })}</section>)}</section> : null}
     </> : <p className="call-sheet__empty">先在拍摄计划中为场次安排拍摄日，即可生成通告。</p>}
     {currentVersion ? <section className="call-sheet__acknowledgements" aria-label="成员确认">
       <div><h3>成员确认</h3><strong>已确认 {currentAcknowledgementCount} / {members.length}</strong></div>
