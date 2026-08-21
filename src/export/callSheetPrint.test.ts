@@ -47,3 +47,9 @@ it("counts acknowledgements only for current members on the selected version", (
 it("rejects legacy versions with incomplete snapshots", () => {
   expect(() => buildCallSheetPrintModel(version({ projectTitle: "旧版本", shootDay: null, scenes: [], shots: [] }), [owner], [])).toThrowError("通告版本快照不完整");
 });
+
+it("rejects a null legacy snapshot with the formal validation error", () => {
+  const nullSnapshotVersion = { ...version(snapshotWithLocation("发布地点")), snapshot: null as unknown as Record<string, unknown> };
+
+  expect(() => buildCallSheetPrintModel(nullSnapshotVersion, [owner], [])).toThrowError("通告版本快照不完整");
+});

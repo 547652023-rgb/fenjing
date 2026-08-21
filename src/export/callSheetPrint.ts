@@ -15,8 +15,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function readSnapshot(snapshot: Record<string, unknown>) {
-  if (typeof snapshot.projectTitle !== "string" || !isRecord(snapshot.shootDay) || !Array.isArray(snapshot.scenes) || !Array.isArray(snapshot.shots) || !snapshot.scenes.every(isRecord) || !snapshot.shots.every(isRecord)) {
+function readSnapshot(snapshot: unknown) {
+  if (!isRecord(snapshot) || typeof snapshot.projectTitle !== "string" || !isRecord(snapshot.shootDay) || !Array.isArray(snapshot.scenes) || !Array.isArray(snapshot.shots) || !snapshot.scenes.every(isRecord) || !snapshot.shots.every(isRecord)) {
     throw new Error("通告版本快照不完整");
   }
   return {

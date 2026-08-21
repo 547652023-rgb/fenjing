@@ -323,3 +323,23 @@ it("offers formal printing only for the current non-withdrawn published version"
   rerender(<CallSheet project={project} versions={[withdrawn]} members={[owner]} acknowledgements={[]} />);
   expect(screen.queryByRole("button", { name: /打印正式通告/ })).not.toBeInTheDocument();
 });
+
+it("closes an open formal print view when a newer version becomes current", () => {
+  const project = createProject();
+  const owner = { userId: "owner", email: "owner@example.com", role: "owner" as const };
+  const snapshot = {
+    projectTitle: "发布时项目名",
+    shootDay: { id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-23", location: "已发布地点", callTime: "08:00", wrapTime: "18:00", coordinator: "王制片", notes: "带雨具", weather: "小雨", rainPlan: "转棚内", safetyNotes: "高空作业系安全绳", emergencyContactName: "李安全", emergencyContactRole: "安全员", emergencyContactPhone: "13800000000", order: 0 },
+    scenes: [], shots: [],
+  };
+  const v1 = { id: "v1", projectId: project.id, shootDate: "2026-08-23", versionNumber: 1, snapshot, publishedBy: owner.userId, publishedAt: "2026-08-20T08:00:00.000Z" };
+  const v2 = { ...v1, id: "v2", versionNumber: 2, publishedAt: "2026-08-21T08:00:00.000Z" };
+  const { rerender } = render(<CallSheet project={project} versions={[v1]} members={[owner]} acknowledgements={[]} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "打印正式通告 V1" }));
+  expect(screen.getByText("正式拍摄通告 · V1")).toBeInTheDocument();
+
+  rerender(<CallSheet project={project} versions={[v1, v2]} members={[owner]} acknowledgements={[]} />);
+  expect(screen.queryByText("正式拍摄通告 · V1")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "打印正式通告 V2" })).toBeInTheDocument();
+});

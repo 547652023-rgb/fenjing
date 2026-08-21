@@ -34,3 +34,13 @@ it("prints without mutating the formal notice and closes on request", () => {
   expect(model.shootDay.location).toBe("测试棚 A");
   print.mockRestore();
 });
+
+it("mounts the formal notice outside the workbench and marks the page for isolated printing", () => {
+  const { unmount } = render(<CallSheetPrintView model={model} onClose={vi.fn()} />);
+
+  expect(screen.getByRole("region", { name: "正式拍摄通告" }).parentElement).toBe(document.body);
+  expect(document.body).toHaveClass("call-sheet-printing");
+
+  unmount();
+  expect(document.body).not.toHaveClass("call-sheet-printing");
+});
