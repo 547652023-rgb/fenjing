@@ -73,3 +73,27 @@ it("requires a second confirmation before deleting a published call-sheet", () =
 
   expect(onDeleteShootDay).toHaveBeenCalledWith("day-1", "2026-08-13", true);
 });
+
+it("saves call-sheet production details without leaving the call-sheet view", () => {
+  const project = createProject();
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "旧址", callTime: "", wrapTime: "", coordinator: "", notes: "", order: 0 }];
+  const onUpdateShootDay = vi.fn();
+
+  render(<CallSheet project={project} onUpdateShootDay={onUpdateShootDay} />);
+
+  fireEvent.change(screen.getByLabelText("通告拍摄地点"), { target: { value: "滨江路 18 号" } });
+  fireEvent.change(screen.getByLabelText("通告集合时间"), { target: { value: "07:00" } });
+  fireEvent.change(screen.getByLabelText("通告收工时间"), { target: { value: "18:00" } });
+  fireEvent.change(screen.getByLabelText("通告负责人"), { target: { value: "小李" } });
+  fireEvent.change(screen.getByLabelText("通告现场备注"), { target: { value: "备雨具" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存通告资料" }));
+
+  expect(onUpdateShootDay).toHaveBeenCalledWith(expect.objectContaining({
+    id: "day-1",
+    location: "滨江路 18 号",
+    callTime: "07:00",
+    wrapTime: "18:00",
+    coordinator: "小李",
+    notes: "备雨具",
+  }));
+});

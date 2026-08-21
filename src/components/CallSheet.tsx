@@ -9,6 +9,7 @@ type CallSheetProps = {
   onDateChange?: (shootDate: string) => void;
   onCreateShootDay?: (input: { title: string; shootDate: string }) => void | Promise<void>;
   onDeleteShootDay?: (shootDayId: string, shootDate: string, withdrawPublished: boolean) => void | Promise<void>;
+  onUpdateShootDay?: (shootDay: NonNullable<StoryboardProject["shootDays"]>[number]) => void | Promise<void>;
 };
 
 export function buildCallSheetSnapshot(project: StoryboardProject, shootDate: string): Record<string, unknown> {
@@ -36,7 +37,7 @@ export function buildCallSheetSnapshot(project: StoryboardProject, shootDate: st
   };
 }
 
-export function CallSheet({ project, versions = [], onPublish, onDateChange, onCreateShootDay, onDeleteShootDay }: CallSheetProps) {
+export function CallSheet({ project, versions = [], onPublish, onDateChange, onCreateShootDay, onDeleteShootDay, onUpdateShootDay }: CallSheetProps) {
   const dates = useMemo(() => [...new Set([...(project.shootDays ?? []).flatMap((day) => day.shootDate ? [day.shootDate] : []), ...project.scenes.flatMap((scene) => scene.shootDate ? [scene.shootDate] : [])])], [project.scenes, project.shootDays]);
   const [selectedDate, setSelectedDate] = useState(dates[0] ?? "");
   const [draftTitle, setDraftTitle] = useState("");
@@ -75,6 +76,19 @@ export function CallSheet({ project, versions = [], onPublish, onDateChange, onC
     }
     void onDeleteShootDay(shootDay.id, selectedDate, isPublished);
   };
+  const saveProductionDetails = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!shootDay || !onUpdateShootDay) return;
+    const form = new FormData(event.currentTarget);
+    void onUpdateShootDay({
+      ...shootDay,
+      location: String(form.get("location")),
+      callTime: String(form.get("callTime")),
+      wrapTime: String(form.get("wrapTime")),
+      coordinator: String(form.get("coordinator")),
+      notes: String(form.get("notes")),
+    });
+  };
 
   return <section aria-label="拍摄通告" className="call-sheet">
     <header>
@@ -87,6 +101,7 @@ export function CallSheet({ project, versions = [], onPublish, onDateChange, onC
     {onCreateShootDay ? <form className="call-sheet__create" onSubmit={createDraft}>
       <strong>新建拍摄通告</strong><label>通告标题<input aria-label="通告标题" value={draftTitle} onChange={(event) => setDraftTitle(event.currentTarget.value)} placeholder="例如：首日通告" /></label><label>拍摄日期<input aria-label="通告拍摄日期" type="date" value={draftDate} onChange={(event) => setDraftDate(event.currentTarget.value)} /></label><button type="submit" disabled={!draftTitle.trim() || !draftDate}>创建通告草稿</button>
     </form> : null}
+    {shootDay && onUpdateShootDay ? <form key={shootDay.id} className="call-sheet__details" onSubmit={saveProductionDetails}><strong>通告制作资料</strong><label>拍摄地点<input aria-label="通告拍摄地点" name="location" defaultValue={shootDay.location} /></label><label>集合时间<input aria-label="通告集合时间" name="callTime" type="time" defaultValue={shootDay.callTime} /></label><label>收工时间<input aria-label="通告收工时间" name="wrapTime" type="time" defaultValue={shootDay.wrapTime} /></label><label>负责人<input aria-label="通告负责人" name="coordinator" defaultValue={shootDay.coordinator} /></label><label>现场备注<input aria-label="通告现场备注" name="notes" defaultValue={shootDay.notes} /></label><button type="submit">保存通告资料</button></form> : null}
     {scenes.length || scheduledShots.length ? <>
       <div className="call-sheet__publish"><span>将当前排期冻结为不可改写的交付版本。</span>{onPublish ? <button type="button" onClick={publish}>发布 V{latestVersion + 1}</button> : null}</div>
       {scenes.map((scene) => {
