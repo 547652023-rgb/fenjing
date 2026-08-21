@@ -202,6 +202,19 @@ it("publishes immutable call-sheet versions in newest-first order", async () => 
   ]);
 });
 
+it("withdraws published call-sheet versions without discarding their audit history", async () => {
+  const gateway = new FakeStoryboardGateway();
+  await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("广告片");
+  await gateway.publishCallSheet(project.id, "2026-08-13", { projectTitle: "广告片" });
+
+  await gateway.withdrawCallSheetVersions(project.id, "2026-08-13");
+
+  await expect(gateway.listCallSheetVersions(project.id, "2026-08-13")).resolves.toEqual([
+    expect.objectContaining({ versionNumber: 1, withdrawnAt: expect.any(String) }),
+  ]);
+});
+
 it("keeps folders, assignments, and home settings personal", async () => {
   const gateway = new FakeStoryboardGateway();
   const owner = await gateway.signUp("owner@example.com", "password123");

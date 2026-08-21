@@ -42,3 +42,34 @@ it("publishes the current shooting-day snapshot and labels superseded versions",
   expect(onPublish).toHaveBeenCalledWith("2026-08-13", expect.objectContaining({ projectTitle: "夜景广告" }));
   expect(screen.getByText("V1 · 已被 V2 替代")).toBeVisible();
 });
+
+it("creates a call-sheet draft by creating a shooting day", () => {
+  const project = createProject();
+  const onCreateShootDay = vi.fn();
+
+  render(<CallSheet project={project} onCreateShootDay={onCreateShootDay} />);
+
+  fireEvent.change(screen.getByLabelText("通告标题"), { target: { value: "首日通告" } });
+  fireEvent.change(screen.getByLabelText("通告拍摄日期"), { target: { value: "2026-08-13" } });
+  fireEvent.click(screen.getByRole("button", { name: "创建通告草稿" }));
+
+  expect(onCreateShootDay).toHaveBeenCalledWith({ title: "首日通告", shootDate: "2026-08-13" });
+});
+
+it("requires a second confirmation before deleting a published call-sheet", () => {
+  const project = createProject();
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", order: 0 }];
+  const onDeleteShootDay = vi.fn();
+
+  render(<CallSheet
+    project={project}
+    onDeleteShootDay={onDeleteShootDay}
+    versions={[{ id: "v1", projectId: project.id, shootDate: "2026-08-13", versionNumber: 1, snapshot: {}, publishedBy: "producer@example.com", publishedAt: "2026-08-10T08:00:00.000Z" }]}
+  />);
+
+  fireEvent.click(screen.getByRole("button", { name: "删除通告" }));
+  expect(screen.getByText("已发布通告将被撤销，是否继续？")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "确认删除并撤销" }));
+
+  expect(onDeleteShootDay).toHaveBeenCalledWith("day-1", "2026-08-13", true);
+});

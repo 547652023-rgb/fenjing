@@ -520,9 +520,15 @@ export function ProjectWorkbench({
     try { await gateway.updateShootDay(projectId, shootDay); await reload(); setSaveStatus("saved"); } catch { setSaveStatus("error"); await reload(); }
   }
 
-  async function deleteShootDay(shootDayId: string) {
+  async function deleteShootDay(shootDayId: string, shootDate?: string, withdrawPublished = false) {
     setSaveStatus("saving");
-    try { await gateway.deleteShootDay(projectId, shootDayId); await reload(); setSaveStatus("saved"); } catch { setSaveStatus("error"); await reload(); }
+    try {
+      if (withdrawPublished && shootDate) await gateway.withdrawCallSheetVersions(projectId, shootDate);
+      await gateway.deleteShootDay(projectId, shootDayId);
+      await reload();
+      setCallSheetVersions((current) => withdrawPublished ? current.map((version) => ({ ...version, withdrawnAt: new Date().toISOString() })) : current);
+      setSaveStatus("saved");
+    } catch { setSaveStatus("error"); await reload(); }
   }
 
   async function assignShotsToShootDay(shotIds: string[], shootDayId: string | null) {
@@ -791,7 +797,7 @@ export function ProjectWorkbench({
             }));
           }}
         />
-      ) : workspaceView === "shoot-plan" ? <ShootPlan project={project} saveStatus={saveStatus} onUpdateScene={updateScene} onCreateShootDay={createShootDay} onUpdateShootDay={updateShootDay} onDeleteShootDay={deleteShootDay} onAssignShots={assignShotsToShootDay} onReorderShots={reorderShootDayShots} /> : <CallSheet project={project} versions={callSheetVersions} onPublish={publishCallSheet} onDateChange={(shootDate) => setCallSheetDate(shootDate)} />}
+      ) : workspaceView === "shoot-plan" ? <ShootPlan project={project} saveStatus={saveStatus} onUpdateScene={updateScene} onCreateShootDay={createShootDay} onUpdateShootDay={updateShootDay} onDeleteShootDay={deleteShootDay} onAssignShots={assignShotsToShootDay} onReorderShots={reorderShootDayShots} /> : <CallSheet project={project} versions={callSheetVersions} onPublish={publishCallSheet} onDateChange={(shootDate) => setCallSheetDate(shootDate)} onCreateShootDay={createShootDay} onDeleteShootDay={deleteShootDay} />}
       {showFieldSettings ? (
         <FieldSettings
           project={fieldSettingsProject}

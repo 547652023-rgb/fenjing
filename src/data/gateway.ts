@@ -98,6 +98,7 @@ export interface StoryboardGateway {
   setProjectDefaultView(projectId: string, presentation: ColumnPresentation[]): Promise<void>;
   listCallSheetVersions(projectId: string, shootDate: string): Promise<CallSheetVersion[]>;
   publishCallSheet(projectId: string, shootDate: string, snapshot: Record<string, unknown>): Promise<CallSheetVersion>;
+  withdrawCallSheetVersions(projectId: string, shootDate: string): Promise<void>;
   createShootDay(projectId: string, input: CreateShootDayInput): Promise<ShootDay>;
   updateShootDay(projectId: string, shootDay: ShootDay): Promise<void>;
   deleteShootDay(projectId: string, shootDayId: string): Promise<void>;

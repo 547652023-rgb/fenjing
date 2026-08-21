@@ -585,6 +585,13 @@ export class FakeStoryboardGateway implements StoryboardGateway {
     return { ...version, snapshot: structuredClone(version.snapshot) };
   }
 
+  async withdrawCallSheetVersions(projectId: string, shootDate: string): Promise<void> {
+    this.requireProjectMember(projectId);
+    const key = `${projectId}:${shootDate}`;
+    const withdrawnAt = new Date().toISOString();
+    this.callSheetVersions.set(key, (this.callSheetVersions.get(key) ?? []).map((version) => ({ ...version, withdrawnAt })));
+  }
+
   async saveProjectMeta(
     projectId: string,
     patch: ProjectMetaPatch,
