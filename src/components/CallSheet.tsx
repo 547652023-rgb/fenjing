@@ -66,9 +66,11 @@ export function CallSheet({ project, versions = [], members = [], acknowledgemen
   const latestVersion = versions.reduce((latest, version) => Math.max(latest, version.versionNumber), 0);
   const activeVersions = versions.filter((version) => !version.withdrawnAt);
   const currentVersion = activeVersions.reduce<CallSheetVersion | undefined>((latest, version) => !latest || version.versionNumber > latest.versionNumber ? version : latest, undefined);
-  const currentAcknowledged = acknowledgements.some((row) => row.callSheetVersionId === currentVersion?.id && row.userId === currentUserId);
-  const acknowledgementRows = members.map((member) => ({ member, acknowledgement: acknowledgements.find((row) => row.userId === member.userId) }));
-  const currentAcknowledgementCount = acknowledgements.filter((row) => row.callSheetVersionId === currentVersion?.id).length;
+  const memberIds = new Set(members.map((member) => member.userId));
+  const currentAcknowledgements = acknowledgements.filter((row) => row.callSheetVersionId === currentVersion?.id && memberIds.has(row.userId));
+  const currentAcknowledged = currentAcknowledgements.some((row) => row.userId === currentUserId);
+  const acknowledgementRows = members.map((member) => ({ member, acknowledgement: currentAcknowledgements.find((row) => row.userId === member.userId) }));
+  const currentAcknowledgementCount = currentAcknowledgements.length;
   const isPublished = activeVersions.length > 0;
   const callSheetStatus = !currentVersion
     ? versions.length ? "已撤销，需重新发布" : "草稿待发布"

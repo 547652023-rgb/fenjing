@@ -251,3 +251,21 @@ it("keeps confirmation available and reports a Chinese error when acknowledgemen
   expect(await screen.findByRole("alert")).toHaveTextContent("确认回执失败，请稍后重试");
   expect(screen.getByRole("button", { name: "确认已阅读 V1" })).toBeEnabled();
 });
+
+it("counts acknowledgements only for current project members", () => {
+  const project = createProject();
+  const editor = { userId: "editor", email: "editor@example.com", role: "editor" as const };
+
+  render(<CallSheet
+    project={project}
+    versions={[{ id: "v1", projectId: project.id, shootDate: "2026-08-13", versionNumber: 1, snapshot: {}, publishedBy: editor.email, publishedAt: "2026-08-12T00:00:00Z" }]}
+    currentUserId="editor"
+    members={[editor]}
+    acknowledgements={[
+      { callSheetVersionId: "v1", userId: "removed-member", acknowledgedAt: "2026-08-12T01:00:00Z" },
+      { callSheetVersionId: "v1", userId: "editor", acknowledgedAt: "2026-08-12T01:01:00Z" },
+    ]}
+  />);
+
+  expect(screen.getByText("已确认 1 / 1")).toBeInTheDocument();
+});

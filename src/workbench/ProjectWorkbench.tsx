@@ -93,6 +93,7 @@ export function ProjectWorkbench({
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const membersLoadedForProject = useRef<string | null>(null);
+  const acknowledgementRequestVersionId = useRef<string | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -175,14 +176,20 @@ export function ProjectWorkbench({
   }, [reload]);
 
   const loadCallSheetAcknowledgements = useCallback(async (versionId?: string) => {
+    acknowledgementRequestVersionId.current = versionId ?? null;
     if (!versionId) {
       setCallSheetAcknowledgements([]);
       return;
     }
     try {
-      setCallSheetAcknowledgements(await gateway.listCallSheetAcknowledgements(versionId));
+      const acknowledgements = await gateway.listCallSheetAcknowledgements(versionId);
+      if (acknowledgementRequestVersionId.current === versionId) {
+        setCallSheetAcknowledgements(acknowledgements);
+      }
     } catch {
-      setCallSheetAcknowledgements([]);
+      if (acknowledgementRequestVersionId.current === versionId) {
+        setCallSheetAcknowledgements([]);
+      }
     }
   }, [gateway]);
 
