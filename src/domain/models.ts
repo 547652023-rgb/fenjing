@@ -108,6 +108,13 @@ export type CallSheetVersion = {
   snapshot: Record<string, unknown>;
   publishedBy: string;
   publishedAt: string;
+  withdrawnAt?: string | null;
+};
+
+export type CallSheetAcknowledgement = {
+  callSheetVersionId: string;
+  userId: string;
+  acknowledgedAt: string;
 };
 
 export type ProjectEvent =

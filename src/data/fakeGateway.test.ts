@@ -184,6 +184,34 @@ it("schedules, reorders, and releases individual shots without changing storyboa
   expect((await gateway.loadProject(project.id)).shots.every((shot) => !shot.shootDayId)).toBe(true);
 });
 
+it("persists shoot-day safety details", async () => {
+  const gateway = new FakeStoryboardGateway();
+  await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("广告片");
+  const day = await gateway.createShootDay(project.id, {
+    title: "首日",
+    weather: "阵雨",
+    rainPlan: "转棚内",
+    safetyNotes: "天台作业系安全绳",
+    emergencyContactName: "王制片",
+    emergencyContactRole: "制片",
+    emergencyContactPhone: "13800000000",
+  });
+
+  await gateway.updateShootDay(project.id, { ...day, weather: "小雨" });
+
+  await expect(gateway.loadProject(project.id)).resolves.toMatchObject({
+    shootDays: [expect.objectContaining({
+      weather: "小雨",
+      rainPlan: "转棚内",
+      safetyNotes: "天台作业系安全绳",
+      emergencyContactName: "王制片",
+      emergencyContactRole: "制片",
+      emergencyContactPhone: "13800000000",
+    })],
+  });
+});
+
 it("publishes immutable call-sheet versions in newest-first order", async () => {
   const gateway = new FakeStoryboardGateway();
   await gateway.signUp("owner@example.com", "password123");
@@ -200,6 +228,39 @@ it("publishes immutable call-sheet versions in newest-first order", async () => 
     expect.objectContaining({ versionNumber: 2 }),
     expect.objectContaining({ versionNumber: 1, snapshot: { projectTitle: "广告片", scenes: [{ name: "天台" }] } }),
   ]);
+});
+
+it("withdraws published call-sheet versions without discarding their audit history", async () => {
+  const gateway = new FakeStoryboardGateway();
+  await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("广告片");
+  await gateway.publishCallSheet(project.id, "2026-08-13", { projectTitle: "广告片" });
+
+  await gateway.withdrawCallSheetVersions(project.id, "2026-08-13");
+
+  await expect(gateway.listCallSheetVersions(project.id, "2026-08-13")).resolves.toEqual([
+    expect.objectContaining({ versionNumber: 1, withdrawnAt: expect.any(String) }),
+  ]);
+});
+
+it("records one acknowledgement per member and version", async () => {
+  const gateway = new FakeStoryboardGateway();
+  await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("广告片");
+  const version = await gateway.publishCallSheet(project.id, "2026-08-13", {});
+  const first = await gateway.acknowledgeCallSheet(version.id);
+  const repeated = await gateway.acknowledgeCallSheet(version.id);
+  expect(repeated).toEqual(first);
+  await expect(gateway.listCallSheetAcknowledgements(version.id)).resolves.toEqual([first]);
+});
+
+it("rejects acknowledgement of a withdrawn version", async () => {
+  const gateway = new FakeStoryboardGateway();
+  await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("广告片");
+  const version = await gateway.publishCallSheet(project.id, "2026-08-13", {});
+  await gateway.withdrawCallSheetVersions(project.id, "2026-08-13");
+  await expect(gateway.acknowledgeCallSheet(version.id)).rejects.toMatchObject({ code: "forbidden" });
 });
 
 it("keeps folders, assignments, and home settings personal", async () => {

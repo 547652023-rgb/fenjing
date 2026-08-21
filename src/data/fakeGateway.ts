@@ -14,6 +14,7 @@ import {
 } from "../domain/storyboard";
 import type {
   AuthUser,
+  CallSheetAcknowledgement,
   CallSheetVersion,
   ProjectEvent,
   ProjectEventListener,
@@ -91,6 +92,7 @@ export class FakeStoryboardGateway implements StoryboardGateway {
   private readonly permanentDeleteRequestedAt = new Map<string, string | null>();
   private readonly versions = new Map<string, number>();
   private readonly callSheetVersions = new Map<string, CallSheetVersion[]>();
+  private readonly callSheetAcknowledgements = new Map<string, Map<string, CallSheetAcknowledgement>>();
   private readonly authListeners = new Set<(user: AuthUser | null) => void>();
   private readonly platformAccounts = new Map<string, PlatformAccount>();
   private readonly projectListeners = new Map<
@@ -455,6 +457,12 @@ export class FakeStoryboardGateway implements StoryboardGateway {
       wrapTime: input.wrapTime ?? "",
       coordinator: input.coordinator ?? "",
       notes: input.notes ?? "",
+      weather: input.weather ?? "",
+      rainPlan: input.rainPlan ?? "",
+      safetyNotes: input.safetyNotes ?? "",
+      emergencyContactName: input.emergencyContactName ?? "",
+      emergencyContactRole: input.emergencyContactRole ?? "",
+      emergencyContactPhone: input.emergencyContactPhone ?? "",
       order: shootDays.length,
     };
     this.projects.set(projectId, { ...project, shootDays: [...shootDays, shootDay] });
@@ -583,6 +591,38 @@ export class FakeStoryboardGateway implements StoryboardGateway {
     const version: CallSheetVersion = { id: `call-sheet-${versions.length + 1}`, projectId, shootDate, versionNumber: versions.length + 1, snapshot: structuredClone(snapshot), publishedBy: this.currentUser.id, publishedAt: new Date().toISOString() };
     this.callSheetVersions.set(key, [...versions, version]);
     return { ...version, snapshot: structuredClone(version.snapshot) };
+  }
+
+  async withdrawCallSheetVersions(projectId: string, shootDate: string): Promise<void> {
+    this.requireProjectMember(projectId);
+    const key = `${projectId}:${shootDate}`;
+    const withdrawnAt = new Date().toISOString();
+    this.callSheetVersions.set(key, (this.callSheetVersions.get(key) ?? []).map((version) => ({ ...version, withdrawnAt })));
+  }
+
+  async listCallSheetAcknowledgements(versionId: string): Promise<CallSheetAcknowledgement[]> {
+    const version = this.requireCallSheetVersion(versionId);
+    this.requireProjectMember(version.projectId);
+    return [...(this.callSheetAcknowledgements.get(versionId)?.values() ?? [])]
+      .map((acknowledgement) => ({ ...acknowledgement }));
+  }
+
+  async acknowledgeCallSheet(versionId: string): Promise<CallSheetAcknowledgement> {
+    const user = this.requireUser();
+    const version = this.requireCallSheetVersion(versionId);
+    this.requireProjectMember(version.projectId);
+    if (version.withdrawnAt) throw new GatewayError("forbidden");
+    const acknowledgements = this.callSheetAcknowledgements.get(versionId) ?? new Map<string, CallSheetAcknowledgement>();
+    this.callSheetAcknowledgements.set(versionId, acknowledgements);
+    const existing = acknowledgements.get(user.id);
+    if (existing) return { ...existing };
+    const acknowledgement: CallSheetAcknowledgement = {
+      callSheetVersionId: versionId,
+      userId: user.id,
+      acknowledgedAt: new Date().toISOString(),
+    };
+    acknowledgements.set(user.id, acknowledgement);
+    return { ...acknowledgement };
   }
 
   async saveProjectMeta(
@@ -784,6 +824,14 @@ export class FakeStoryboardGateway implements StoryboardGateway {
       throw new GatewayError("not_found");
     }
     return project;
+  }
+
+  private requireCallSheetVersion(versionId: string): CallSheetVersion {
+    for (const versions of this.callSheetVersions.values()) {
+      const version = versions.find((candidate) => candidate.id === versionId);
+      if (version) return version;
+    }
+    throw new GatewayError("not_found");
   }
 
   private requireProjectMember(projectId: string): StoryboardProject {

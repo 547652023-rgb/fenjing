@@ -17,13 +17,18 @@ afterEach(() => {
 
 it("builds a two-sheet workbook for a shoot day", async () => {
   const project = { ...createProject(), title: "广告片" };
-  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日外景", shootDate: "2026-08-23", location: "测试棚 A", callTime: "09:00", wrapTime: "18:00", coordinator: "制片", notes: "", order: 0 }];
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日外景", shootDate: "2026-08-23", location: "测试棚 A", callTime: "09:00", wrapTime: "18:00", coordinator: "制片", notes: "", weather: "阵雨", rainPlan: "", safetyNotes: "天台作业系安全绳", emergencyContactName: "王制片", emergencyContactRole: "制片", emergencyContactPhone: "13800000000", order: 0 }];
   project.shots = [{ id: "shot-1", shootDayId: "day-1", shootOrder: 0, values: { shotNumber: "1", content: "开场" } }];
   const files = await buildShootDayXlsxPackage(buildShootDayExportModel(project, "day-1"));
   const read = (name: string) => new TextDecoder().decode(files.get(name));
   expect(read("xl/workbook.xml")).toContain('sheet name="拍摄日信息"');
   expect(read("xl/workbook.xml")).toContain('sheet name="镜头执行表"');
   expect(read("xl/worksheets/sheet1.xml")).toContain("测试棚 A");
+  expect(read("xl/worksheets/sheet1.xml")).toContain("天气");
+  expect(read("xl/worksheets/sheet1.xml")).toContain("阵雨");
+  expect(read("xl/worksheets/sheet1.xml")).toContain("安全提示");
+  expect(read("xl/worksheets/sheet1.xml")).toContain("王制片 · 制片 · 13800000000");
+  expect(read("xl/worksheets/sheet1.xml")).not.toContain("雨天备选方案");
   expect(read("xl/worksheets/sheet2.xml")).toContain("镜号");
 });
 

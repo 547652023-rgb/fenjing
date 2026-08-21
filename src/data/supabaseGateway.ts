@@ -8,6 +8,7 @@ import type {
 } from "../domain/storyboard";
 import type {
   AuthUser,
+  CallSheetAcknowledgement,
   CallSheetVersion,
   ProjectEventListener,
   ProjectFolder,
@@ -106,6 +107,14 @@ function authUser(user: any): AuthUser {
   return { id: user.id, email: user.email };
 }
 
+function callSheetAcknowledgementFromRow(row: any): CallSheetAcknowledgement {
+  return {
+    callSheetVersionId: row.call_sheet_version_id,
+    userId: row.user_id,
+    acknowledgedAt: row.acknowledged_at,
+  };
+}
+
 function rowToPlatformAccount(row: any): PlatformAccount {
   return {
     email: row.email,
@@ -143,7 +152,7 @@ function rowToScene(row: any): StoryboardScene {
 }
 
 function rowToShootDay(row: any): ShootDay {
-  return { id: row.id, projectId: row.project_id, title: row.title, shootDate: row.shoot_date ?? "", location: row.location ?? "", callTime: row.call_time ?? "", wrapTime: row.wrap_time ?? "", coordinator: row.coordinator ?? "", notes: row.notes ?? "", order: row.position ?? 0 };
+  return { id: row.id, projectId: row.project_id, title: row.title, shootDate: row.shoot_date ?? "", location: row.location ?? "", callTime: row.call_time ?? "", wrapTime: row.wrap_time ?? "", coordinator: row.coordinator ?? "", notes: row.notes ?? "", weather: row.weather ?? "", rainPlan: row.rain_plan ?? "", safetyNotes: row.safety_notes ?? "", emergencyContactName: row.emergency_contact_name ?? "", emergencyContactRole: row.emergency_contact_role ?? "", emergencyContactPhone: row.emergency_contact_phone ?? "", order: row.position ?? 0 };
 }
 
 function rowToVersionedShot(row: any): VersionedShot {
@@ -587,7 +596,7 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
       this.client.from("fields").select("id,field_key,label,field_type,visible,position,allow_custom_value").eq("project_id", projectId).order("position"),
       this.client.from("field_options").select("field_id,value,position").order("position"),
       this.client.from("scenes").select("id,name,int_ext,day_night,target_duration_seconds,shoot_date,notes,collapsed,position").eq("project_id", projectId).order("position"),
-      this.client.from("shoot_days").select("id,project_id,title,shoot_date,location,call_time,wrap_time,coordinator,notes,position").eq("project_id", projectId).order("position"),
+      this.client.from("shoot_days").select("id,project_id,title,shoot_date,location,call_time,wrap_time,coordinator,notes,weather,rain_plan,safety_notes,emergency_contact_name,emergency_contact_role,emergency_contact_phone,position").eq("project_id", projectId).order("position"),
       this.client.from("shots").select("id,scene_id,shoot_day_id,shoot_order,values,version,position").eq("project_id", projectId).order("position"),
     ]);
     const projectRow = requireData<any>(projectResult);
@@ -677,16 +686,51 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
   }
 
   async listCallSheetVersions(projectId: string, shootDate: string): Promise<CallSheetVersion[]> {
-    const rows = requireData<any[]>(await this.client.from("call_sheet_versions").select("id,project_id,shoot_date,version_number,snapshot,published_by,published_at").eq("project_id", projectId).eq("shoot_date", shootDate).order("version_number", { ascending: false }));
-    return rows.map((row) => ({ id: row.id, projectId: row.project_id, shootDate: row.shoot_date, versionNumber: row.version_number, snapshot: row.snapshot, publishedBy: row.published_by, publishedAt: row.published_at }));
+    const rows = requireData<any[]>(await this.client.from("call_sheet_versions").select("id,project_id,shoot_date,version_number,snapshot,published_by,published_at,withdrawn_at").eq("project_id", projectId).eq("shoot_date", shootDate).order("version_number", { ascending: false }));
+    return rows.map((row) => ({ id: row.id, projectId: row.project_id, shootDate: row.shoot_date, versionNumber: row.version_number, snapshot: row.snapshot, publishedBy: row.published_by, publishedAt: row.published_at, withdrawnAt: row.withdrawn_at }));
   }
 
   async publishCallSheet(projectId: string, shootDate: string, snapshot: Record<string, unknown>): Promise<CallSheetVersion> {
     const user = await this.getSession();
     if (!user) throw new GatewayError("not_authenticated");
     const existing = await this.listCallSheetVersions(projectId, shootDate);
-    const rows = requireData<any[]>(await this.client.from("call_sheet_versions").insert({ project_id: projectId, shoot_date: shootDate, version_number: (existing[0]?.versionNumber ?? 0) + 1, snapshot, published_by: user.id }).select("id,project_id,shoot_date,version_number,snapshot,published_by,published_at"));
-    const row = rows[0]; return { id: row.id, projectId: row.project_id, shootDate: row.shoot_date, versionNumber: row.version_number, snapshot: row.snapshot, publishedBy: row.published_by, publishedAt: row.published_at };
+    const rows = requireData<any[]>(await this.client.from("call_sheet_versions").insert({ project_id: projectId, shoot_date: shootDate, version_number: (existing[0]?.versionNumber ?? 0) + 1, snapshot, published_by: user.id }).select("id,project_id,shoot_date,version_number,snapshot,published_by,published_at,withdrawn_at"));
+    const row = rows[0]; return { id: row.id, projectId: row.project_id, shootDate: row.shoot_date, versionNumber: row.version_number, snapshot: row.snapshot, publishedBy: row.published_by, publishedAt: row.published_at, withdrawnAt: row.withdrawn_at };
+  }
+
+  async withdrawCallSheetVersions(projectId: string, shootDate: string): Promise<void> {
+    const result = await this.client.from("call_sheet_versions").update({ withdrawn_at: new Date().toISOString() }).eq("project_id", projectId).eq("shoot_date", shootDate).is("withdrawn_at", null);
+    if (result.error) throw mapSupabaseError(result.error);
+  }
+
+  async listCallSheetAcknowledgements(versionId: string): Promise<CallSheetAcknowledgement[]> {
+    const rows = requireData<any[]>(
+      await this.client
+        .from("call_sheet_acknowledgements")
+        .select("call_sheet_version_id,user_id,acknowledged_at")
+        .eq("call_sheet_version_id", versionId),
+    );
+    return rows.map(callSheetAcknowledgementFromRow);
+  }
+
+  async acknowledgeCallSheet(versionId: string): Promise<CallSheetAcknowledgement> {
+    const user = await this.getSession();
+    if (!user) throw new GatewayError("not_authenticated");
+    const result = await this.client
+      .from("call_sheet_acknowledgements")
+      .insert({ call_sheet_version_id: versionId, user_id: user.id })
+      .select("call_sheet_version_id,user_id,acknowledged_at");
+    if (!result.error) return callSheetAcknowledgementFromRow(requireData<any[]>(result)[0]);
+    if (result.error.code !== "23505") throw mapSupabaseError(result.error);
+    const rows = requireData<any[]>(
+      await this.client
+        .from("call_sheet_acknowledgements")
+        .select("call_sheet_version_id,user_id,acknowledged_at")
+        .eq("call_sheet_version_id", versionId)
+        .eq("user_id", user.id),
+    );
+    if (!rows[0]) throw mapSupabaseError(result.error);
+    return callSheetAcknowledgementFromRow(rows[0]);
   }
 
   async saveProjectMeta(projectId: string, patch: ProjectMetaPatch): Promise<void> {
@@ -756,12 +800,12 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
 
   async createShootDay(projectId: string, input: CreateShootDayInput): Promise<ShootDay> {
     const rows = requireData<any[]>(await this.client.from("shoot_days").select("position").eq("project_id", projectId).order("position", { ascending: false }).limit(1));
-    const inserted = requireData<any[]>(await this.client.from("shoot_days").insert({ project_id: projectId, position: (rows[0]?.position ?? -1) + 1, title: input.title?.trim() || "未命名拍摄日", shoot_date: input.shootDate || null, location: input.location ?? "", call_time: input.callTime ?? "", wrap_time: input.wrapTime ?? "", coordinator: input.coordinator ?? "", notes: input.notes ?? "" }).select("id,project_id,title,shoot_date,location,call_time,wrap_time,coordinator,notes,position"));
+    const inserted = requireData<any[]>(await this.client.from("shoot_days").insert({ project_id: projectId, position: (rows[0]?.position ?? -1) + 1, title: input.title?.trim() || "未命名拍摄日", shoot_date: input.shootDate || null, location: input.location ?? "", call_time: input.callTime ?? "", wrap_time: input.wrapTime ?? "", coordinator: input.coordinator ?? "", notes: input.notes ?? "", weather: input.weather ?? "", rain_plan: input.rainPlan ?? "", safety_notes: input.safetyNotes ?? "", emergency_contact_name: input.emergencyContactName ?? "", emergency_contact_role: input.emergencyContactRole ?? "", emergency_contact_phone: input.emergencyContactPhone ?? "" }).select("id,project_id,title,shoot_date,location,call_time,wrap_time,coordinator,notes,weather,rain_plan,safety_notes,emergency_contact_name,emergency_contact_role,emergency_contact_phone,position"));
     return rowToShootDay(inserted[0]);
   }
 
   async updateShootDay(projectId: string, shootDay: ShootDay): Promise<void> {
-    const result = await this.client.from("shoot_days").update({ title: shootDay.title, shoot_date: shootDay.shootDate || null, location: shootDay.location, call_time: shootDay.callTime, wrap_time: shootDay.wrapTime, coordinator: shootDay.coordinator, notes: shootDay.notes, position: shootDay.order }).eq("id", shootDay.id).eq("project_id", projectId);
+    const result = await this.client.from("shoot_days").update({ title: shootDay.title, shoot_date: shootDay.shootDate || null, location: shootDay.location, call_time: shootDay.callTime, wrap_time: shootDay.wrapTime, coordinator: shootDay.coordinator, notes: shootDay.notes, weather: shootDay.weather, rain_plan: shootDay.rainPlan, safety_notes: shootDay.safetyNotes, emergency_contact_name: shootDay.emergencyContactName, emergency_contact_role: shootDay.emergencyContactRole, emergency_contact_phone: shootDay.emergencyContactPhone, position: shootDay.order }).eq("id", shootDay.id).eq("project_id", projectId);
     if (result.error) throw mapSupabaseError(result.error);
   }
 

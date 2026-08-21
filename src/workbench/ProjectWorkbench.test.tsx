@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { afterEach, vi } from "vitest";
 import { FakeStoryboardGateway } from "../data/fakeGateway";
+import { buildCallSheetSnapshot } from "../components/CallSheet";
 import { createNamedStoryboardView } from "../domain/storyboardViews";
 import { ProjectWorkbench } from "./ProjectWorkbench";
 
@@ -212,6 +213,90 @@ it("publishes a call-sheet snapshot through the active project gateway", async (
   expect(await screen.findByText("V1 · 当前版本")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "导出文件" }));
   expect(screen.getByText("拍摄通告 · 2026-08-13 · V1")).toBeVisible();
+});
+
+it("loads acknowledgement progress and confirms the current call-sheet version", async () => {
+  const { gateway, owner, project } = await setupProject();
+  await gateway.createScene(project.id, { name: "夜景", shootDate: "2026-08-13" });
+  const snapshot = buildCallSheetSnapshot(await gateway.loadProject(project.id), "2026-08-13");
+  const version = await gateway.publishCallSheet(project.id, "2026-08-13", snapshot);
+  const user = userEvent.setup();
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+
+  await screen.findByDisplayValue("广告片");
+  await user.click(screen.getByRole("button", { name: "拍摄通告" }));
+  await user.click(await screen.findByRole("button", { name: "确认已阅读 V1" }));
+
+  expect(await screen.findByText("已确认 1 / 1")).toBeVisible();
+  await expect(gateway.listCallSheetAcknowledgements(version.id)).resolves.toEqual([
+    expect.objectContaining({ callSheetVersionId: version.id, userId: owner.id }),
+  ]);
+});
+
+it("clears the prior version acknowledgement after publishing a replacement version", async () => {
+  const { gateway, owner, project } = await setupProject();
+  await gateway.createScene(project.id, { name: "夜景", shootDate: "2026-08-13" });
+  const snapshot = buildCallSheetSnapshot(await gateway.loadProject(project.id), "2026-08-13");
+  const firstVersion = await gateway.publishCallSheet(project.id, "2026-08-13", snapshot);
+  await gateway.acknowledgeCallSheet(firstVersion.id);
+  const user = userEvent.setup();
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+
+  await screen.findByDisplayValue("广告片");
+  await user.click(screen.getByRole("button", { name: "拍摄通告" }));
+  expect(await screen.findByText("已确认 1 / 1")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "发布 V2" }));
+
+  expect(await screen.findByText("待确认")).toBeVisible();
+  expect(screen.getByText("已确认 0 / 1")).toBeVisible();
+});
+
+it("keeps the selected shooting date acknowledgement when an earlier request returns late", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const firstDate = "2026-08-13";
+  const secondDate = "2026-08-14";
+  await gateway.createScene(project.id, { name: "首日", shootDate: firstDate });
+  await gateway.createScene(project.id, { name: "次日", shootDate: secondDate });
+  const loaded = await gateway.loadProject(project.id);
+  await gateway.publishCallSheet(project.id, firstDate, buildCallSheetSnapshot(loaded, firstDate));
+  await gateway.publishCallSheet(project.id, secondDate, buildCallSheetSnapshot(loaded, secondDate));
+  const firstVersionId = "version-first-date";
+  const secondVersionId = "version-second-date";
+  const listVersions = gateway.listCallSheetVersions.bind(gateway);
+  vi.spyOn(gateway, "listCallSheetVersions").mockImplementation(async (projectId, shootDate) => (
+    (await listVersions(projectId, shootDate)).map((version) => ({
+      ...version,
+      id: shootDate === firstDate ? firstVersionId : secondVersionId,
+    }))
+  ));
+  const delayedFirstDateResponses: Array<() => void> = [];
+  vi.spyOn(gateway, "listCallSheetAcknowledgements").mockImplementation(async (versionId) => {
+    if (versionId === secondVersionId) {
+      return [{ callSheetVersionId: secondVersionId, userId: owner.id, acknowledgedAt: "2026-08-12T02:00:00Z" }];
+    }
+    return new Promise((resolve) => {
+      delayedFirstDateResponses.push(() => resolve([
+        { callSheetVersionId: firstVersionId, userId: owner.id, acknowledgedAt: "2026-08-12T01:00:00Z" },
+      ]));
+    });
+  });
+  const secondAcknowledgementTime = new Date("2026-08-12T02:00:00Z").toLocaleString("zh-CN", { hour12: false });
+  const user = userEvent.setup();
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+
+  await screen.findByDisplayValue("广告片");
+  await user.click(screen.getByRole("button", { name: "拍摄通告" }));
+  await user.selectOptions(screen.getByRole("combobox", { name: "选择拍摄日" }), secondDate);
+  const acknowledgementArea = screen.getByRole("region", { name: "成员确认" });
+  expect(await within(acknowledgementArea).findByText(secondAcknowledgementTime)).toBeVisible();
+
+  await act(async () => {
+    delayedFirstDateResponses.forEach((resolve) => resolve());
+  });
+
+  await waitFor(() => {
+    expect(within(acknowledgementArea).getByText(secondAcknowledgementTime)).toBeVisible();
+  });
 });
 
 it("saves the current project as a template without altering the project", async () => {

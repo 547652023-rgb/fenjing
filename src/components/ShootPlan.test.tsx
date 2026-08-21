@@ -41,7 +41,7 @@ it("renders unassigned shots so a new project does not have an empty shoot plan"
 
 it("shows unplanned shot metadata beside a shoot-day summary", () => {
   const project = createProject();
-  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日外景", shootDate: "2026-08-21", location: "滨江路", callTime: "07:00", wrapTime: "18:00", coordinator: "制片小李", notes: "备雨具", order: 0 }];
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日外景", shootDate: "2026-08-21", location: "滨江路", callTime: "07:00", wrapTime: "18:00", coordinator: "制片小李", notes: "备雨具", weather: "", rainPlan: "", safetyNotes: "", emergencyContactName: "", emergencyContactRole: "", emergencyContactPhone: "", order: 0 }];
   project.shots = [
     { id: "shot-1", values: { shotNumber: "1", content: "演员走入咖啡馆", shotSize: "中景", durationSeconds: "6", productionStatus: "待拍" } },
     { id: "shot-2", shootDayId: "day-1", shootOrder: 0, values: { shotNumber: "2", content: "推门特写", durationSeconds: "3", productionStatus: "已确认" } },
@@ -85,7 +85,7 @@ it("keeps the delete control visible but disabled until a shoot day is selected"
 
 it("saves editable production details for the selected shoot day", () => {
   const project = createProject();
-  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-21", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", order: 0 }];
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-21", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", weather: "", rainPlan: "", safetyNotes: "", emergencyContactName: "", emergencyContactRole: "", emergencyContactPhone: "", order: 0 }];
   const onUpdateShootDay = vi.fn();
   render(<ShootPlan project={project} onUpdateScene={vi.fn()} onUpdateShootDay={onUpdateShootDay} />);
   fireEvent.change(screen.getByLabelText("拍摄地点"), { target: { value: "滨江路" } });
@@ -95,7 +95,7 @@ it("saves editable production details for the selected shoot day", () => {
 
 it("exports the selected shoot day only after its changes are saved", async () => {
   const project = createProject();
-  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-21", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", order: 0 }];
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-21", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", weather: "", rainPlan: "", safetyNotes: "", emergencyContactName: "", emergencyContactRole: "", emergencyContactPhone: "", order: 0 }];
   const exportExcel = vi.fn(async () => undefined);
   render(<ShootPlan project={project} onUpdateScene={vi.fn()} exportShootDayExcel={exportExcel} />);
 
@@ -106,7 +106,7 @@ it("exports the selected shoot day only after its changes are saved", async () =
 
 it("disables shoot-day exports while changes are saving", () => {
   const project = createProject();
-  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-21", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", order: 0 }];
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-21", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", weather: "", rainPlan: "", safetyNotes: "", emergencyContactName: "", emergencyContactRole: "", emergencyContactPhone: "", order: 0 }];
   render(<ShootPlan project={project} saveStatus="saving" onUpdateScene={vi.fn()} />);
 
   expect(screen.getByRole("button", { name: "导出镜头执行表（Excel）" })).toBeDisabled();
@@ -115,7 +115,7 @@ it("disables shoot-day exports while changes are saving", () => {
 
 it("confirms before deleting a shoot day", () => {
   const project = createProject();
-  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-21", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", order: 0 }];
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-21", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", weather: "", rainPlan: "", safetyNotes: "", emergencyContactName: "", emergencyContactRole: "", emergencyContactPhone: "", order: 0 }];
   const onDeleteShootDay = vi.fn();
   const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
   render(<ShootPlan project={project} onUpdateScene={vi.fn()} onDeleteShootDay={onDeleteShootDay} />);

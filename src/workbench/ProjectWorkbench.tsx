@@ -10,7 +10,7 @@ import {
   type StoryboardImageActions,
 } from "../components/StoryboardTable";
 import type { StoryboardGateway } from "../data/gateway";
-import type { AuthUser, CallSheetVersion, RemoteImage, SaveState } from "../domain/models";
+import type { AuthUser, CallSheetAcknowledgement, CallSheetVersion, ProjectMember, RemoteImage, SaveState } from "../domain/models";
 import type { ProjectRole } from "../domain/models";
 import { ExportActions } from "../export/ExportActions";
 import { MemberManager } from "../projects/MemberManager";
@@ -83,6 +83,8 @@ export function ProjectWorkbench({
   const [workspaceView, setWorkspaceView] = useState<"table" | "review" | "shoot-plan" | "call-sheet">("table");
   const [callSheetDate, setCallSheetDate] = useState("");
   const [callSheetVersions, setCallSheetVersions] = useState<CallSheetVersion[]>([]);
+  const [callSheetAcknowledgements, setCallSheetAcknowledgements] = useState<CallSheetAcknowledgement[]>([]);
+  const [members, setMembers] = useState<ProjectMember[]>([]);
   const [isReadOnlyReview, setIsReadOnlyReview] = useState(false);
   const versions = useRef(new Map<string, number>());
   const serverProject = useRef<StoryboardProject | null>(null);
@@ -90,6 +92,8 @@ export function ProjectWorkbench({
   const dirtyFields = useRef(new Set<string>());
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const membersLoadedForProject = useRef<string | null>(null);
+  const acknowledgementRequestVersionId = useRef<string | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -157,6 +161,12 @@ export function ProjectWorkbench({
     };
   }, [reload]);
 
+  useEffect(() => {
+    if (!project || membersLoadedForProject.current === projectId) return;
+    membersLoadedForProject.current = projectId;
+    void gateway.listMembers(projectId).then(setMembers).catch(() => setMembers([]));
+  }, [gateway, project, projectId]);
+
   const scheduleReload = useCallback(() => {
     if (reloadTimer.current) clearTimeout(reloadTimer.current);
     reloadTimer.current = setTimeout(() => {
@@ -165,17 +175,40 @@ export function ProjectWorkbench({
     }, 100);
   }, [reload]);
 
-  const loadCallSheetVersions = useCallback(async (shootDate: string) => {
-    if (!shootDate) {
-      setCallSheetVersions([]);
+  const loadCallSheetAcknowledgements = useCallback(async (versionId?: string) => {
+    acknowledgementRequestVersionId.current = versionId ?? null;
+    if (!versionId) {
+      setCallSheetAcknowledgements([]);
       return;
     }
     try {
-      setCallSheetVersions(await gateway.listCallSheetVersions(projectId, shootDate));
+      const acknowledgements = await gateway.listCallSheetAcknowledgements(versionId);
+      if (acknowledgementRequestVersionId.current === versionId) {
+        setCallSheetAcknowledgements(acknowledgements);
+      }
+    } catch {
+      if (acknowledgementRequestVersionId.current === versionId) {
+        setCallSheetAcknowledgements([]);
+      }
+    }
+  }, [gateway]);
+
+  const loadCallSheetVersions = useCallback(async (shootDate: string) => {
+    if (!shootDate) {
+      setCallSheetVersions([]);
+      await loadCallSheetAcknowledgements();
+      return;
+    }
+    try {
+      const nextVersions = await gateway.listCallSheetVersions(projectId, shootDate);
+      setCallSheetVersions(nextVersions);
+      const activeVersion = nextVersions.filter((version) => !version.withdrawnAt).reduce<CallSheetVersion | undefined>((latest, version) => !latest || version.versionNumber > latest.versionNumber ? version : latest, undefined);
+      await loadCallSheetAcknowledgements(activeVersion?.id);
     } catch {
       setCallSheetVersions([]);
+      await loadCallSheetAcknowledgements();
     }
-  }, [gateway, projectId]);
+  }, [gateway, loadCallSheetAcknowledgements, projectId]);
 
   useEffect(() => {
     if (workspaceView !== "call-sheet" || !project) return;
@@ -520,9 +553,15 @@ export function ProjectWorkbench({
     try { await gateway.updateShootDay(projectId, shootDay); await reload(); setSaveStatus("saved"); } catch { setSaveStatus("error"); await reload(); }
   }
 
-  async function deleteShootDay(shootDayId: string) {
+  async function deleteShootDay(shootDayId: string, shootDate?: string, withdrawPublished = false) {
     setSaveStatus("saving");
-    try { await gateway.deleteShootDay(projectId, shootDayId); await reload(); setSaveStatus("saved"); } catch { setSaveStatus("error"); await reload(); }
+    try {
+      if (withdrawPublished && shootDate) await gateway.withdrawCallSheetVersions(projectId, shootDate);
+      await gateway.deleteShootDay(projectId, shootDayId);
+      await reload();
+      setCallSheetVersions((current) => withdrawPublished ? current.map((version) => ({ ...version, withdrawnAt: new Date().toISOString() })) : current);
+      setSaveStatus("saved");
+    } catch { setSaveStatus("error"); await reload(); }
   }
 
   async function assignShotsToShootDay(shotIds: string[], shootDayId: string | null) {
@@ -540,9 +579,19 @@ export function ProjectWorkbench({
     try {
       const published = await gateway.publishCallSheet(projectId, shootDate, snapshot);
       setCallSheetVersions((current) => [published, ...current]);
+      await loadCallSheetAcknowledgements(published.id);
       setSaveStatus("saved");
     } catch {
       setSaveStatus("error");
+    }
+  }
+
+  async function acknowledgeCallSheet(versionId: string) {
+    try {
+      await gateway.acknowledgeCallSheet(versionId);
+      await loadCallSheetAcknowledgements(versionId);
+    } catch {
+      throw new Error("确认回执失败，请稍后重试");
     }
   }
 
@@ -791,7 +840,7 @@ export function ProjectWorkbench({
             }));
           }}
         />
-      ) : workspaceView === "shoot-plan" ? <ShootPlan project={project} saveStatus={saveStatus} onUpdateScene={updateScene} onCreateShootDay={createShootDay} onUpdateShootDay={updateShootDay} onDeleteShootDay={deleteShootDay} onAssignShots={assignShotsToShootDay} onReorderShots={reorderShootDayShots} /> : <CallSheet project={project} versions={callSheetVersions} onPublish={publishCallSheet} onDateChange={(shootDate) => setCallSheetDate(shootDate)} />}
+      ) : workspaceView === "shoot-plan" ? <ShootPlan project={project} saveStatus={saveStatus} onUpdateScene={updateScene} onCreateShootDay={createShootDay} onUpdateShootDay={updateShootDay} onDeleteShootDay={deleteShootDay} onAssignShots={assignShotsToShootDay} onReorderShots={reorderShootDayShots} /> : <CallSheet project={project} versions={callSheetVersions} members={members} acknowledgements={callSheetAcknowledgements} currentUserId={user.id} onAcknowledge={acknowledgeCallSheet} onPublish={publishCallSheet} onDateChange={(shootDate) => setCallSheetDate(shootDate)} onCreateShootDay={createShootDay} onUpdateShootDay={updateShootDay} onDeleteShootDay={deleteShootDay} onUpdateShot={(shotId, values) => updateProject((current) => updateShotValue(updateShotValue(current, shotId, "productionStatus", values.productionStatus), shotId, "notes", values.notes), true)} />}
       {showFieldSettings ? (
         <FieldSettings
           project={fieldSettingsProject}

@@ -637,4 +637,46 @@ describe("SupabaseStoryboardGateway", () => {
       { project_id: "project-1", position: 0, scene_id: null, values: { content: "保留" } },
     ]);
   });
+
+  it("returns the existing acknowledgement after a duplicate confirmation", async () => {
+    const existing = {
+      call_sheet_version_id: "version-1",
+      user_id: "user-1",
+      acknowledged_at: "2026-08-13T08:00:00.000Z",
+    };
+    const insertSelect = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "23505", message: "duplicate key value" },
+    });
+    const insert = vi.fn(() => ({ select: insertSelect }));
+    const byUser = vi.fn().mockResolvedValue({ data: [existing], error: null });
+    const byVersion = vi.fn(() => ({ eq: byUser }));
+    const select = vi.fn(() => ({ eq: byVersion }));
+    const client = {
+      auth: {
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: { user: { id: "user-1", email: "owner@example.com" } } },
+          error: null,
+        }),
+      },
+      from: vi.fn((table: string) => {
+        if (table === "call_sheet_acknowledgements") return { insert, select };
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    };
+    const gateway = createSupabaseGateway(client);
+
+    await expect(gateway.acknowledgeCallSheet("version-1")).resolves.toEqual({
+      callSheetVersionId: "version-1",
+      userId: "user-1",
+      acknowledgedAt: "2026-08-13T08:00:00.000Z",
+    });
+
+    expect(insert).toHaveBeenCalledWith({
+      call_sheet_version_id: "version-1",
+      user_id: "user-1",
+    });
+    expect(byVersion).toHaveBeenCalledWith("call_sheet_version_id", "version-1");
+    expect(byUser).toHaveBeenCalledWith("user_id", "user-1");
+  });
 });
