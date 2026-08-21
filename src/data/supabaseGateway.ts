@@ -8,6 +8,7 @@ import type {
 } from "../domain/storyboard";
 import type {
   AuthUser,
+  CallSheetAcknowledgement,
   CallSheetVersion,
   ProjectEventListener,
   ProjectFolder,
@@ -104,6 +105,14 @@ function isShootDaySchemaUnavailable(error: SupabaseErrorLike | null): boolean {
 function authUser(user: any): AuthUser {
   if (!user?.id || !user?.email) throw new GatewayError("not_authenticated");
   return { id: user.id, email: user.email };
+}
+
+function callSheetAcknowledgementFromRow(row: any): CallSheetAcknowledgement {
+  return {
+    callSheetVersionId: row.call_sheet_version_id,
+    userId: row.user_id,
+    acknowledgedAt: row.acknowledged_at,
+  };
 }
 
 function rowToPlatformAccount(row: any): PlatformAccount {
@@ -692,6 +701,36 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
   async withdrawCallSheetVersions(projectId: string, shootDate: string): Promise<void> {
     const result = await this.client.from("call_sheet_versions").update({ withdrawn_at: new Date().toISOString() }).eq("project_id", projectId).eq("shoot_date", shootDate).is("withdrawn_at", null);
     if (result.error) throw mapSupabaseError(result.error);
+  }
+
+  async listCallSheetAcknowledgements(versionId: string): Promise<CallSheetAcknowledgement[]> {
+    const rows = requireData<any[]>(
+      await this.client
+        .from("call_sheet_acknowledgements")
+        .select("call_sheet_version_id,user_id,acknowledged_at")
+        .eq("call_sheet_version_id", versionId),
+    );
+    return rows.map(callSheetAcknowledgementFromRow);
+  }
+
+  async acknowledgeCallSheet(versionId: string): Promise<CallSheetAcknowledgement> {
+    const user = await this.getSession();
+    if (!user) throw new GatewayError("not_authenticated");
+    const result = await this.client
+      .from("call_sheet_acknowledgements")
+      .insert({ call_sheet_version_id: versionId, user_id: user.id })
+      .select("call_sheet_version_id,user_id,acknowledged_at");
+    if (!result.error) return callSheetAcknowledgementFromRow(requireData<any[]>(result)[0]);
+    if (result.error.code !== "23505") throw mapSupabaseError(result.error);
+    const rows = requireData<any[]>(
+      await this.client
+        .from("call_sheet_acknowledgements")
+        .select("call_sheet_version_id,user_id,acknowledged_at")
+        .eq("call_sheet_version_id", versionId)
+        .eq("user_id", user.id),
+    );
+    if (!rows[0]) throw mapSupabaseError(result.error);
+    return callSheetAcknowledgementFromRow(rows[0]);
   }
 
   async saveProjectMeta(projectId: string, patch: ProjectMetaPatch): Promise<void> {

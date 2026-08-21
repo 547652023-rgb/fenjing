@@ -111,6 +111,12 @@ export type CallSheetVersion = {
   withdrawnAt?: string | null;
 };
 
+export type CallSheetAcknowledgement = {
+  callSheetVersionId: string;
+  userId: string;
+  acknowledgedAt: string;
+};
+
 export type ProjectEvent =
   | { type: "project.changed" }
   | { type: "shot.updated"; shot: VersionedShot }

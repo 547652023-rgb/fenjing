@@ -8,6 +8,7 @@ import type {
 } from "../domain/storyboard";
 import type {
   AuthUser,
+  CallSheetAcknowledgement,
   CallSheetVersion,
   ProjectEventListener,
   ProjectFolder,
@@ -99,6 +100,8 @@ export interface StoryboardGateway {
   listCallSheetVersions(projectId: string, shootDate: string): Promise<CallSheetVersion[]>;
   publishCallSheet(projectId: string, shootDate: string, snapshot: Record<string, unknown>): Promise<CallSheetVersion>;
   withdrawCallSheetVersions(projectId: string, shootDate: string): Promise<void>;
+  listCallSheetAcknowledgements(versionId: string): Promise<CallSheetAcknowledgement[]>;
+  acknowledgeCallSheet(versionId: string): Promise<CallSheetAcknowledgement>;
   createShootDay(projectId: string, input: CreateShootDayInput): Promise<ShootDay>;
   updateShootDay(projectId: string, shootDay: ShootDay): Promise<void>;
   deleteShootDay(projectId: string, shootDayId: string): Promise<void>;

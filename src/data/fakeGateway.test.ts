@@ -243,6 +243,26 @@ it("withdraws published call-sheet versions without discarding their audit histo
   ]);
 });
 
+it("records one acknowledgement per member and version", async () => {
+  const gateway = new FakeStoryboardGateway();
+  await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("广告片");
+  const version = await gateway.publishCallSheet(project.id, "2026-08-13", {});
+  const first = await gateway.acknowledgeCallSheet(version.id);
+  const repeated = await gateway.acknowledgeCallSheet(version.id);
+  expect(repeated).toEqual(first);
+  await expect(gateway.listCallSheetAcknowledgements(version.id)).resolves.toEqual([first]);
+});
+
+it("rejects acknowledgement of a withdrawn version", async () => {
+  const gateway = new FakeStoryboardGateway();
+  await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("广告片");
+  const version = await gateway.publishCallSheet(project.id, "2026-08-13", {});
+  await gateway.withdrawCallSheetVersions(project.id, "2026-08-13");
+  await expect(gateway.acknowledgeCallSheet(version.id)).rejects.toMatchObject({ code: "forbidden" });
+});
+
 it("keeps folders, assignments, and home settings personal", async () => {
   const gateway = new FakeStoryboardGateway();
   const owner = await gateway.signUp("owner@example.com", "password123");
