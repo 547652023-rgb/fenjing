@@ -1016,6 +1016,9 @@ select:focus-visible { outline: 2px solid var(--copper-bright); outline-offset: 
 .export-format-option strong { font-family: var(--font-display); font-size: 1.12rem; font-weight: 700; letter-spacing: -0.015em; }
 .export-format-option small { max-width: 19ch; color: inherit; line-height: 1.55; opacity: 0.72; }
 .export-actions__error { margin: 1rem 1.5rem 0; padding: 0.65rem; color: var(--wine-deep); background: #f0d9d8; }
+.shoot-day-print { max-width: 210mm; margin: 2rem auto; padding: 12mm; color: #111; background: #fff; }
+.shoot-day-print header { border-bottom: 2px solid #111; }.shoot-day-print dl { display: grid; grid-template-columns: repeat(2, 1fr); gap: .8rem; }.shoot-day-print dt { font-size: .8rem; color: #666; }.shoot-day-print dd { margin: .2rem 0; }.shoot-day-print table { width: 100%; border-collapse: collapse; }.shoot-day-print th,.shoot-day-print td { padding: .35rem; border: 1px solid #999; text-align: left; }.shoot-day-print__actions { display:flex; gap:.5rem; margin-bottom:1rem; }
+@media print { @page { size: A4 portrait; margin: 12mm; } body > *:not(.shoot-day-print) { display:none !important; }.shoot-day-print { margin:0; padding:0; }.shoot-day-print__actions { display:none; }.shoot-day-print thead { display:table-header-group; } }
 .export-dialog__footer { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0 1.5rem 1.5rem; color: #6d5b50; font-size: 0.78rem; }
 
 .field-settings,
