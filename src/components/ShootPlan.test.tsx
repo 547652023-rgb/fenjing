@@ -64,6 +64,18 @@ it("creates a shoot day without a typed title and exposes its production details
   expect(onCreateShootDay).toHaveBeenCalledWith({ title: "", shootDate: "" });
 });
 
+it("passes a date entered through an input event when creating a shoot day", () => {
+  const project = createProject();
+  const onCreateShootDay = vi.fn();
+  render(<ShootPlan project={project} onUpdateScene={vi.fn()} onCreateShootDay={onCreateShootDay} />);
+
+  fireEvent.input(screen.getByLabelText("拍摄日名称"), { target: { value: "首日外景" } });
+  fireEvent.input(screen.getByLabelText("拍摄日日期"), { target: { value: "2026-08-23" } });
+  fireEvent.click(screen.getByRole("button", { name: "新建拍摄日" }));
+
+  expect(onCreateShootDay).toHaveBeenCalledWith({ title: "首日外景", shootDate: "2026-08-23" });
+});
+
 it("keeps the delete control visible but disabled until a shoot day is selected", () => {
   const project = createProject();
   render(<ShootPlan project={project} onUpdateScene={vi.fn()} />);
@@ -79,6 +91,26 @@ it("saves editable production details for the selected shoot day", () => {
   fireEvent.change(screen.getByLabelText("拍摄地点"), { target: { value: "滨江路" } });
   fireEvent.click(screen.getByRole("button", { name: "保存制作资料" }));
   expect(onUpdateShootDay).toHaveBeenCalledWith(expect.objectContaining({ id: "day-1", location: "滨江路" }));
+});
+
+it("exports the selected shoot day only after its changes are saved", async () => {
+  const project = createProject();
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-21", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", order: 0 }];
+  const exportExcel = vi.fn(async () => undefined);
+  render(<ShootPlan project={project} onUpdateScene={vi.fn()} exportShootDayExcel={exportExcel} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "导出镜头执行表（Excel）" }));
+  expect(exportExcel).toHaveBeenCalledWith(project, "day-1");
+  expect(screen.getByRole("button", { name: "打印拍摄通告单（PDF）" })).toBeEnabled();
+});
+
+it("disables shoot-day exports while changes are saving", () => {
+  const project = createProject();
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-21", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", order: 0 }];
+  render(<ShootPlan project={project} saveStatus="saving" onUpdateScene={vi.fn()} />);
+
+  expect(screen.getByRole("button", { name: "导出镜头执行表（Excel）" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "打印拍摄通告单（PDF）" })).toBeDisabled();
 });
 
 it("confirms before deleting a shoot day", () => {

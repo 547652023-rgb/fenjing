@@ -7,6 +7,7 @@ import {
   type ExportModel,
 } from "./storyboardExport";
 import { createZip } from "./zip";
+import { buildShootDayExportModel, type ShootDayExportModel } from "./shootDayExport";
 
 export type LoadedImage = {
   bytes: Uint8Array;
@@ -336,3 +337,16 @@ export async function exportStoryboardExcel(project: StoryboardProject, options:
     exportFilename(project, "xlsx", new Date(), options.documentLabel),
   );
 }
+
+function shootDayWorkbookXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="拍摄日信息" sheetId="1" r:id="rId1"/><sheet name="镜头执行表" sheetId="2" r:id="rId2"/></sheets></workbook>`;
+}
+function shootDayWorkbookRelsXml(): string { return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`; }
+function shootDayContentTypesXml(): string { return contentTypesXml().replace('<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>', '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'); }
+function simpleWorksheet(rows: string[][]): string { return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rows.map((row, index) => `<row r="${index + 1}">${row.map((value, column) => inlineCell(column, index + 1, value, index === 0 ? 1 : 3)).join("")}</row>`).join("")}</sheetData><pageSetup orientation="landscape" paperSize="9"/></worksheet>`; }
+export async function buildShootDayXlsxPackage(model: ShootDayExportModel): Promise<Map<string, Uint8Array>> {
+  const info = [["拍摄日信息", ""], ["项目", model.projectTitle], ["拍摄日", model.shootDay.title], ["日期", model.shootDay.shootDate || "日期待定"], ["地点", model.shootDay.location || "地点待定"], ["集合", model.shootDay.callTime || "待定"], ["收工", model.shootDay.wrapTime || "待定"], ["负责人", model.shootDay.coordinator || "待确认"], ["备注", model.shootDay.notes || "—"], ["镜头数", String(model.summary.shotCount)], ["总时长（秒）", String(model.summary.totalDurationSeconds)]];
+  const shots = [model.fields.map((field) => field.label), ...model.rows.map((row) => model.fields.map((field) => row.cells.find((cell) => cell.fieldId === field.id)?.text ?? ""))];
+  return new Map([["[Content_Types].xml", encoder.encode(shootDayContentTypesXml())], ["_rels/.rels", encoder.encode(rootRelationshipsXml())], ["xl/workbook.xml", encoder.encode(shootDayWorkbookXml())], ["xl/_rels/workbook.xml.rels", encoder.encode(shootDayWorkbookRelsXml())], ["xl/styles.xml", encoder.encode(stylesXml())], ["xl/worksheets/sheet1.xml", encoder.encode(simpleWorksheet(info))], ["xl/worksheets/sheet2.xml", encoder.encode(simpleWorksheet(shots.length > 1 ? shots : [["暂无已排镜头"]]))]]);
+}
+export async function exportShootDayExcel(project: StoryboardProject, shootDayId: string): Promise<void> { const model = buildShootDayExportModel(project, shootDayId); const files = await buildShootDayXlsxPackage(model); const bytes = createZip([...files].map(([name, data]) => ({ name, data }))); downloadBlob(new Blob([new Uint8Array(bytes)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `${model.projectTitle}-${model.shootDay.title}-${model.shootDay.shootDate || "日期待定"}-镜头执行表.xlsx`); }

@@ -1,6 +1,8 @@
 import { afterEach, vi } from "vitest";
 import type { ExportModel } from "./storyboardExport";
-import { buildXlsxPackage } from "./excelExport";
+import { buildShootDayXlsxPackage, buildXlsxPackage } from "./excelExport";
+import { createProject } from "../domain/storyboard";
+import { buildShootDayExportModel } from "./shootDayExport";
 
 function validPngBytes(): Uint8Array {
   const binary = atob(
@@ -11,6 +13,18 @@ function validPngBytes(): Uint8Array {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+it("builds a two-sheet workbook for a shoot day", async () => {
+  const project = { ...createProject(), title: "广告片" };
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日外景", shootDate: "2026-08-23", location: "测试棚 A", callTime: "09:00", wrapTime: "18:00", coordinator: "制片", notes: "", order: 0 }];
+  project.shots = [{ id: "shot-1", shootDayId: "day-1", shootOrder: 0, values: { shotNumber: "1", content: "开场" } }];
+  const files = await buildShootDayXlsxPackage(buildShootDayExportModel(project, "day-1"));
+  const read = (name: string) => new TextDecoder().decode(files.get(name));
+  expect(read("xl/workbook.xml")).toContain('sheet name="拍摄日信息"');
+  expect(read("xl/workbook.xml")).toContain('sheet name="镜头执行表"');
+  expect(read("xl/worksheets/sheet1.xml")).toContain("测试棚 A");
+  expect(read("xl/worksheets/sheet2.xml")).toContain("镜号");
 });
 
 const model: ExportModel = {
