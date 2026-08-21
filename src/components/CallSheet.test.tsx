@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it } from "vitest";
 import { createProject } from "../domain/storyboard";
-import { CallSheet } from "./CallSheet";
+import { buildCallSheetSnapshot, CallSheet } from "./CallSheet";
 
 it("creates a call-sheet preview from the selected shooting day", () => {
   const project = createProject();
@@ -13,6 +13,13 @@ it("creates a call-sheet preview from the selected shooting day", () => {
   expect(screen.getByText("场次 1 · 天台")).toBeVisible();
   expect(screen.getByText(/高空作业/)).toBeVisible();
   expect(screen.getByText("1 个镜头 · 15 秒")).toBeVisible();
+});
+
+it("freezes shoot-day details and ordered scheduled shots in a call-sheet snapshot", () => {
+  const project = createProject();
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "滨江路", callTime: "07:00", wrapTime: "18:00", coordinator: "小李", notes: "备雨具", order: 0 }];
+  project.shots = [{ id: "shot-2", shootDayId: "day-1", shootOrder: 1, values: { shotNumber: "2" } }, { id: "shot-1", shootDayId: "day-1", shootOrder: 0, values: { shotNumber: "1" } }];
+  expect(buildCallSheetSnapshot(project, "2026-08-13")).toMatchObject({ shootDay: expect.objectContaining({ location: "滨江路" }), shots: [expect.objectContaining({ id: "shot-1" }), expect.objectContaining({ id: "shot-2" })] });
 });
 
 it("publishes the current shooting-day snapshot and labels superseded versions", () => {

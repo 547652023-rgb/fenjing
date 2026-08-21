@@ -27,8 +27,27 @@ export type Shot = {
   id: string;
   version?: number;
   sceneId?: string;
+  shootDayId?: string;
+  shootOrder?: number;
   values: Record<string, string>;
 };
+
+export type ShootDay = {
+  id: string;
+  projectId: string;
+  title: string;
+  shootDate: string;
+  location: string;
+  callTime: string;
+  wrapTime: string;
+  coordinator: string;
+  notes: string;
+  order: number;
+};
+
+export type CreateShootDayInput = Partial<
+  Pick<ShootDay, "title" | "shootDate" | "location" | "callTime" | "wrapTime" | "coordinator" | "notes">
+>;
 
 export type StoryboardScene = {
   id: string;
@@ -55,6 +74,8 @@ export type StoryboardProject = {
   aspectRatio?: string;
   fields: FieldDefinition[];
   scenes: StoryboardScene[];
+  /** Absent only in legacy project payloads; new projects always initialize it. */
+  shootDays?: ShootDay[];
   shots: Shot[];
 };
 
@@ -172,6 +193,7 @@ export function createProject(): StoryboardProject {
     aspectRatio: DEFAULT_ASPECT_RATIO,
     fields: copyFields(DEFAULT_FIELDS),
     scenes: [],
+    shootDays: [],
     shots: [{ id: "1", values: { shotNumber: "1" } }],
   };
 }

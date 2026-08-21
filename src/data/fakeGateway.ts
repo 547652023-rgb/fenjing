@@ -8,6 +8,8 @@ import {
   type Shot,
   type StoryboardProject,
   type CreateSceneInput,
+  type CreateShootDayInput,
+  type ShootDay,
   type StoryboardScene,
 } from "../domain/storyboard";
 import type {
@@ -49,6 +51,7 @@ function cloneProject(project: StoryboardProject): StoryboardProject {
       options: field.options ? [...field.options] : undefined,
     })),
     scenes: project.scenes.map((scene) => ({ ...scene })),
+    shootDays: project.shootDays?.map((shootDay) => ({ ...shootDay })),
     shots: project.shots.map((shot) => ({
       ...shot,
       values: { ...shot.values },
@@ -100,6 +103,7 @@ export class FakeStoryboardGateway implements StoryboardGateway {
   private nextProjectId = 1;
   private nextTemplateId = 1;
   private nextFolderId = 1;
+  private nextShootDayId = 1;
   private nextConflict: { projectId: string; shot: Shot } | null = null;
 
   async getSession(): Promise<AuthUser | null> {
@@ -436,6 +440,69 @@ export class FakeStoryboardGateway implements StoryboardGateway {
     this.touchProject(projectId);
     this.emit(projectId, { type: "structure.changed" });
     return { ...scene };
+  }
+
+  async createShootDay(projectId: string, input: CreateShootDayInput): Promise<ShootDay> {
+    const project = this.requireProjectMember(projectId);
+    const shootDays = project.shootDays ?? [];
+    const shootDay: ShootDay = {
+      id: `shoot-day-${this.nextShootDayId++}`,
+      projectId,
+      title: input.title?.trim() || "未命名拍摄日",
+      shootDate: input.shootDate ?? "",
+      location: input.location ?? "",
+      callTime: input.callTime ?? "",
+      wrapTime: input.wrapTime ?? "",
+      coordinator: input.coordinator ?? "",
+      notes: input.notes ?? "",
+      order: shootDays.length,
+    };
+    this.projects.set(projectId, { ...project, shootDays: [...shootDays, shootDay] });
+    this.touchProject(projectId);
+    this.emit(projectId, { type: "structure.changed" });
+    return { ...shootDay };
+  }
+
+  async updateShootDay(projectId: string, shootDay: ShootDay): Promise<void> {
+    const project = this.requireProjectMember(projectId);
+    if (!(project.shootDays ?? []).some((candidate) => candidate.id === shootDay.id)) throw new GatewayError("not_found");
+    this.projects.set(projectId, { ...project, shootDays: (project.shootDays ?? []).map((candidate) => candidate.id === shootDay.id ? { ...shootDay } : candidate) });
+    this.touchProject(projectId);
+    this.emit(projectId, { type: "structure.changed" });
+  }
+
+  async deleteShootDay(projectId: string, shootDayId: string): Promise<void> {
+    const project = this.requireProjectMember(projectId);
+    if (!(project.shootDays ?? []).some((shootDay) => shootDay.id === shootDayId)) throw new GatewayError("not_found");
+    this.projects.set(projectId, {
+      ...project,
+      shootDays: (project.shootDays ?? []).filter((shootDay) => shootDay.id !== shootDayId).map((shootDay, order) => ({ ...shootDay, order })),
+      shots: project.shots.map((shot) => shot.shootDayId === shootDayId ? { ...shot, shootDayId: undefined, shootOrder: undefined, values: { ...shot.values } } : { ...shot, values: { ...shot.values } }),
+    });
+    this.touchProject(projectId);
+    this.emit(projectId, { type: "structure.changed" });
+  }
+
+  async assignShotsToShootDay(projectId: string, shotIds: string[], shootDayId: string | null): Promise<void> {
+    const project = this.requireProjectMember(projectId);
+    if (shootDayId && !(project.shootDays ?? []).some((shootDay) => shootDay.id === shootDayId)) throw new GatewayError("not_found");
+    const selected = new Set(shotIds);
+    const existing = shootDayId ? project.shots.filter((shot) => shot.shootDayId === shootDayId && !selected.has(shot.id)).sort((a, b) => (a.shootOrder ?? 0) - (b.shootOrder ?? 0)) : [];
+    const scheduled = shootDayId ? [...existing, ...shotIds.map((id) => project.shots.find((shot) => shot.id === id)).filter((shot): shot is Shot => Boolean(shot))] : [];
+    const orderById = new Map(scheduled.map((shot, order) => [shot.id, order]));
+    this.projects.set(projectId, { ...project, shots: project.shots.map((shot) => selected.has(shot.id) ? { ...shot, shootDayId: shootDayId ?? undefined, shootOrder: shootDayId ? orderById.get(shot.id) : undefined, values: { ...shot.values } } : { ...shot, values: { ...shot.values } }) });
+    this.touchProject(projectId);
+    this.emit(projectId, { type: "structure.changed" });
+  }
+
+  async reorderShootDayShots(projectId: string, shootDayId: string, orderedShotIds: string[]): Promise<void> {
+    const project = this.requireProjectMember(projectId);
+    const assigned = project.shots.filter((shot) => shot.shootDayId === shootDayId).map((shot) => shot.id).sort();
+    if (assigned.join("|") !== [...orderedShotIds].sort().join("|")) throw new GatewayError("not_found");
+    const orders = new Map(orderedShotIds.map((id, order) => [id, order]));
+    this.projects.set(projectId, { ...project, shots: project.shots.map((shot) => shot.shootDayId === shootDayId ? { ...shot, shootOrder: orders.get(shot.id), values: { ...shot.values } } : { ...shot, values: { ...shot.values } }) });
+    this.touchProject(projectId);
+    this.emit(projectId, { type: "structure.changed" });
   }
 
   async updateScene(projectId: string, scene: StoryboardScene): Promise<void> {

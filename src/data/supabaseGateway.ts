@@ -2,6 +2,7 @@ import type {
   FieldDefinition,
   FieldType,
   Shot,
+  ShootDay,
   StoryboardProject,
   StoryboardScene,
 } from "../domain/storyboard";
@@ -29,7 +30,7 @@ import {
   type GatewayErrorCode,
   type StoryboardGateway,
 } from "./gateway";
-import { DEFAULT_ASPECT_RATIO, type CreateSceneInput } from "../domain/storyboard";
+import { DEFAULT_ASPECT_RATIO, type CreateSceneInput, type CreateShootDayInput } from "../domain/storyboard";
 import type { ColumnPresentation } from "../domain/storyboardViews";
 import {
   BUILT_IN_TEMPLATES,
@@ -107,6 +108,8 @@ function rowToShot(row: any): Shot {
     id: row.id,
     version: row.version ?? 1,
     sceneId: row.scene_id ?? undefined,
+    shootDayId: row.shoot_day_id ?? undefined,
+    shootOrder: row.shoot_order ?? undefined,
     values: { ...(row.values ?? {}) },
   };
 }
@@ -123,6 +126,10 @@ function rowToScene(row: any): StoryboardScene {
     notes: row.notes ?? "",
     collapsed: Boolean(row.collapsed),
   };
+}
+
+function rowToShootDay(row: any): ShootDay {
+  return { id: row.id, projectId: row.project_id, title: row.title, shootDate: row.shoot_date ?? "", location: row.location ?? "", callTime: row.call_time ?? "", wrapTime: row.wrap_time ?? "", coordinator: row.coordinator ?? "", notes: row.notes ?? "", order: row.position ?? 0 };
 }
 
 function rowToVersionedShot(row: any): VersionedShot {
@@ -561,17 +568,19 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
   }
 
   async loadProject(projectId: string): Promise<StoryboardProject> {
-    const [projectResult, fieldsResult, optionsResult, scenesResult, shotsResult] = await Promise.all([
+    const [projectResult, fieldsResult, optionsResult, scenesResult, shootDaysResult, shotsResult] = await Promise.all([
       this.client.from("projects").select("id,title,aspect_ratio").eq("id", projectId).single(),
       this.client.from("fields").select("id,field_key,label,field_type,visible,position,allow_custom_value").eq("project_id", projectId).order("position"),
       this.client.from("field_options").select("field_id,value,position").order("position"),
       this.client.from("scenes").select("id,name,int_ext,day_night,target_duration_seconds,shoot_date,notes,collapsed,position").eq("project_id", projectId).order("position"),
-      this.client.from("shots").select("id,scene_id,values,version,position").eq("project_id", projectId).order("position"),
+      this.client.from("shoot_days").select("id,project_id,title,shoot_date,location,call_time,wrap_time,coordinator,notes,position").eq("project_id", projectId).order("position"),
+      this.client.from("shots").select("id,scene_id,shoot_day_id,shoot_order,values,version,position").eq("project_id", projectId).order("position"),
     ]);
     const projectRow = requireData<any>(projectResult);
     const fieldRows = requireData<any[]>(fieldsResult);
     const optionRows = requireData<any[]>(optionsResult);
     const sceneRows = requireData<any[]>(scenesResult);
+    const shootDayRows = requireData<any[]>(shootDaysResult);
     const shotRows = requireData<any[]>(shotsResult);
     const imageFieldIds = new Set(
       fieldRows
@@ -583,6 +592,8 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
         id: row.id,
         version: row.version ?? 1,
         sceneId: row.scene_id ?? undefined,
+        shootDayId: row.shoot_day_id ?? undefined,
+        shootOrder: row.shoot_order ?? undefined,
         values: await refreshImageUrlsInValues(
           { ...(row.values ?? {}) },
           imageFieldIds,
@@ -613,6 +624,7 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
           .map((option) => option.value),
       })),
       scenes: sceneRows.map(rowToScene),
+      shootDays: shootDayRows.map(rowToShootDay),
       shots,
     };
   }
@@ -711,6 +723,41 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
     if (result.error) throw mapSupabaseError(result.error);
   }
 
+  async createShootDay(projectId: string, input: CreateShootDayInput): Promise<ShootDay> {
+    const rows = requireData<any[]>(await this.client.from("shoot_days").select("position").eq("project_id", projectId).order("position", { ascending: false }).limit(1));
+    const inserted = requireData<any[]>(await this.client.from("shoot_days").insert({ project_id: projectId, position: (rows[0]?.position ?? -1) + 1, title: input.title?.trim() || "未命名拍摄日", shoot_date: input.shootDate || null, location: input.location ?? "", call_time: input.callTime ?? "", wrap_time: input.wrapTime ?? "", coordinator: input.coordinator ?? "", notes: input.notes ?? "" }).select("id,project_id,title,shoot_date,location,call_time,wrap_time,coordinator,notes,position"));
+    return rowToShootDay(inserted[0]);
+  }
+
+  async updateShootDay(projectId: string, shootDay: ShootDay): Promise<void> {
+    const result = await this.client.from("shoot_days").update({ title: shootDay.title, shoot_date: shootDay.shootDate || null, location: shootDay.location, call_time: shootDay.callTime, wrap_time: shootDay.wrapTime, coordinator: shootDay.coordinator, notes: shootDay.notes, position: shootDay.order }).eq("id", shootDay.id).eq("project_id", projectId);
+    if (result.error) throw mapSupabaseError(result.error);
+  }
+
+  async deleteShootDay(projectId: string, shootDayId: string): Promise<void> {
+    const result = await this.client.from("shoot_days").delete().eq("id", shootDayId).eq("project_id", projectId);
+    if (result.error) throw mapSupabaseError(result.error);
+  }
+
+  async assignShotsToShootDay(projectId: string, shotIds: string[], shootDayId: string | null): Promise<void> {
+    const existing = shootDayId ? requireData<any[]>(await this.client.from("shots").select("id").eq("project_id", projectId).eq("shoot_day_id", shootDayId).order("shoot_order")) : [];
+    const selected = new Set(shotIds);
+    const orderedIds = shootDayId ? [...existing.map((row) => row.id).filter((id) => !selected.has(id)), ...shotIds] : shotIds;
+    for (const [shootOrder, shotId] of orderedIds.entries()) {
+      const result = await this.client.from("shots").update({ shoot_day_id: shootDayId, shoot_order: shootOrder }).eq("id", shotId).eq("project_id", projectId);
+      if (result.error) throw mapSupabaseError(result.error);
+    }
+  }
+
+  async reorderShootDayShots(projectId: string, shootDayId: string, orderedShotIds: string[]): Promise<void> {
+    const rows = requireData<any[]>(await this.client.from("shots").select("id").eq("project_id", projectId).eq("shoot_day_id", shootDayId));
+    if (rows.length !== orderedShotIds.length || rows.some((row) => !orderedShotIds.includes(row.id))) throw new GatewayError("not_found");
+    for (const [shootOrder, shotId] of orderedShotIds.entries()) {
+      const result = await this.client.from("shots").update({ shoot_order: shootOrder }).eq("id", shotId).eq("project_id", projectId).eq("shoot_day_id", shootDayId);
+      if (result.error) throw mapSupabaseError(result.error);
+    }
+  }
+
   private async replaceFields(
     projectId: string,
     fields: FieldDefinition[],
@@ -733,11 +780,11 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
   async saveShot(projectId: string, shot: Shot, expectedVersion: number): Promise<VersionedShot> {
     const result = await this.client
       .from("shots")
-      .update({ values: shot.values, scene_id: shot.sceneId ?? null })
+      .update({ values: shot.values, scene_id: shot.sceneId ?? null, shoot_day_id: shot.shootDayId ?? null, shoot_order: shot.shootOrder ?? 0 })
       .eq("id", shot.id)
       .eq("project_id", projectId)
       .eq("version", expectedVersion)
-      .select("id,scene_id,values,version");
+      .select("id,scene_id,shoot_day_id,shoot_order,values,version");
     if (result.error) throw mapSupabaseError(result.error);
     if (!result.data?.[0]) throw new GatewayError("conflict");
     return rowToVersionedShot(result.data[0]);
@@ -752,7 +799,7 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
       await this.client
         .from("shots")
         .insert({ project_id: projectId, position, values: { shotNumber: String(position + 1) } })
-        .select("id,scene_id,values,version"),
+        .select("id,scene_id,shoot_day_id,shoot_order,values,version"),
       "conflict",
     );
     return rowToVersionedShot(inserted[0]);

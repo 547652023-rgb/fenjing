@@ -510,6 +510,31 @@ export function ProjectWorkbench({
     }
   }
 
+  async function createShootDay(input: { title: string; shootDate: string }) {
+    setSaveStatus("saving");
+    try { await gateway.createShootDay(projectId, input); await reload(); setSaveStatus("saved"); } catch { setSaveStatus("error"); }
+  }
+
+  async function updateShootDay(shootDay: import("../domain/storyboard").ShootDay) {
+    setSaveStatus("saving");
+    try { await gateway.updateShootDay(projectId, shootDay); await reload(); setSaveStatus("saved"); } catch { setSaveStatus("error"); await reload(); }
+  }
+
+  async function deleteShootDay(shootDayId: string) {
+    setSaveStatus("saving");
+    try { await gateway.deleteShootDay(projectId, shootDayId); await reload(); setSaveStatus("saved"); } catch { setSaveStatus("error"); await reload(); }
+  }
+
+  async function assignShotsToShootDay(shotIds: string[], shootDayId: string | null) {
+    setSaveStatus("saving");
+    try { await gateway.assignShotsToShootDay(projectId, shotIds, shootDayId); await reload(); setSaveStatus("saved"); } catch { setSaveStatus("error"); await reload(); }
+  }
+
+  async function reorderShootDayShots(shootDayId: string, shotIds: string[]) {
+    setSaveStatus("saving");
+    try { await gateway.reorderShootDayShots(projectId, shootDayId, shotIds); await reload(); setSaveStatus("saved"); } catch { setSaveStatus("error"); await reload(); }
+  }
+
   async function publishCallSheet(shootDate: string, snapshot: Record<string, unknown>) {
     setSaveStatus("saving");
     try {
@@ -766,7 +791,7 @@ export function ProjectWorkbench({
             }));
           }}
         />
-      ) : workspaceView === "shoot-plan" ? <ShootPlan project={project} onUpdateScene={updateScene} /> : <CallSheet project={project} versions={callSheetVersions} onPublish={publishCallSheet} onDateChange={(shootDate) => setCallSheetDate(shootDate)} />}
+      ) : workspaceView === "shoot-plan" ? <ShootPlan project={project} onUpdateScene={updateScene} onCreateShootDay={createShootDay} onUpdateShootDay={updateShootDay} onDeleteShootDay={deleteShootDay} onAssignShots={assignShotsToShootDay} onReorderShots={reorderShootDayShots} /> : <CallSheet project={project} versions={callSheetVersions} onPublish={publishCallSheet} onDateChange={(shootDate) => setCallSheetDate(shootDate)} />}
       {showFieldSettings ? (
         <FieldSettings
           project={fieldSettingsProject}
