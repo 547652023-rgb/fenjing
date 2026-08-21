@@ -301,3 +301,25 @@ it("groups scheduled shots by production status when selected", async () => {
   expect(screen.getByRole("heading", { name: "待拍" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "已完成" })).toBeInTheDocument();
 });
+
+it("offers formal printing only for the current non-withdrawn published version", () => {
+  const project = createProject();
+  project.title = "当前草稿项目名";
+  const owner = { userId: "owner", email: "owner@example.com", role: "owner" as const };
+  const snapshot = {
+    projectTitle: "发布时项目名",
+    shootDay: { id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-23", location: "已发布地点", callTime: "08:00", wrapTime: "18:00", coordinator: "王制片", notes: "带雨具", weather: "小雨", rainPlan: "转棚内", safetyNotes: "高空作业系安全绳", emergencyContactName: "李安全", emergencyContactRole: "安全员", emergencyContactPhone: "13800000000", order: 0 },
+    scenes: [], shots: [],
+  };
+  const active = { id: "v2", projectId: project.id, shootDate: "2026-08-23", versionNumber: 2, snapshot, publishedBy: owner.userId, publishedAt: "2026-08-20T08:00:00.000Z" };
+  const withdrawn = { id: "v3", projectId: project.id, shootDate: "2026-08-23", versionNumber: 3, snapshot, publishedBy: owner.userId, publishedAt: "2026-08-21T08:00:00.000Z", withdrawnAt: "2026-08-21T09:00:00.000Z" };
+  const { rerender } = render(<CallSheet project={project} versions={[withdrawn, active]} members={[owner]} acknowledgements={[]} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "打印正式通告 V2" }));
+  expect(screen.getByText("正式拍摄通告 · V2")).toBeInTheDocument();
+  expect(screen.getByText("发布时项目名")).toBeInTheDocument();
+  expect(screen.getByText(/已发布地点/)).toBeInTheDocument();
+
+  rerender(<CallSheet project={project} versions={[withdrawn]} members={[owner]} acknowledgements={[]} />);
+  expect(screen.queryByRole("button", { name: /打印正式通告/ })).not.toBeInTheDocument();
+});

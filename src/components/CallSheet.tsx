@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CallSheetAcknowledgement, CallSheetVersion, ProjectMember } from "../domain/models";
 import { PRODUCTION_STATUS_OPTIONS, type StoryboardProject } from "../domain/storyboard";
+import { CallSheetPrintView } from "../export/CallSheetPrintView";
+import { buildCallSheetPrintModel, type CallSheetPrintModel } from "../export/callSheetPrint";
 
 type CallSheetProps = {
   project: StoryboardProject;
@@ -56,6 +58,7 @@ export function CallSheet({ project, versions = [], members = [], acknowledgemen
   const [isAcknowledging, setIsAcknowledging] = useState(false);
   const [acknowledgementError, setAcknowledgementError] = useState("");
   const [shotGrouping, setShotGrouping] = useState<"scene" | "status">("scene");
+  const [printModel, setPrintModel] = useState<CallSheetPrintModel | null>(null);
   useEffect(() => {
     if (!dates.includes(selectedDate)) setSelectedDate(dates[0] ?? "");
   }, [dates, selectedDate]);
@@ -192,9 +195,11 @@ export function CallSheet({ project, versions = [], members = [], acknowledgemen
       <div><h3>成员确认</h3><strong>已确认 {currentAcknowledgementCount} / {members.length}</strong></div>
       {acknowledgementRows.map(({ member, acknowledgement }) => <div className="call-sheet__acknowledgement" key={member.userId}><span>{member.email}</span><span>{acknowledgement ? new Date(acknowledgement.acknowledgedAt).toLocaleString("zh-CN", { hour12: false }) : "待确认"}</span></div>)}
       {!currentAcknowledged && currentUserId && onAcknowledge ? <button type="button" onClick={() => void acknowledge()} disabled={isAcknowledging}>{isAcknowledging ? "正在确认…" : `确认已阅读 V${currentVersion.versionNumber}`}</button> : null}
+      <button type="button" onClick={() => setPrintModel(buildCallSheetPrintModel(currentVersion, members, acknowledgements))}>打印正式通告 V{currentVersion.versionNumber}</button>
       {acknowledgementError ? <p role="alert">{acknowledgementError}</p> : null}
     </section> : null}
     {shootDay && onDeleteShootDay ? <section className="call-sheet__delete"><p>{confirmingDelete ? "已发布通告将被撤销，是否继续？" : isPublished ? "删除后将撤销已发布版本，并保留撤销记录。" : "草稿尚未发布，可直接删除。"}</p><button type="button" onClick={deleteCallSheet}>{confirmingDelete ? "确认删除并撤销" : "删除通告"}</button>{confirmingDelete ? <button type="button" onClick={() => setConfirmingDelete(false)}>取消</button> : null}</section> : null}
     {versions.length ? <section className="call-sheet__history" aria-label="通告发布历史"><h3>发布历史</h3>{versions.map((version) => <div key={version.id}><strong>V{version.versionNumber}{version.withdrawnAt ? " · 已撤销" : version.versionNumber < latestVersion ? ` · 已被 V${latestVersion} 替代` : " · 当前版本"}</strong><span>{version.publishedBy} · {new Date(version.publishedAt).toLocaleString("zh-CN", { hour12: false })}</span></div>)}</section> : null}
+    {printModel && currentVersion ? <CallSheetPrintView model={printModel} onClose={() => setPrintModel(null)} /> : null}
   </section>;
 }
