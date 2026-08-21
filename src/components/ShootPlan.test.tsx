@@ -73,3 +73,15 @@ it("saves editable production details for the selected shoot day", () => {
   fireEvent.click(screen.getByRole("button", { name: "保存制作资料" }));
   expect(onUpdateShootDay).toHaveBeenCalledWith(expect.objectContaining({ id: "day-1", location: "滨江路" }));
 });
+
+it("confirms before deleting a shoot day", () => {
+  const project = createProject();
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-21", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", order: 0 }];
+  const onDeleteShootDay = vi.fn();
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+  render(<ShootPlan project={project} onUpdateScene={vi.fn()} onDeleteShootDay={onDeleteShootDay} />);
+  fireEvent.click(screen.getByRole("button", { name: "删除拍摄日" }));
+  expect(confirm).toHaveBeenCalled();
+  expect(onDeleteShootDay).toHaveBeenCalledWith("day-1");
+  confirm.mockRestore();
+});
