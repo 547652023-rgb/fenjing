@@ -34,8 +34,8 @@
 - [ ] **Step 1: 写失败组件测试，覆盖非空日期。**
 
 ```tsx
-fireEvent.change(screen.getByLabelText("拍摄日名称"), { target: { value: "首日外景" } });
-fireEvent.change(screen.getByLabelText("拍摄日日期"), { target: { value: "2026-08-23" } });
+fireEvent.input(screen.getByLabelText("拍摄日名称"), { target: { value: "首日外景" } });
+fireEvent.input(screen.getByLabelText("拍摄日日期"), { target: { value: "2026-08-23" } });
 fireEvent.click(screen.getByRole("button", { name: "新建拍摄日" }));
 expect(onCreateShootDay).toHaveBeenCalledWith({ title: "首日外景", shootDate: "2026-08-23" });
 ```

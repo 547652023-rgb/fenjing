@@ -64,6 +64,18 @@ it("creates a shoot day without a typed title and exposes its production details
   expect(onCreateShootDay).toHaveBeenCalledWith({ title: "", shootDate: "" });
 });
 
+it("passes a date entered through an input event when creating a shoot day", () => {
+  const project = createProject();
+  const onCreateShootDay = vi.fn();
+  render(<ShootPlan project={project} onUpdateScene={vi.fn()} onCreateShootDay={onCreateShootDay} />);
+
+  fireEvent.input(screen.getByLabelText("拍摄日名称"), { target: { value: "首日外景" } });
+  fireEvent.input(screen.getByLabelText("拍摄日日期"), { target: { value: "2026-08-23" } });
+  fireEvent.click(screen.getByRole("button", { name: "新建拍摄日" }));
+
+  expect(onCreateShootDay).toHaveBeenCalledWith({ title: "首日外景", shootDate: "2026-08-23" });
+});
+
 it("keeps the delete control visible but disabled until a shoot day is selected", () => {
   const project = createProject();
   render(<ShootPlan project={project} onUpdateScene={vi.fn()} />);
