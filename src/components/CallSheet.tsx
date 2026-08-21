@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CallSheetVersion } from "../domain/models";
+import type { CallSheetAcknowledgement, CallSheetVersion, ProjectMember } from "../domain/models";
 import { PRODUCTION_STATUS_OPTIONS, type StoryboardProject } from "../domain/storyboard";
 
 type CallSheetProps = {
   project: StoryboardProject;
   versions?: CallSheetVersion[];
+  members?: ProjectMember[];
+  acknowledgements?: CallSheetAcknowledgement[];
+  currentUserId?: string;
+  onAcknowledge?: (versionId: string) => void | Promise<void>;
   onPublish?: (shootDate: string, snapshot: Record<string, unknown>) => void | Promise<void>;
   onDateChange?: (shootDate: string) => void;
   onCreateShootDay?: (input: { title: string; shootDate: string }) => void | Promise<void>;
@@ -43,12 +47,14 @@ function comparableSnapshot(snapshot: Record<string, unknown>): string {
   return JSON.stringify(content);
 }
 
-export function CallSheet({ project, versions = [], onPublish, onDateChange, onCreateShootDay, onDeleteShootDay, onUpdateShootDay, onUpdateShot }: CallSheetProps) {
+export function CallSheet({ project, versions = [], members = [], acknowledgements = [], currentUserId, onAcknowledge, onPublish, onDateChange, onCreateShootDay, onDeleteShootDay, onUpdateShootDay, onUpdateShot }: CallSheetProps) {
   const dates = useMemo(() => [...new Set([...(project.shootDays ?? []).flatMap((day) => day.shootDate ? [day.shootDate] : []), ...project.scenes.flatMap((scene) => scene.shootDate ? [scene.shootDate] : [])])], [project.scenes, project.shootDays]);
   const [selectedDate, setSelectedDate] = useState(dates[0] ?? "");
   const [draftTitle, setDraftTitle] = useState("");
   const [draftDate, setDraftDate] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [isAcknowledging, setIsAcknowledging] = useState(false);
+  const [acknowledgementError, setAcknowledgementError] = useState("");
   useEffect(() => {
     if (!dates.includes(selectedDate)) setSelectedDate(dates[0] ?? "");
   }, [dates, selectedDate]);
@@ -60,6 +66,9 @@ export function CallSheet({ project, versions = [], onPublish, onDateChange, onC
   const latestVersion = versions.reduce((latest, version) => Math.max(latest, version.versionNumber), 0);
   const activeVersions = versions.filter((version) => !version.withdrawnAt);
   const currentVersion = activeVersions.reduce<CallSheetVersion | undefined>((latest, version) => !latest || version.versionNumber > latest.versionNumber ? version : latest, undefined);
+  const currentAcknowledged = acknowledgements.some((row) => row.callSheetVersionId === currentVersion?.id && row.userId === currentUserId);
+  const acknowledgementRows = members.map((member) => ({ member, acknowledgement: acknowledgements.find((row) => row.userId === member.userId) }));
+  const currentAcknowledgementCount = acknowledgements.filter((row) => row.callSheetVersionId === currentVersion?.id).length;
   const isPublished = activeVersions.length > 0;
   const callSheetStatus = !currentVersion
     ? versions.length ? "已撤销，需重新发布" : "草稿待发布"
@@ -126,6 +135,18 @@ export function CallSheet({ project, versions = [], onPublish, onDateChange, onC
       notes: String(form.get("notes")),
     });
   };
+  const acknowledge = async () => {
+    if (!currentVersion || currentAcknowledged || isAcknowledging || !onAcknowledge) return;
+    setAcknowledgementError("");
+    setIsAcknowledging(true);
+    try {
+      await onAcknowledge(currentVersion.id);
+    } catch {
+      setAcknowledgementError("确认回执失败，请稍后重试");
+    } finally {
+      setIsAcknowledging(false);
+    }
+  };
 
   return <section aria-label="拍摄通告" className="call-sheet">
     <header>
@@ -153,6 +174,12 @@ export function CallSheet({ project, versions = [], onPublish, onDateChange, onC
         return <article key={shot.id}><div><strong>镜头 {shotNumber} · {shot.values.content || "未填写内容"}</strong><p>场次 {scene?.number || shot.values.sceneNumber || "待定"} · {scene?.name || shot.values.scene || "未填写场景"}</p></div><span>{shot.values.shotSize || "景别待定"} · {shot.values.durationSeconds || "0"} 秒 · {shot.values.productionStatus || "待制作"} · {shot.values.notes || "备注待补充"}</span>{onUpdateShot ? <form className="call-sheet__shot-update" onSubmit={(event) => saveScheduledShot(event, shot.id)}><label>现场状态<select aria-label={`通告镜头 ${shotNumber} 现场状态`} name="productionStatus" defaultValue={shot.values.productionStatus || "待制作"}>{PRODUCTION_STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}</select></label><label>现场备注<input aria-label={`通告镜头 ${shotNumber} 现场备注`} name="notes" defaultValue={shot.values.notes} /></label><button type="submit">保存镜头 {shotNumber} 现场回写</button></form> : null}</article>;
       })}</section> : null}
     </> : <p className="call-sheet__empty">先在拍摄计划中为场次安排拍摄日，即可生成通告。</p>}
+    {currentVersion ? <section className="call-sheet__acknowledgements" aria-label="成员确认">
+      <div><h3>成员确认</h3><strong>已确认 {currentAcknowledgementCount} / {members.length}</strong></div>
+      {acknowledgementRows.map(({ member, acknowledgement }) => <div className="call-sheet__acknowledgement" key={member.userId}><span>{member.email}</span><span>{acknowledgement ? new Date(acknowledgement.acknowledgedAt).toLocaleString("zh-CN", { hour12: false }) : "待确认"}</span></div>)}
+      {!currentAcknowledged && currentUserId && onAcknowledge ? <button type="button" onClick={() => void acknowledge()} disabled={isAcknowledging}>{isAcknowledging ? "正在确认…" : `确认已阅读 V${currentVersion.versionNumber}`}</button> : null}
+      {acknowledgementError ? <p role="alert">{acknowledgementError}</p> : null}
+    </section> : null}
     {shootDay && onDeleteShootDay ? <section className="call-sheet__delete"><p>{confirmingDelete ? "已发布通告将被撤销，是否继续？" : isPublished ? "删除后将撤销已发布版本，并保留撤销记录。" : "草稿尚未发布，可直接删除。"}</p><button type="button" onClick={deleteCallSheet}>{confirmingDelete ? "确认删除并撤销" : "删除通告"}</button>{confirmingDelete ? <button type="button" onClick={() => setConfirmingDelete(false)}>取消</button> : null}</section> : null}
     {versions.length ? <section className="call-sheet__history" aria-label="通告发布历史"><h3>发布历史</h3>{versions.map((version) => <div key={version.id}><strong>V{version.versionNumber}{version.withdrawnAt ? " · 已撤销" : version.versionNumber < latestVersion ? ` · 已被 V${latestVersion} 替代` : " · 当前版本"}</strong><span>{version.publishedBy} · {new Date(version.publishedAt).toLocaleString("zh-CN", { hour12: false })}</span></div>)}</section> : null}
   </section>;

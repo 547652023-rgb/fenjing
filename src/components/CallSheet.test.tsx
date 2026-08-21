@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { expect, it } from "vitest";
 import { createProject } from "../domain/storyboard";
 import { buildCallSheetSnapshot, CallSheet } from "./CallSheet";
@@ -171,4 +172,82 @@ it("writes a scheduled shot's on-set status and note back to the project", () =>
   fireEvent.click(screen.getByRole("button", { name: "保存镜头 7 现场回写" }));
 
   expect(onUpdateShot).toHaveBeenCalledWith("shot-1", { productionStatus: "已完成", notes: "补拍一条侧面" });
+});
+
+it("lets an unacknowledged member confirm the current version and shows progress", async () => {
+  const project = createProject();
+  const onAcknowledge = vi.fn();
+  const owner = { userId: "owner", email: "owner@example.com", role: "owner" as const };
+  const editor = { userId: "editor", email: "editor@example.com", role: "editor" as const };
+  const currentVersion = { id: "v1", projectId: project.id, shootDate: "2026-08-13", versionNumber: 1, snapshot: {}, publishedBy: owner.email, publishedAt: "2026-08-12T00:00:00Z" };
+
+  render(<CallSheet
+    project={project}
+    versions={[currentVersion]}
+    currentUserId="editor"
+    members={[owner, editor]}
+    acknowledgements={[{ callSheetVersionId: "v1", userId: "owner", acknowledgedAt: "2026-08-12T01:00:00Z" }]}
+    onAcknowledge={onAcknowledge}
+  />);
+
+  expect(screen.getByText("已确认 1 / 2")).toBeInTheDocument();
+  expect(screen.getByText("owner@example.com")).toBeInTheDocument();
+  expect(screen.getByText("待确认")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "确认已阅读 V1" }));
+  expect(onAcknowledge).toHaveBeenCalledWith("v1");
+});
+
+it("does not offer confirmation for a withdrawn version", () => {
+  const project = createProject();
+  const editor = { userId: "editor", email: "editor@example.com", role: "editor" as const };
+
+  render(<CallSheet
+    project={project}
+    versions={[{ id: "v1", projectId: project.id, shootDate: "2026-08-13", versionNumber: 1, snapshot: {}, publishedBy: editor.email, publishedAt: "2026-08-12T00:00:00Z", withdrawnAt: "2026-08-12T01:00:00Z" }]}
+    currentUserId="editor"
+    members={[editor]}
+  />);
+
+  expect(screen.queryByRole("button", { name: /确认已阅读/ })).not.toBeInTheDocument();
+});
+
+it("disables confirmation while the acknowledgement is pending", async () => {
+  const project = createProject();
+  const editor = { userId: "editor", email: "editor@example.com", role: "editor" as const };
+  let resolveAcknowledgement: () => void = () => undefined;
+  const onAcknowledge = vi.fn(() => new Promise<void>((resolve) => { resolveAcknowledgement = resolve; }));
+
+  render(<CallSheet
+    project={project}
+    versions={[{ id: "v1", projectId: project.id, shootDate: "2026-08-13", versionNumber: 1, snapshot: {}, publishedBy: editor.email, publishedAt: "2026-08-12T00:00:00Z" }]}
+    currentUserId="editor"
+    members={[editor]}
+    onAcknowledge={onAcknowledge}
+  />);
+
+  const button = screen.getByRole("button", { name: "确认已阅读 V1" });
+  await userEvent.click(button);
+  expect(button).toBeDisabled();
+  expect(button).toHaveTextContent("正在确认…");
+  await userEvent.click(button);
+  expect(onAcknowledge).toHaveBeenCalledOnce();
+  resolveAcknowledgement();
+});
+
+it("keeps confirmation available and reports a Chinese error when acknowledgement fails", async () => {
+  const project = createProject();
+  const editor = { userId: "editor", email: "editor@example.com", role: "editor" as const };
+  const onAcknowledge = vi.fn().mockRejectedValue(new Error("network"));
+
+  render(<CallSheet
+    project={project}
+    versions={[{ id: "v1", projectId: project.id, shootDate: "2026-08-13", versionNumber: 1, snapshot: {}, publishedBy: editor.email, publishedAt: "2026-08-12T00:00:00Z" }]}
+    currentUserId="editor"
+    members={[editor]}
+    onAcknowledge={onAcknowledge}
+  />);
+
+  await userEvent.click(screen.getByRole("button", { name: "确认已阅读 V1" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("确认回执失败，请稍后重试");
+  expect(screen.getByRole("button", { name: "确认已阅读 V1" })).toBeEnabled();
 });
