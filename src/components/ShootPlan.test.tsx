@@ -55,3 +55,21 @@ it("shows unplanned shot metadata beside a shoot-day summary", () => {
   expect(screen.getByText("2 个镜头 · 9 秒")).toBeVisible();
   expect(screen.getByText("1/2 已确认")).toBeVisible();
 });
+
+it("creates a shoot day without a typed title and exposes its production details for editing", () => {
+  const project = createProject();
+  const onCreateShootDay = vi.fn();
+  render(<ShootPlan project={project} onUpdateScene={vi.fn()} onCreateShootDay={onCreateShootDay} />);
+  fireEvent.click(screen.getByRole("button", { name: "新建拍摄日" }));
+  expect(onCreateShootDay).toHaveBeenCalledWith({ title: "", shootDate: "" });
+});
+
+it("saves editable production details for the selected shoot day", () => {
+  const project = createProject();
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-21", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", order: 0 }];
+  const onUpdateShootDay = vi.fn();
+  render(<ShootPlan project={project} onUpdateScene={vi.fn()} onUpdateShootDay={onUpdateShootDay} />);
+  fireEvent.change(screen.getByLabelText("拍摄地点"), { target: { value: "滨江路" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存制作资料" }));
+  expect(onUpdateShootDay).toHaveBeenCalledWith(expect.objectContaining({ id: "day-1", location: "滨江路" }));
+});
