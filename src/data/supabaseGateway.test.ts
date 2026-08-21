@@ -8,6 +8,69 @@ import {
 } from "./supabaseGateway";
 
 describe("SupabaseStoryboardGateway", () => {
+  it("loads a legacy project when the shoot-day migration is not installed", async () => {
+    const project = { data: { id: "project-1", title: "旧项目", aspect_ratio: "16:9" }, error: null };
+    const fields = {
+      data: [{ id: "field-1", field_key: "content", label: "内容", field_type: "text", visible: true, position: 0, allow_custom_value: false }],
+      error: null,
+    };
+    const options = { data: [], error: null };
+    const scenes = { data: [], error: null };
+    const legacyShots = {
+      data: [{ id: "shot-1", scene_id: null, values: { content: "开场" }, version: 1, position: 0 }],
+      error: null,
+    };
+    const client = {
+      from: vi.fn((table: string) => {
+        if (table === "projects") {
+          return { select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn().mockResolvedValue(project) })) })) };
+        }
+        if (table === "fields") {
+          return { select: vi.fn(() => ({ eq: vi.fn(() => ({ order: vi.fn().mockResolvedValue(fields) })) })) };
+        }
+        if (table === "field_options") {
+          return { select: vi.fn(() => ({ order: vi.fn().mockResolvedValue(options) })) };
+        }
+        if (table === "scenes") {
+          return { select: vi.fn(() => ({ eq: vi.fn(() => ({ order: vi.fn().mockResolvedValue(scenes) })) })) };
+        }
+        if (table === "shoot_days") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                order: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: { code: "PGRST205", message: "Could not find the table 'public.shoot_days'" },
+                }),
+              })),
+            })),
+          };
+        }
+        if (table === "shots") {
+          return {
+            select: vi.fn((columns: string) => ({
+              eq: vi.fn(() => ({
+                order: vi.fn().mockResolvedValue(
+                  columns.includes("shoot_day_id")
+                    ? { data: null, error: { code: "PGRST204", message: "shoot_day_id does not exist" } }
+                    : legacyShots,
+                ),
+              })),
+            })),
+          };
+        }
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    };
+    const gateway = createSupabaseGateway(client);
+
+    await expect(gateway.loadProject("project-1")).resolves.toMatchObject({
+      id: "project-1",
+      shootDays: [],
+      shots: [{ id: "shot-1", values: { content: "开场" } }],
+    });
+  });
+
   it("maps project home metadata from Supabase rows", async () => {
     const projectOrder = vi.fn().mockResolvedValue({
       data: [{

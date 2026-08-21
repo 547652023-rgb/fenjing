@@ -87,6 +87,20 @@ function requireData<T>(result: { data: T | null; error: SupabaseErrorLike | nul
   return result.data;
 }
 
+function isShootDaySchemaUnavailable(error: SupabaseErrorLike | null): boolean {
+  if (!error) return false;
+  const message = error.message?.toLowerCase() ?? "";
+  return (
+    error.code === "PGRST204" ||
+    error.code === "PGRST205" ||
+    error.code === "42P01" ||
+    error.code === "42703" ||
+    message.includes("shoot_days") ||
+    message.includes("shoot_day_id") ||
+    message.includes("shoot_order")
+  );
+}
+
 function authUser(user: any): AuthUser {
   if (!user?.id || !user?.email) throw new GatewayError("not_authenticated");
   return { id: user.id, email: user.email };
@@ -580,8 +594,25 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
     const fieldRows = requireData<any[]>(fieldsResult);
     const optionRows = requireData<any[]>(optionsResult);
     const sceneRows = requireData<any[]>(scenesResult);
-    const shootDayRows = requireData<any[]>(shootDaysResult);
-    const shotRows = requireData<any[]>(shotsResult);
+    const usesLegacyShootPlanSchema =
+      isShootDaySchemaUnavailable(shootDaysResult.error) ||
+      isShootDaySchemaUnavailable(shotsResult.error);
+    if (shootDaysResult.error && !isShootDaySchemaUnavailable(shootDaysResult.error)) {
+      throw mapSupabaseError(shootDaysResult.error);
+    }
+    if (shotsResult.error && !isShootDaySchemaUnavailable(shotsResult.error)) {
+      throw mapSupabaseError(shotsResult.error);
+    }
+    const shootDayRows = usesLegacyShootPlanSchema ? [] : requireData<any[]>(shootDaysResult);
+    const shotRows = usesLegacyShootPlanSchema
+      ? requireData<any[]>(
+          await this.client
+            .from("shots")
+            .select("id,scene_id,values,version,position")
+            .eq("project_id", projectId)
+            .order("position"),
+        )
+      : requireData<any[]>(shotsResult);
     const imageFieldIds = new Set(
       fieldRows
         .filter((row) => row.field_type === "image")
