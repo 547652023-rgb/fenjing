@@ -93,6 +93,26 @@ it("saves editable production details for the selected shoot day", () => {
   expect(onUpdateShootDay).toHaveBeenCalledWith(expect.objectContaining({ id: "day-1", location: "滨江路" }));
 });
 
+it("exports the selected shoot day only after its changes are saved", async () => {
+  const project = createProject();
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-21", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", order: 0 }];
+  const exportExcel = vi.fn(async () => undefined);
+  render(<ShootPlan project={project} onUpdateScene={vi.fn()} exportShootDayExcel={exportExcel} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "导出镜头执行表（Excel）" }));
+  expect(exportExcel).toHaveBeenCalledWith(project, "day-1");
+  expect(screen.getByRole("button", { name: "打印拍摄通告单（PDF）" })).toBeEnabled();
+});
+
+it("disables shoot-day exports while changes are saving", () => {
+  const project = createProject();
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-21", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", order: 0 }];
+  render(<ShootPlan project={project} saveStatus="saving" onUpdateScene={vi.fn()} />);
+
+  expect(screen.getByRole("button", { name: "导出镜头执行表（Excel）" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "打印拍摄通告单（PDF）" })).toBeDisabled();
+});
+
 it("confirms before deleting a shoot day", () => {
   const project = createProject();
   project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-21", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", order: 0 }];
