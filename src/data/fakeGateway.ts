@@ -455,6 +455,12 @@ export class FakeStoryboardGateway implements StoryboardGateway {
       wrapTime: input.wrapTime ?? "",
       coordinator: input.coordinator ?? "",
       notes: input.notes ?? "",
+      weather: input.weather ?? "",
+      rainPlan: input.rainPlan ?? "",
+      safetyNotes: input.safetyNotes ?? "",
+      emergencyContactName: input.emergencyContactName ?? "",
+      emergencyContactRole: input.emergencyContactRole ?? "",
+      emergencyContactPhone: input.emergencyContactPhone ?? "",
       order: shootDays.length,
     };
     this.projects.set(projectId, { ...project, shootDays: [...shootDays, shootDay] });

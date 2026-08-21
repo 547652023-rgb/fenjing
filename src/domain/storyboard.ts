@@ -42,11 +42,17 @@ export type ShootDay = {
   wrapTime: string;
   coordinator: string;
   notes: string;
+  weather: string;
+  rainPlan: string;
+  safetyNotes: string;
+  emergencyContactName: string;
+  emergencyContactRole: string;
+  emergencyContactPhone: string;
   order: number;
 };
 
 export type CreateShootDayInput = Partial<
-  Pick<ShootDay, "title" | "shootDate" | "location" | "callTime" | "wrapTime" | "coordinator" | "notes">
+  Pick<ShootDay, "title" | "shootDate" | "location" | "callTime" | "wrapTime" | "coordinator" | "notes" | "weather" | "rainPlan" | "safetyNotes" | "emergencyContactName" | "emergencyContactRole" | "emergencyContactPhone">
 >;
 
 export type StoryboardScene = {

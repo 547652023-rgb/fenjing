@@ -184,6 +184,34 @@ it("schedules, reorders, and releases individual shots without changing storyboa
   expect((await gateway.loadProject(project.id)).shots.every((shot) => !shot.shootDayId)).toBe(true);
 });
 
+it("persists shoot-day safety details", async () => {
+  const gateway = new FakeStoryboardGateway();
+  await gateway.signUp("owner@example.com", "password123");
+  const project = await gateway.createProject("广告片");
+  const day = await gateway.createShootDay(project.id, {
+    title: "首日",
+    weather: "阵雨",
+    rainPlan: "转棚内",
+    safetyNotes: "天台作业系安全绳",
+    emergencyContactName: "王制片",
+    emergencyContactRole: "制片",
+    emergencyContactPhone: "13800000000",
+  });
+
+  await gateway.updateShootDay(project.id, { ...day, weather: "小雨" });
+
+  await expect(gateway.loadProject(project.id)).resolves.toMatchObject({
+    shootDays: [expect.objectContaining({
+      weather: "小雨",
+      rainPlan: "转棚内",
+      safetyNotes: "天台作业系安全绳",
+      emergencyContactName: "王制片",
+      emergencyContactRole: "制片",
+      emergencyContactPhone: "13800000000",
+    })],
+  });
+});
+
 it("publishes immutable call-sheet versions in newest-first order", async () => {
   const gateway = new FakeStoryboardGateway();
   await gateway.signUp("owner@example.com", "password123");

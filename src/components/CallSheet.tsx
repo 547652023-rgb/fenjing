@@ -102,6 +102,20 @@ export function CallSheet({ project, versions = [], onPublish, onDateChange, onC
       notes: String(form.get("notes")),
     });
   };
+  const saveSafetyDetails = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!shootDay || !onUpdateShootDay) return;
+    const form = new FormData(event.currentTarget);
+    void onUpdateShootDay({
+      ...shootDay,
+      weather: String(form.get("weather")),
+      rainPlan: String(form.get("rainPlan")),
+      safetyNotes: String(form.get("safetyNotes")),
+      emergencyContactName: String(form.get("emergencyContactName")),
+      emergencyContactRole: String(form.get("emergencyContactRole")),
+      emergencyContactPhone: String(form.get("emergencyContactPhone")),
+    });
+  };
 
   return <section aria-label="拍摄通告" className="call-sheet">
     <header>
@@ -116,6 +130,7 @@ export function CallSheet({ project, versions = [], onPublish, onDateChange, onC
       <strong>新建拍摄通告</strong><label>通告标题<input aria-label="通告标题" value={draftTitle} onChange={(event) => setDraftTitle(event.currentTarget.value)} placeholder="例如：首日通告" /></label><label>拍摄日期<input aria-label="通告拍摄日期" type="date" value={draftDate} onChange={(event) => setDraftDate(event.currentTarget.value)} /></label><button type="submit" disabled={!draftTitle.trim() || !draftDate}>创建通告草稿</button>
     </form> : null}
     {shootDay && onUpdateShootDay ? <form key={shootDay.id} className="call-sheet__details" onSubmit={saveProductionDetails}><strong>通告制作资料</strong><label>拍摄地点<input aria-label="通告拍摄地点" name="location" defaultValue={shootDay.location} /></label><label>集合时间<input aria-label="通告集合时间" name="callTime" type="time" defaultValue={shootDay.callTime} /></label><label>收工时间<input aria-label="通告收工时间" name="wrapTime" type="time" defaultValue={shootDay.wrapTime} /></label><label>负责人<input aria-label="通告负责人" name="coordinator" defaultValue={shootDay.coordinator} /></label><label>现场备注<input aria-label="通告现场备注" name="notes" defaultValue={shootDay.notes} /></label><button type="submit">保存通告资料</button></form> : null}
+    {shootDay && onUpdateShootDay ? <form key={`${shootDay.id}-safety`} className="call-sheet__safety" onSubmit={saveSafetyDetails}><strong>现场保障</strong><label>天气<input aria-label="通告天气" name="weather" defaultValue={shootDay.weather} /></label><label>雨天备选方案<input aria-label="通告雨天备选方案" name="rainPlan" defaultValue={shootDay.rainPlan} /></label><label>安全提示<input aria-label="通告安全提示" name="safetyNotes" defaultValue={shootDay.safetyNotes} /></label><label>紧急联系人<input aria-label="通告紧急联系人" name="emergencyContactName" defaultValue={shootDay.emergencyContactName} /></label><label>紧急联系人职责<input aria-label="通告紧急联系人职责" name="emergencyContactRole" defaultValue={shootDay.emergencyContactRole} /></label><label>紧急联系电话<input aria-label="通告紧急联系电话" name="emergencyContactPhone" type="tel" defaultValue={shootDay.emergencyContactPhone} /></label><button type="submit">保存现场保障</button></form> : null}
     {scenes.length || scheduledShots.length ? <>
       <div className="call-sheet__publish"><span>将当前排期冻结为不可改写的交付版本。</span>{onPublish ? <button type="button" onClick={publish}>发布 V{latestVersion + 1}</button> : null}</div>
       {scenes.map((scene) => {

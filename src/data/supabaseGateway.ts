@@ -143,7 +143,7 @@ function rowToScene(row: any): StoryboardScene {
 }
 
 function rowToShootDay(row: any): ShootDay {
-  return { id: row.id, projectId: row.project_id, title: row.title, shootDate: row.shoot_date ?? "", location: row.location ?? "", callTime: row.call_time ?? "", wrapTime: row.wrap_time ?? "", coordinator: row.coordinator ?? "", notes: row.notes ?? "", order: row.position ?? 0 };
+  return { id: row.id, projectId: row.project_id, title: row.title, shootDate: row.shoot_date ?? "", location: row.location ?? "", callTime: row.call_time ?? "", wrapTime: row.wrap_time ?? "", coordinator: row.coordinator ?? "", notes: row.notes ?? "", weather: row.weather ?? "", rainPlan: row.rain_plan ?? "", safetyNotes: row.safety_notes ?? "", emergencyContactName: row.emergency_contact_name ?? "", emergencyContactRole: row.emergency_contact_role ?? "", emergencyContactPhone: row.emergency_contact_phone ?? "", order: row.position ?? 0 };
 }
 
 function rowToVersionedShot(row: any): VersionedShot {
@@ -587,7 +587,7 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
       this.client.from("fields").select("id,field_key,label,field_type,visible,position,allow_custom_value").eq("project_id", projectId).order("position"),
       this.client.from("field_options").select("field_id,value,position").order("position"),
       this.client.from("scenes").select("id,name,int_ext,day_night,target_duration_seconds,shoot_date,notes,collapsed,position").eq("project_id", projectId).order("position"),
-      this.client.from("shoot_days").select("id,project_id,title,shoot_date,location,call_time,wrap_time,coordinator,notes,position").eq("project_id", projectId).order("position"),
+      this.client.from("shoot_days").select("id,project_id,title,shoot_date,location,call_time,wrap_time,coordinator,notes,weather,rain_plan,safety_notes,emergency_contact_name,emergency_contact_role,emergency_contact_phone,position").eq("project_id", projectId).order("position"),
       this.client.from("shots").select("id,scene_id,shoot_day_id,shoot_order,values,version,position").eq("project_id", projectId).order("position"),
     ]);
     const projectRow = requireData<any>(projectResult);
@@ -761,12 +761,12 @@ class SupabaseStoryboardGateway implements StoryboardGateway {
 
   async createShootDay(projectId: string, input: CreateShootDayInput): Promise<ShootDay> {
     const rows = requireData<any[]>(await this.client.from("shoot_days").select("position").eq("project_id", projectId).order("position", { ascending: false }).limit(1));
-    const inserted = requireData<any[]>(await this.client.from("shoot_days").insert({ project_id: projectId, position: (rows[0]?.position ?? -1) + 1, title: input.title?.trim() || "未命名拍摄日", shoot_date: input.shootDate || null, location: input.location ?? "", call_time: input.callTime ?? "", wrap_time: input.wrapTime ?? "", coordinator: input.coordinator ?? "", notes: input.notes ?? "" }).select("id,project_id,title,shoot_date,location,call_time,wrap_time,coordinator,notes,position"));
+    const inserted = requireData<any[]>(await this.client.from("shoot_days").insert({ project_id: projectId, position: (rows[0]?.position ?? -1) + 1, title: input.title?.trim() || "未命名拍摄日", shoot_date: input.shootDate || null, location: input.location ?? "", call_time: input.callTime ?? "", wrap_time: input.wrapTime ?? "", coordinator: input.coordinator ?? "", notes: input.notes ?? "", weather: input.weather ?? "", rain_plan: input.rainPlan ?? "", safety_notes: input.safetyNotes ?? "", emergency_contact_name: input.emergencyContactName ?? "", emergency_contact_role: input.emergencyContactRole ?? "", emergency_contact_phone: input.emergencyContactPhone ?? "" }).select("id,project_id,title,shoot_date,location,call_time,wrap_time,coordinator,notes,weather,rain_plan,safety_notes,emergency_contact_name,emergency_contact_role,emergency_contact_phone,position"));
     return rowToShootDay(inserted[0]);
   }
 
   async updateShootDay(projectId: string, shootDay: ShootDay): Promise<void> {
-    const result = await this.client.from("shoot_days").update({ title: shootDay.title, shoot_date: shootDay.shootDate || null, location: shootDay.location, call_time: shootDay.callTime, wrap_time: shootDay.wrapTime, coordinator: shootDay.coordinator, notes: shootDay.notes, position: shootDay.order }).eq("id", shootDay.id).eq("project_id", projectId);
+    const result = await this.client.from("shoot_days").update({ title: shootDay.title, shoot_date: shootDay.shootDate || null, location: shootDay.location, call_time: shootDay.callTime, wrap_time: shootDay.wrapTime, coordinator: shootDay.coordinator, notes: shootDay.notes, weather: shootDay.weather, rain_plan: shootDay.rainPlan, safety_notes: shootDay.safetyNotes, emergency_contact_name: shootDay.emergencyContactName, emergency_contact_role: shootDay.emergencyContactRole, emergency_contact_phone: shootDay.emergencyContactPhone, position: shootDay.order }).eq("id", shootDay.id).eq("project_id", projectId);
     if (result.error) throw mapSupabaseError(result.error);
   }
 

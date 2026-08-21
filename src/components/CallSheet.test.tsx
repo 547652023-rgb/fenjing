@@ -17,7 +17,7 @@ it("creates a call-sheet preview from the selected shooting day", () => {
 
 it("freezes shoot-day details and ordered scheduled shots in a call-sheet snapshot", () => {
   const project = createProject();
-  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "滨江路", callTime: "07:00", wrapTime: "18:00", coordinator: "小李", notes: "备雨具", order: 0 }];
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "滨江路", callTime: "07:00", wrapTime: "18:00", coordinator: "小李", notes: "备雨具", weather: "", rainPlan: "", safetyNotes: "", emergencyContactName: "", emergencyContactRole: "", emergencyContactPhone: "", order: 0 }];
   project.shots = [{ id: "shot-2", shootDayId: "day-1", shootOrder: 1, values: { shotNumber: "2" } }, { id: "shot-1", shootDayId: "day-1", shootOrder: 0, values: { shotNumber: "1" } }];
   expect(buildCallSheetSnapshot(project, "2026-08-13")).toMatchObject({ shootDay: expect.objectContaining({ location: "滨江路" }), shots: [expect.objectContaining({ id: "shot-1" }), expect.objectContaining({ id: "shot-2" })] });
 });
@@ -58,7 +58,7 @@ it("creates a call-sheet draft by creating a shooting day", () => {
 
 it("requires a second confirmation before deleting a published call-sheet", () => {
   const project = createProject();
-  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", order: 0 }];
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "", callTime: "", wrapTime: "", coordinator: "", notes: "", weather: "", rainPlan: "", safetyNotes: "", emergencyContactName: "", emergencyContactRole: "", emergencyContactPhone: "", order: 0 }];
   const onDeleteShootDay = vi.fn();
 
   render(<CallSheet
@@ -76,7 +76,7 @@ it("requires a second confirmation before deleting a published call-sheet", () =
 
 it("saves call-sheet production details without leaving the call-sheet view", () => {
   const project = createProject();
-  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "旧址", callTime: "", wrapTime: "", coordinator: "", notes: "", order: 0 }];
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "旧址", callTime: "", wrapTime: "", coordinator: "", notes: "", weather: "", rainPlan: "", safetyNotes: "", emergencyContactName: "", emergencyContactRole: "", emergencyContactPhone: "", order: 0 }];
   const onUpdateShootDay = vi.fn();
 
   render(<CallSheet project={project} onUpdateShootDay={onUpdateShootDay} />);
@@ -100,7 +100,7 @@ it("saves call-sheet production details without leaving the call-sheet view", ()
 
 it("shows scheduled shots with their scene, shooting details, and duration summary", () => {
   const project = createProject();
-  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "滨江路", callTime: "07:00", wrapTime: "18:00", coordinator: "小李", notes: "", order: 0 }];
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "滨江路", callTime: "07:00", wrapTime: "18:00", coordinator: "小李", notes: "", weather: "", rainPlan: "", safetyNotes: "", emergencyContactName: "", emergencyContactRole: "", emergencyContactPhone: "", order: 0 }];
   project.scenes = [{ id: "scene-1", number: "3", name: "天台对话", intExt: "EXT", dayNight: "NIGHT", targetDurationSeconds: "20", shootDate: "2026-08-13", notes: "", collapsed: false }];
   project.shots = [
     { id: "shot-1", sceneId: "scene-1", shootDayId: "day-1", shootOrder: 0, values: { shotNumber: "7", content: "主角走向栏杆", shotSize: "中景", durationSeconds: "12", productionStatus: "待拍", notes: "留出收声时间" } },
@@ -119,7 +119,7 @@ it("shows scheduled shots with their scene, shooting details, and duration summa
 
 it("warns when the current call-sheet has changes that were not published", () => {
   const project = createProject();
-  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "滨江路", callTime: "07:00", wrapTime: "18:00", coordinator: "小李", notes: "", order: 0 }];
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "滨江路", callTime: "07:00", wrapTime: "18:00", coordinator: "小李", notes: "", weather: "", rainPlan: "", safetyNotes: "", emergencyContactName: "", emergencyContactRole: "", emergencyContactPhone: "", order: 0 }];
   project.shots = [{ id: "shot-1", shootDayId: "day-1", shootOrder: 0, values: { shotNumber: "1", content: "原始画面", durationSeconds: "8" } }];
   const snapshot = buildCallSheetSnapshot(project, "2026-08-13");
   const version = { id: "v1", projectId: project.id, shootDate: "2026-08-13", versionNumber: 1, snapshot, publishedBy: "producer@example.com", publishedAt: "2026-08-10T08:00:00.000Z" };
@@ -131,4 +131,29 @@ it("warns when the current call-sheet has changes that were not published", () =
   rerender(<CallSheet project={changedProject} versions={[version]} />);
 
   expect(screen.getByRole("status")).toHaveTextContent("存在未发布变更");
+});
+
+it("saves call-sheet safety details", () => {
+  const project = createProject();
+  project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日", shootDate: "2026-08-13", location: "滨江路", callTime: "07:00", wrapTime: "18:00", coordinator: "小李", notes: "", weather: "晴", rainPlan: "", safetyNotes: "", emergencyContactName: "", emergencyContactRole: "", emergencyContactPhone: "", order: 0 }];
+  const onUpdateShootDay = vi.fn();
+
+  render(<CallSheet project={project} onUpdateShootDay={onUpdateShootDay} />);
+
+  fireEvent.change(screen.getByLabelText("通告天气"), { target: { value: "阵雨" } });
+  fireEvent.change(screen.getByLabelText("通告雨天备选方案"), { target: { value: "转棚内" } });
+  fireEvent.change(screen.getByLabelText("通告安全提示"), { target: { value: "天台作业系安全绳" } });
+  fireEvent.change(screen.getByLabelText("通告紧急联系人"), { target: { value: "王制片" } });
+  fireEvent.change(screen.getByLabelText("通告紧急联系人职责"), { target: { value: "制片" } });
+  fireEvent.change(screen.getByLabelText("通告紧急联系电话"), { target: { value: "13800000000" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存现场保障" }));
+
+  expect(onUpdateShootDay).toHaveBeenCalledWith(expect.objectContaining({
+    weather: "阵雨",
+    rainPlan: "转棚内",
+    safetyNotes: "天台作业系安全绳",
+    emergencyContactName: "王制片",
+    emergencyContactRole: "制片",
+    emergencyContactPhone: "13800000000",
+  }));
 });
