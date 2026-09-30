@@ -854,6 +854,17 @@ export function StoryboardTable({
                           )
                         }
                       />
+                    ) : field.type === "text" ? (
+                      <textarea
+                        aria-label={`${field.label}-${shot.id}`}
+                        rows={2}
+                        value={shot.values[field.id] ?? ""}
+                        onChange={(event) =>
+                          onChange(
+                            updateShotValue(project, shot.id, field.id, event.target.value),
+                          )
+                        }
+                      />
                     ) : (
                       <input
                         aria-label={`${field.label}-${shot.id}`}
