@@ -40,3 +40,15 @@ it("stacks multiple storyboard images in one capped-width column aligned to the 
   expect(styles).toMatch(/\.image-cell--multiple\s*\{[^}]*padding:\s*0(?:;|\s)/s);
   expect(styles).toMatch(/\.storyboard-table td\s*\{[^}]*vertical-align:\s*top/s);
 });
+
+it("fills each storyboard text cell before scrolling overflow inside the field", () => {
+  expect(styles).toMatch(
+    /\.storyboard-table td\[data-field-type="text"\]\s*\{[^}]*position:\s*relative/s,
+  );
+  expect(styles).toMatch(
+    /\.storyboard-table td\[data-field-type="text"\] textarea\s*\{[^}]*position:\s*absolute[^}]*inset:\s*0[^}]*height:\s*100%[^}]*overflow:\s*auto/s,
+  );
+  expect(styles).toMatch(
+    /\.storyboard-table td\[data-field-type="text"\]\.sticky-project-column\s*\{[^}]*position:\s*sticky/s,
+  );
+});
