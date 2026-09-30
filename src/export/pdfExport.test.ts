@@ -332,9 +332,15 @@ it("draws the temporary export logo on every PDF page", async () => {
 
 it("renders the wide white logo on a dark backing without distorting it", async () => {
   const drawImage = vi.fn();
-  const fillRect = vi.fn();
+  let fillStyle = "";
+  const backingColors: string[] = [];
+  const fillRect = vi.fn((_x: number, _y: number, width: number, height: number) => {
+    if (width === 180 && height === 34) backingColors.push(fillStyle);
+  });
   const context = {
-    fillStyle: "", strokeStyle: "", lineWidth: 1, font: "", textAlign: "start", textBaseline: "alphabetic",
+    get fillStyle() { return fillStyle; },
+    set fillStyle(value: string) { fillStyle = value; },
+    strokeStyle: "", lineWidth: 1, font: "", textAlign: "start", textBaseline: "alphabetic",
     fillRect, strokeRect: vi.fn(), fillText: vi.fn(), drawImage,
     measureText: (text: string) => ({ width: text.length * 8 }),
   };
@@ -355,4 +361,5 @@ it("renders the wide white logo on a dark backing without distorting it", async 
   const logoCall = drawImage.mock.calls.find(([image]) => image === logo);
   expect(logoCall?.slice(3)).toEqual([180, 33]);
   expect(fillRect).toHaveBeenCalledWith(911, 39, 180, 34);
+  expect(backingColors).toEqual(["#000000"]);
 });
