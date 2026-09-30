@@ -308,9 +308,10 @@ it("renders one titled header page for an empty project", async () => {
 
 it("draws the temporary export logo on every PDF page", async () => {
   const drawImage = vi.fn();
+  const fillRect = vi.fn();
   const context = {
     fillStyle: "", strokeStyle: "", lineWidth: 1, font: "", textAlign: "start", textBaseline: "alphabetic",
-    fillRect: vi.fn(), strokeRect: vi.fn(), fillText: vi.fn(), drawImage,
+    fillRect, strokeRect: vi.fn(), fillText: vi.fn(), drawImage,
     measureText: (text: string) => ({ width: text.length * 8 }),
   };
   const jpeg = Uint8Array.from([255, 216, 255, 217]);
@@ -326,6 +327,7 @@ it("draws the temporary export logo on every PDF page", async () => {
 
   expect(pages.length).toBeGreaterThan(1);
   expect(loadImage.mock.calls.filter(([url]) => url === "blob:logo")).toHaveLength(pages.length);
+  expect(fillRect).not.toHaveBeenCalledWith(911, 39, 180, 34);
 });
 
 it("renders the wide white logo on a dark backing without distorting it", async () => {
@@ -348,7 +350,7 @@ it("renders the wide white logo on a dark backing without distorting it", async 
   await renderPdfPages(buildExportModel(project), {
     createCanvas,
     loadImage: async () => logo,
-  }, { logo: { name: "logo.png", url: "blob:logo", type: "image/png" } });
+  }, { logo: { name: "大拍档logo.png", url: "blob:logo", type: "image/png" } });
 
   const logoCall = drawImage.mock.calls.find(([image]) => image === logo);
   expect(logoCall?.slice(3)).toEqual([180, 33]);

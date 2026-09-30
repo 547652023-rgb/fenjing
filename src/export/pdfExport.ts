@@ -354,8 +354,10 @@ export async function renderPdfPages(
         const logoHeight = 34;
         const logoX = layout.width - PAGE_MARGIN - logoWidth;
         const logoY = PAGE_MARGIN + 7;
-        context.fillStyle = "#14532d";
-        context.fillRect(logoX, logoY, logoWidth, logoHeight);
+        if (options.logo.name === "大拍档logo.png") {
+          context.fillStyle = "#14532d";
+          context.fillRect(logoX, logoY, logoWidth, logoHeight);
+        }
         const fittedLogo = fitImageIntoSlot(logo, logoX, logoY, logoWidth, logoHeight);
         context.drawImage(logo, fittedLogo.x, fittedLogo.y, fittedLogo.width, fittedLogo.height);
       } catch {
