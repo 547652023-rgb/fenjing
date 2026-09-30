@@ -278,7 +278,7 @@ async function drawImageCell(
       return { image: null };
     }
   }));
-  const slotHeight = height / images.length;
+  const slotHeight = Math.min(height / images.length, IMAGE_ROW_HEIGHT);
 
   loaded.forEach(({ image }, index) => {
     const slotY = y + slotHeight * index;
@@ -350,9 +350,14 @@ export async function renderPdfPages(
     if (options.logo) {
       try {
         const logo = await loadImage(options.logo.url);
-        const logoWidth = 118;
-        const logoHeight = 36;
-        context.drawImage(logo, layout.width - PAGE_MARGIN - logoWidth, PAGE_MARGIN + 7, logoWidth, logoHeight);
+        const logoWidth = 180;
+        const logoHeight = 34;
+        const logoX = layout.width - PAGE_MARGIN - logoWidth;
+        const logoY = PAGE_MARGIN + 7;
+        context.fillStyle = "#14532d";
+        context.fillRect(logoX, logoY, logoWidth, logoHeight);
+        const fittedLogo = fitImageIntoSlot(logo, logoX, logoY, logoWidth, logoHeight);
+        context.drawImage(logo, fittedLogo.x, fittedLogo.y, fittedLogo.width, fittedLogo.height);
       } catch {
         // A failed temporary logo must not prevent storyboard export.
       }

@@ -170,6 +170,48 @@ it("fits exported images inside their PDF slots without stretching", async () =>
   expect(imageCalls[1].slice(3)).toEqual([54, 96]);
 });
 
+it("keeps an image the same size when long text makes its row taller", async () => {
+  const drawImage = vi.fn();
+  const context = {
+    fillStyle: "", strokeStyle: "", lineWidth: 1, font: "", textAlign: "start", textBaseline: "alphabetic",
+    fillRect: vi.fn(), strokeRect: vi.fn(), fillText: vi.fn(), drawImage,
+    measureText: (text: string) => ({ width: text.length * 8 }),
+  };
+  const jpeg = Uint8Array.from([255, 216, 255, 217]);
+  const createCanvas = vi.fn(() => ({
+    getContext: () => context,
+    toBlob: (callback: BlobCallback) => callback(new Blob([jpeg], { type: "image/jpeg" })),
+  }) as unknown as HTMLCanvasElement);
+  const model = {
+    title: "长文本与画面尺寸",
+    aspectRatio: "16:9",
+    shotCount: 1,
+    fields: [
+      { id: "frame", label: "画面", type: "image" as const, visible: true, order: 0 },
+      { id: "content", label: "内容", type: "text" as const, visible: true, order: 1 },
+    ],
+    rows: [{
+      shotId: "shot-1",
+      cells: [
+        { fieldId: "frame", fieldType: "image" as const, text: "", images: [{ path: "frame.jpg", url: "frame", name: "frame.jpg", position: 0 }] },
+        { fieldId: "content", fieldType: "text" as const, text: "很长的分镜内容。".repeat(80), images: [] },
+      ],
+    }],
+  };
+  const frame = { width: 1600, height: 900 } as CanvasImageSource;
+
+  const pages = await renderPdfPages(model, {
+    createCanvas,
+    loadImage: async () => frame,
+  });
+
+  const layout = buildPdfLayout(model);
+  expect(layout.pages[0].rows[0].height).toBeGreaterThan(96);
+  expect(pages).toHaveLength(1);
+  expect(drawImage.mock.calls.find(([image]) => image === frame)?.slice(3))
+    .toEqual([Math.round(96 * 16 / 9), 96]);
+});
+
 it("renders every line of a long text cell across variable-height pages", async () => {
   const sourceLines = Array.from(
     { length: 80 },
@@ -284,4 +326,31 @@ it("draws the temporary export logo on every PDF page", async () => {
 
   expect(pages.length).toBeGreaterThan(1);
   expect(loadImage.mock.calls.filter(([url]) => url === "blob:logo")).toHaveLength(pages.length);
+});
+
+it("renders the wide white logo on a dark backing without distorting it", async () => {
+  const drawImage = vi.fn();
+  const fillRect = vi.fn();
+  const context = {
+    fillStyle: "", strokeStyle: "", lineWidth: 1, font: "", textAlign: "start", textBaseline: "alphabetic",
+    fillRect, strokeRect: vi.fn(), fillText: vi.fn(), drawImage,
+    measureText: (text: string) => ({ width: text.length * 8 }),
+  };
+  const jpeg = Uint8Array.from([255, 216, 255, 217]);
+  const createCanvas = vi.fn(() => ({
+    getContext: () => context,
+    toBlob: (callback: BlobCallback) => callback(new Blob([jpeg], { type: "image/jpeg" })),
+  }) as unknown as HTMLCanvasElement);
+  const logo = { width: 600, height: 110 } as CanvasImageSource;
+  const project = createPdfProject();
+  project.shots = [];
+
+  await renderPdfPages(buildExportModel(project), {
+    createCanvas,
+    loadImage: async () => logo,
+  }, { logo: { name: "logo.png", url: "blob:logo", type: "image/png" } });
+
+  const logoCall = drawImage.mock.calls.find(([image]) => image === logo);
+  expect(logoCall?.slice(3)).toEqual([180, 33]);
+  expect(fillRect).toHaveBeenCalledWith(911, 39, 180, 34);
 });
