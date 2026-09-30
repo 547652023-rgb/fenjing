@@ -28,6 +28,15 @@ it("edits a visible storyboard cell and adds a shot", async () => {
   );
 });
 
+it("renders text storyboard fields as multiline inputs", () => {
+  render(<StoryboardTable project={createProject()} onChange={vi.fn()} />);
+
+  expect(screen.getByLabelText("内容-1").tagName).toBe("TEXTAREA");
+  expect(screen.getByLabelText("备注-1").tagName).toBe("TEXTAREA");
+  expect(screen.getByLabelText("场景-1").tagName).toBe("TEXTAREA");
+  expect(screen.getByLabelText("镜号-1").tagName).toBe("INPUT");
+});
+
 it("switches to the cinematography view without mutating storyboard fields", async () => {
   const user = userEvent.setup();
   const onChange = vi.fn();

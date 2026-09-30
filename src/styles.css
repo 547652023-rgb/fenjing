@@ -946,6 +946,16 @@ select:focus-visible { outline: 2px solid var(--copper-bright); outline-offset: 
 .storyboard-table th { color: var(--paper); background: var(--ink); font-size: 0.72rem; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; }
 .storyboard-table input,
 .storyboard-table select { line-height: 1.5; }
+.storyboard-table textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 8rem;
+  min-height: 3.5rem;
+  resize: vertical;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+  color: var(--ink);
+}
 .storyboard-table input[type="checkbox"] {
   display: inline-block;
   width: 1rem;
@@ -961,7 +971,8 @@ select:focus-visible { outline: 2px solid var(--copper-bright); outline-offset: 
 .storyboard-table input,
 .storyboard-table select { color: var(--ink); }
 .storyboard-table input:focus,
-.storyboard-table select:focus { outline-color: var(--copper); }
+.storyboard-table select:focus,
+.storyboard-table textarea:focus { outline-color: var(--copper); }
 .storyboard-table .sticky-shot-actions { background: #eadfce; box-shadow: 1px 0 0 #af987f; }
 .storyboard-table th.sticky-shot-actions { background: var(--wine); }
 .storyboard-table .sticky-shot-number { background: #f0e5d7; box-shadow: 1px 0 0 #af987f; }
