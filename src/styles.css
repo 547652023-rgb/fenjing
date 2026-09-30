@@ -950,10 +950,9 @@ select:focus-visible { outline: 2px solid var(--copper-bright); outline-offset: 
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  max-width: 24rem;
+  max-width: 100%;
   min-height: 3.5rem;
   max-height: 14rem;
-  field-sizing: content;
   resize: vertical;
   overflow-y: auto;
   overflow-wrap: anywhere;

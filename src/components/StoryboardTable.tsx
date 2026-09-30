@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   addShot,
   assignShotsToScene,
@@ -120,6 +120,37 @@ function columnWidth(field: FieldDefinition, width: ColumnWidth): string {
 
 function maxImagesFor(field: FieldDefinition): number {
   return field.id === "frame" || field.id === "reference" ? 5 : 1;
+}
+
+function TextFieldTextarea({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "auto";
+    const maxHeight = Number.parseFloat(window.getComputedStyle(textarea).maxHeight);
+    textarea.style.height = `${maxHeight ? Math.min(textarea.scrollHeight, maxHeight) : textarea.scrollHeight}px`;
+  }, [value]);
+
+  return (
+    <textarea
+      ref={textareaRef}
+      aria-label={label}
+      rows={2}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  );
 }
 
 export function StoryboardTable({
@@ -855,14 +886,11 @@ export function StoryboardTable({
                         }
                       />
                     ) : field.type === "text" ? (
-                      <textarea
-                        aria-label={`${field.label}-${shot.id}`}
-                        rows={2}
+                      <TextFieldTextarea
+                        label={`${field.label}-${shot.id}`}
                         value={shot.values[field.id] ?? ""}
-                        onChange={(event) =>
-                          onChange(
-                            updateShotValue(project, shot.id, field.id, event.target.value),
-                          )
+                        onChange={(value) =>
+                          onChange(updateShotValue(project, shot.id, field.id, value))
                         }
                       />
                     ) : (
