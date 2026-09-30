@@ -949,7 +949,8 @@ select:focus-visible { outline: 2px solid var(--copper-bright); outline-offset: 
 .storyboard-table textarea {
   box-sizing: border-box;
   width: 100%;
-  min-width: 8rem;
+  min-width: 0;
+  max-width: 24rem;
   min-height: 3.5rem;
   max-height: 14rem;
   field-sizing: content;
