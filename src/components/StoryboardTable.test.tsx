@@ -37,7 +37,7 @@ it("renders text storyboard fields as multiline inputs", () => {
   expect(screen.getByLabelText("镜号-1").tagName).toBe("INPUT");
 });
 
-it("resizes a text field to show wrapped content", () => {
+it("keeps a text field at its original height when content wraps", () => {
   const project = createProject();
 
   function StatefulTable() {
@@ -58,7 +58,7 @@ it("resizes a text field to show wrapped content", () => {
 
   fireEvent.change(contentField, { target: { value: "一段足够长、需要折行显示的镜头描述" } });
 
-  expect(contentField).toHaveStyle({ height: "180px" });
+  expect((contentField as HTMLTextAreaElement).style.height).toBe("");
 });
 
 it("switches to the cinematography view without mutating storyboard fields", async () => {
