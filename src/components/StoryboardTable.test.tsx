@@ -37,6 +37,30 @@ it("renders text storyboard fields as multiline inputs", () => {
   expect(screen.getByLabelText("镜号-1").tagName).toBe("INPUT");
 });
 
+it("resizes a text field to show wrapped content", () => {
+  const project = createProject();
+
+  function StatefulTable() {
+    const [currentProject, setCurrentProject] = useState(project);
+    return (
+      <StoryboardTable
+        project={currentProject}
+        onChange={(update) => setCurrentProject((current) =>
+          typeof update === "function" ? update(current) : update,
+        )}
+      />
+    );
+  }
+
+  render(<StatefulTable />);
+  const contentField = screen.getByLabelText("内容-1");
+  Object.defineProperty(contentField, "scrollHeight", { configurable: true, value: 180 });
+
+  fireEvent.change(contentField, { target: { value: "一段足够长、需要折行显示的镜头描述" } });
+
+  expect(contentField).toHaveStyle({ height: "180px" });
+});
+
 it("switches to the cinematography view without mutating storyboard fields", async () => {
   const user = userEvent.setup();
   const onChange = vi.fn();
