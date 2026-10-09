@@ -44,6 +44,37 @@ function createPdfProject(): StoryboardProject {
   };
 }
 
+it("exports high-resolution pages and vertically centers the first photo in a tall row", async () => {
+  const drawImage = vi.fn();
+  const context = { fillStyle: "", strokeStyle: "", lineWidth: 1, font: "", textAlign: "start", textBaseline: "alphabetic", fillRect: vi.fn(), strokeRect: vi.fn(), fillText: vi.fn(), drawImage, scale: vi.fn(), measureText: (text: string) => ({ width: text.length * 8 }) };
+  const createCanvas = vi.fn(() => ({ getContext: () => context, toBlob: (callback: BlobCallback) => callback(new Blob([Uint8Array.from([255,216,255,217])], { type: "image/jpeg" })) }) as unknown as HTMLCanvasElement);
+  const project = createPdfProject();
+  project.shots = [project.shots[0]];
+  project.shots[0].values.frame = JSON.stringify([{ path: "frame", url: "frame", name: "frame.jpg", position: 0 }]);
+  project.shots[0].values.content = "完整内容\n".repeat(15);
+  const frame = { width: 1920, height: 1080 } as CanvasImageSource;
+  const pages = await renderPdfPages(buildExportModel(project), { createCanvas, loadImage: async () => frame });
+  expect(pages[0].width).toBeGreaterThanOrEqual(3369);
+  const row = buildPdfLayout(buildExportModel(project)).pages[0].rows[0];
+  const call = drawImage.mock.calls.find(([image]) => image === frame)!;
+  expect(call[2] + call[4] / 2).toBeCloseTo(152 + row.height / 2, 0);
+  expect(call[3] / call[4]).toBeCloseTo(16 / 9, 2);
+  const pdf = new TextDecoder().decode(encodePdfPages(pages));
+  expect(pdf).toContain("/ToUnicode");
+  expect(pdf).toContain("/Encoding /Identity-H");
+  expect(pdf).toContain("5B8C657451855BB9");
+});
+
+it("keeps all five photos when a shot spans multiple PDF pages", () => {
+  const project = createPdfProject();
+  project.shots = [project.shots[0]];
+  project.shots[0].values.frame = JSON.stringify(Array.from({ length: 5 }, (_, i) => ({ path: `frame-${i}`, url: `frame-${i}`, name: `frame-${i}.jpg`, position: i })));
+  const layout = buildPdfLayout(buildExportModel(project));
+  expect(layout.pages.length).toBeGreaterThan(1);
+  expect(layout.pages.flatMap(page => page.rows.flatMap(row => row.cells.flatMap(cell => cell.images))).map(image => image.path)).toEqual(Array.from({ length: 5 }, (_, i) => `frame-${i}`));
+  layout.pages.forEach((page, index) => expect(page.rows.reduce((height, row) => height + row.height, 0)).toBeLessThanOrEqual(index === 0 ? 610 : 638));
+});
+
 it("preserves visible field and shot order across deterministic PDF pages", () => {
   const project = createPdfProject();
   const layout = buildPdfLayout(buildExportModel(project));
@@ -166,8 +197,8 @@ it("fits exported images inside their PDF slots without stretching", async () =>
 
   const imageCalls = drawImage.mock.calls.filter(([image]) => image === landscape || image === portrait);
   expect(imageCalls).toHaveLength(2);
-  expect(imageCalls[0].slice(3)).toEqual([Math.round(96 * 16 / 9), 96]);
-  expect(imageCalls[1].slice(3)).toEqual([54, 96]);
+  expect(imageCalls[0].slice(3)).toEqual([Math.round(128 * 16 / 9), 128]);
+  expect(imageCalls[1].slice(3)).toEqual([72, 128]);
 });
 
 it("keeps an image the same size when long text makes its row taller", async () => {
@@ -209,7 +240,7 @@ it("keeps an image the same size when long text makes its row taller", async () 
   expect(layout.pages[0].rows[0].height).toBeGreaterThan(96);
   expect(pages).toHaveLength(1);
   expect(drawImage.mock.calls.find(([image]) => image === frame)?.slice(3))
-    .toEqual([Math.round(96 * 16 / 9), 96]);
+    .toEqual([Math.round(128 * 16 / 9), 128]);
 });
 
 it("renders every line of a long text cell across variable-height pages", async () => {
@@ -248,7 +279,7 @@ it("renders every line of a long text cell across variable-height pages", async 
     fillText,
     drawImage: vi.fn(),
     measureText(text: string) {
-      measuredFonts.push(this.font);
+      if (fillText.mock.calls.length === 0) measuredFonts.push(this.font);
       return { width: text.length * 8 };
     },
   };

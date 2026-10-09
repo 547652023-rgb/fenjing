@@ -8,10 +8,13 @@ import {
 } from "./storyboardExport";
 import { createZip } from "./zip";
 import { buildShootDayExportModel, type ShootDayExportModel } from "./shootDayExport";
+import { fitImage, imageSize } from "./imageGeometry";
 
 export type LoadedImage = {
   bytes: Uint8Array;
   extension: "png" | "jpeg" | "gif";
+  width?: number;
+  height?: number;
 };
 
 export type XlsxImageLoadDependencies = {
@@ -36,6 +39,50 @@ const encoder = new TextEncoder();
 const CELL_WIDTH_EMU = 2_181_225;
 const POINT_TO_EMU = 12_700;
 const HEADER_ROWS = 4;
+const IMAGE_SLOT_HEIGHT = 104;
+const IMAGE_PADDING_EMU = 6 * POINT_TO_EMU;
+
+function wrapSpreadsheetText(text: string): string[] {
+  const lines: string[] = [];
+  for (const paragraph of text.split("\n")) {
+      let width = 0;
+      let line = "";
+      for (const character of paragraph) {
+        const advance = /[^\u0000-\u00ff]/.test(character) ? 10.5 : 6;
+        if (width + advance > 86) { lines.push(line); line = ""; width = 0; }
+        line += character;
+        width += advance;
+      }
+      lines.push(line);
+  }
+  return lines;
+}
+
+function rowHeight(row: ExportModel["rows"][number]): number {
+  const imageCount = Math.max(0, ...row.cells.filter(cell => cell.fieldType === "image").map(cell => cell.images.length));
+  const lines = Math.max(1, ...row.cells.filter(cell => cell.fieldType !== "image").map(cell => wrapSpreadsheetText(cell.text).length));
+  return Math.max(32, imageCount * IMAGE_SLOT_HEIGHT, 12 + lines * 15);
+}
+
+function splitExcelRows(model: ExportModel): ExportModel["rows"] {
+  // Excel limits a row to 409 points. Continue oversized cells instead of clipping them.
+  const lineCapacity = 26;
+  const imageCapacity = 3;
+  const shotNumberId = model.fields.find(field => field.label === "镜号")?.id;
+  return model.rows.flatMap(row => {
+    const wrapped = row.cells.map(cell => wrapSpreadsheetText(cell.text));
+    const parts = Math.max(1, ...row.cells.map((cell, index) => Math.max(Math.ceil(wrapped[index].length / lineCapacity), Math.ceil(cell.images.length / imageCapacity))));
+    if (parts === 1) return [row];
+    return Array.from({ length: parts }, (_, part) => ({
+      ...row,
+      cells: row.cells.map((cell, index) => ({
+        ...cell,
+        text: cell.fieldId === shotNumberId ? cell.text : wrapped[index].length <= lineCapacity ? (part === 0 ? cell.text : "") : wrapped[index].slice(part * lineCapacity, (part + 1) * lineCapacity).join("\n"),
+        images: cell.images.slice(part * imageCapacity, (part + 1) * imageCapacity),
+      })),
+    }));
+  });
+}
 
 function spreadsheetText(value: string): string {
   return value
@@ -101,7 +148,10 @@ async function loadRemoteImage(
   }
   const blob = await response.blob();
   const extension = imageExtension(response.headers.get("content-type") || blob.type, url);
-  if (extension) return { bytes: await blobBytes(blob), extension };
+  if (extension) {
+    const bytes = await blobBytes(blob);
+    return { bytes, extension, ...imageSize(bytes) };
+  }
 
   const decodeImage = dependencies.createImageBitmap ?? createImageBitmap;
   const createCanvas = dependencies.createCanvas ?? createBrowserImageCanvas;
@@ -115,7 +165,7 @@ async function loadRemoteImage(
     const context = canvas.getContext("2d");
     if (!context) throw new Error("Canvas 2D context is unavailable");
     context.drawImage(bitmap, 0, 0, width, height);
-    return canvasPng(canvas);
+    return { ...await canvasPng(canvas), width, height };
   } finally {
     bitmap.close();
   }
@@ -189,7 +239,7 @@ function workbookRelationshipsXml(): string {
 
 function stylesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="4"><font><sz val="10"/><name val="Microsoft YaHei"/><family val="2"/></font><font><b/><sz val="18"/><name val="Microsoft YaHei"/><family val="2"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="10"/><name val="Microsoft YaHei"/><family val="2"/></font><font><sz val="10"/><name val="Microsoft YaHei"/><family val="2"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF000000"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FF8C8C8C"/></left><right style="thin"><color rgb="FF8C8C8C"/></right><top style="thin"><color rgb="FF8C8C8C"/></top><bottom style="thin"><color rgb="FF8C8C8C"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="4"><font><sz val="10"/><name val="Arial"/><family val="2"/></font><font><b/><sz val="18"/><name val="Microsoft YaHei"/><family val="2"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="10"/><name val="Microsoft YaHei"/><family val="2"/></font><font><sz val="10"/><name val="Microsoft YaHei"/><family val="2"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF000000"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FF8C8C8C"/></left><right style="thin"><color rgb="FF8C8C8C"/></right><top style="thin"><color rgb="FF8C8C8C"/></top><bottom style="thin"><color rgb="FF8C8C8C"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="top" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
 }
 
 function worksheetXml(model: ExportModel, failedCells: Set<string>, hasLogo: boolean): string {
@@ -207,8 +257,6 @@ function worksheetXml(model: ExportModel, failedCells: Set<string>, hasLogo: boo
   ];
   const rows = model.rows.map((row, rowIndex) => {
     const excelRow = rowIndex + metadataRows + 2;
-    const hasImageCell = row.cells.some((cell) => cell.fieldType === "image");
-    const imageCount = Math.max(1, ...row.cells.filter((cell) => cell.fieldType === "image").map((cell) => cell.images.length));
     const cells = model.fields.map((field, columnIndex) => {
       const cell = row.cells.find((candidate) => candidate.fieldId === field.id);
       if (field.type === "image") {
@@ -217,12 +265,12 @@ function worksheetXml(model: ExportModel, failedCells: Set<string>, hasLogo: boo
       }
       return inlineCell(columnIndex, excelRow, cell?.text ?? "", 3);
     }).join("");
-    const height = hasImageCell ? ` ht="${Math.min(400, imageCount * 80)}" customHeight="1"` : "";
+    const height = ` ht="${rowHeight(row)}" customHeight="1"`;
     return `<row r="${excelRow}"${height}>${cells}</row>`;
   }).join("");
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:${lastColumn}${lastRow}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A5" sqref="A5"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>${columns}</cols><sheetData><row r="1" ht="30" customHeight="1">${metadata[0]}</row><row r="2">${metadata[1]}</row><row r="3">${metadata[2]}</row><row r="4" ht="34" customHeight="1">${header}</row>${rows}</sheetData><pageMargins left="0.3" right="0.3" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup orientation="landscape" paperSize="9" fitToWidth="1" fitToHeight="0"/><drawing r:id="rId1"/>${hasLogo ? '<headerFooter><oddHeader>&amp;R&amp;G</oddHeader></headerFooter><legacyDrawingHF r:id="rId2"/>' : ""}</worksheet>`;
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:${lastColumn}${lastRow}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A5" sqref="A5"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>${columns}</cols><sheetData><row r="1" ht="30" customHeight="1">${metadata[0]}</row><row r="2">${metadata[1]}</row><row r="3">${metadata[2]}</row><row r="4" ht="34" customHeight="1">${header}</row>${rows}</sheetData><pageMargins left="0.3" right="0.3" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup orientation="landscape" paperSize="9" fitToWidth="1" fitToHeight="0"/>${hasLogo ? '<headerFooter><oddHeader>&amp;R&amp;G</oddHeader></headerFooter>' : ""}<drawing r:id="rId1"/>${hasLogo ? '<legacyDrawingHF r:id="rId2"/>' : ""}</worksheet>`;
 }
 
 function worksheetRelationshipsXml(hasLogo: boolean): string {
@@ -230,25 +278,37 @@ function worksheetRelationshipsXml(hasLogo: boolean): string {
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>${hasLogo ? '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/>' : ""}</Relationships>`;
 }
 
-function headerLogoVml(): string {
-  return `<?xml version="1.0" encoding="UTF-8"?><xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="1"/></o:shapelayout><v:shapetype id="_x0000_t75" coordsize="21600,21600" o:spt="75" path="m@4@5l@4@11@9@11@9@5xe"><v:stroke joinstyle="miter"/><v:formulas><v:f eqn="if lineDrawn pixelLineWidth 0"/><v:f eqn="sum @0 1 0"/><v:f eqn="sum 0 0 @1"/><v:f eqn="prod @2 1 2"/><v:f eqn="prod @3 21600 pixelWidth"/><v:f eqn="prod @3 21600 pixelHeight"/><v:f eqn="sum @0 0 1"/><v:f eqn="prod @6 1 2"/><v:f eqn="prod @7 21600 pixelWidth"/><v:f eqn="sum @8 21600 0"/><v:f eqn="prod @7 21600 pixelHeight"/><v:f eqn="sum @10 21600 0"/></v:formulas><v:path o:extrusionok="f" gradientshapeok="t" o:connecttype="rect"/><o:lock v:ext="edit" aspectratio="t"/></v:shapetype><v:shape id="RH" o:spid="_x0000_s1025" type="#_x0000_t75" style="position:absolute;margin-left:0;margin-top:0;width:120pt;height:36pt;z-index:1" filled="f" stroked="f"><v:imagedata o:relid="rId1" o:title="Logo"/><o:lock v:ext="edit" rotation="t"/></v:shape></xml>`;
+function headerLogoVml(logo: EmbeddedImage): string {
+  const size = fitImage({ width: logo.width || 600, height: logo.height || 110 }, 120, 36);
+  return `<?xml version="1.0" encoding="UTF-8"?><xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="1"/></o:shapelayout><v:shapetype id="_x0000_t75" coordsize="21600,21600" o:spt="75" path="m@4@5l@4@11@9@11@9@5xe"><v:stroke joinstyle="miter"/><v:formulas><v:f eqn="if lineDrawn pixelLineWidth 0"/><v:f eqn="sum @0 1 0"/><v:f eqn="sum 0 0 @1"/><v:f eqn="prod @2 1 2"/><v:f eqn="prod @3 21600 pixelWidth"/><v:f eqn="prod @3 21600 pixelHeight"/><v:f eqn="sum @0 0 1"/><v:f eqn="prod @6 1 2"/><v:f eqn="prod @7 21600 pixelWidth"/><v:f eqn="sum @8 21600 0"/><v:f eqn="prod @7 21600 pixelHeight"/><v:f eqn="sum @10 21600 0"/></v:formulas><v:path o:extrusionok="f" gradientshapeok="t" o:connecttype="rect"/><o:lock v:ext="edit" aspectratio="t"/></v:shapetype><v:shape id="RH" o:spid="_x0000_s1025" type="#_x0000_t75" style="position:absolute;margin-left:0;margin-top:0;width:${size.width.toFixed(3)}pt;height:${size.height.toFixed(3)}pt;z-index:1" filled="f" stroked="f"><v:imagedata o:relid="rId1" o:title="Logo"/><o:lock v:ext="edit" rotation="t"/></v:shape></xml>`;
 }
 
 function headerLogoRelationshipsXml(logo: EmbeddedImage): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${logo.mediaName}"/></Relationships>`;
 }
 
-function drawingXml(anchors: CellAnchor[]): string {
+function drawingXml(anchors: CellAnchor[], logo?: EmbeddedImage, fieldCount = 0): string {
   let imageNumber = 0;
   const drawings = anchors.flatMap((anchor) => anchor.images.map((image, slot) => {
     imageNumber += 1;
-    const start = Math.floor(anchor.heightEmu * slot / anchor.images.length);
-    const end = Math.floor(anchor.heightEmu * (slot + 1) / anchor.images.length);
-    return `<xdr:twoCellAnchor editAs="oneCell"><xdr:from><xdr:col>${anchor.column}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${anchor.row}</xdr:row><xdr:rowOff>${start}</xdr:rowOff></xdr:from><xdr:to><xdr:col>${anchor.column + 1}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${anchor.row}</xdr:row><xdr:rowOff>${end}</xdr:rowOff></xdr:to><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${imageNumber}" name="Image ${imageNumber}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="${image.relationshipId}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>`;
+    const slotHeight = IMAGE_SLOT_HEIGHT * POINT_TO_EMU;
+    const fitted = fitImage({ width: image.width || 16, height: image.height || 9 }, CELL_WIDTH_EMU - 2 * IMAGE_PADDING_EMU, slotHeight - 2 * IMAGE_PADDING_EMU);
+    const x = Math.round((CELL_WIDTH_EMU - fitted.width) / 2);
+    const y = Math.round((anchor.heightEmu - slotHeight * anchor.images.length) / 2 + slot * slotHeight + (slotHeight - fitted.height) / 2);
+    const width = Math.round(fitted.width);
+    const height = Math.round(fitted.height);
+    return `<xdr:oneCellAnchor><xdr:from><xdr:col>${anchor.column}</xdr:col><xdr:colOff>${x}</xdr:colOff><xdr:row>${anchor.row}</xdr:row><xdr:rowOff>${y}</xdr:rowOff></xdr:from><xdr:ext cx="${width}" cy="${height}"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${imageNumber}" name="Image ${imageNumber}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="${image.relationshipId}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${width}" cy="${height}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`;
   })).join("");
 
+  let logoDrawing = "";
+  if (logo && fieldCount >= 3) {
+    const fitted = fitImage({ width: logo.width || 600, height: logo.height || 110 }, 160, 32);
+    const width = Math.round(fitted.width * 9525);
+    const height = Math.round(fitted.height * 9525);
+    logoDrawing = `<xdr:oneCellAnchor><xdr:from><xdr:col>${fieldCount - 2}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>38100</xdr:rowOff></xdr:from><xdr:ext cx="${width}" cy="${height}"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${imageNumber + 1}" name="Logo"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="${logo.relationshipId}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${width}" cy="${height}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`;
+  }
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${drawings}</xdr:wsDr>`;
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${drawings}${logoDrawing}</xdr:wsDr>`;
 }
 
 function drawingRelationshipsXml(images: EmbeddedImage[]): string {
@@ -266,13 +326,28 @@ export async function buildXlsxPackage(
   imageDependencies: XlsxImageLoadDependencies = {},
   options: ExportOptions = {},
 ): Promise<Map<string, Uint8Array>> {
+  model = { ...model, rows: splitExcelRows(model) };
   const images: EmbeddedImage[] = [];
   const anchors: CellAnchor[] = [];
   const failedCells = new Set<string>();
   const imageLoader = loadImage ?? ((url: string) => loadRemoteImage(url, imageDependencies));
   let logo: EmbeddedImage | undefined;
   if (options.logo) {
-    const loaded = await imageLoader(options.logo.url);
+    let loaded = await imageLoader(options.logo.url);
+    if (options.logo.name === "大拍档logo.png") {
+      const decode = imageDependencies.createImageBitmap ?? createImageBitmap;
+      const bitmap = await decode(new Blob([new Uint8Array(loaded.bytes)], { type: options.logo.type }));
+      try {
+        const canvas = (imageDependencies.createCanvas ?? createBrowserImageCanvas)(bitmap.width, bitmap.height);
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("Canvas 2D context is unavailable");
+        context.fillStyle = "#000000";
+        context.fillRect(0, 0, bitmap.width, bitmap.height);
+        context.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height);
+        loaded = { ...await canvasPng(canvas), width: bitmap.width, height: bitmap.height };
+      } finally { bitmap.close(); }
+    }
+    loaded = { ...imageSize(loaded.bytes), ...loaded };
     logo = { ...loaded, relationshipId: "rId1", mediaName: `logo.${loaded.extension}` };
   }
 
@@ -291,7 +366,7 @@ export async function buildXlsxPackage(
         }
         const number = images.length + 1;
         const embedded: EmbeddedImage = {
-          ...loaded,
+          ...imageSize(loaded.bytes), ...loaded,
           relationshipId: `rId${number}`,
           mediaName: `image${number}.${loaded.extension}`,
         };
@@ -299,13 +374,13 @@ export async function buildXlsxPackage(
         cellImages.push(embedded);
       }
       if (cellImages.length > 0) {
-        const imageCount = Math.max(1, cellImages.length);
-        anchors.push({ column: columnIndex, row: rowIndex + 4, heightEmu: Math.min(400, imageCount * 80) * POINT_TO_EMU, images: cellImages });
+        anchors.push({ column: columnIndex, row: rowIndex + 4, heightEmu: rowHeight(row) * POINT_TO_EMU, images: cellImages });
       }
     }
   }
 
   const files = new Map<string, Uint8Array>();
+  if (logo) logo.relationshipId = `rId${images.length + 1}`;
   files.set("[Content_Types].xml", encoder.encode(contentTypesXml()));
   files.set("_rels/.rels", encoder.encode(rootRelationshipsXml()));
   files.set("xl/workbook.xml", encoder.encode(workbookXml()));
@@ -313,14 +388,14 @@ export async function buildXlsxPackage(
   files.set("xl/styles.xml", encoder.encode(stylesXml()));
   files.set("xl/worksheets/sheet1.xml", encoder.encode(worksheetXml(model, failedCells, Boolean(logo))));
   files.set("xl/worksheets/_rels/sheet1.xml.rels", encoder.encode(worksheetRelationshipsXml(Boolean(logo))));
-  files.set("xl/drawings/drawing1.xml", encoder.encode(drawingXml(anchors)));
-  files.set("xl/drawings/_rels/drawing1.xml.rels", encoder.encode(drawingRelationshipsXml(images)));
+  files.set("xl/drawings/drawing1.xml", encoder.encode(drawingXml(anchors, logo, model.fields.length)));
+  files.set("xl/drawings/_rels/drawing1.xml.rels", encoder.encode(drawingRelationshipsXml(logo ? [...images, logo] : images)));
   for (const image of images) {
     files.set(`xl/media/${image.mediaName}`, image.bytes);
   }
   if (logo) {
     files.set(`xl/media/${logo.mediaName}`, logo.bytes);
-    files.set("xl/drawings/vmlDrawing1.vml", encoder.encode(headerLogoVml()));
+    files.set("xl/drawings/vmlDrawing1.vml", encoder.encode(headerLogoVml(logo)));
     files.set("xl/drawings/_rels/vmlDrawing1.vml.rels", encoder.encode(headerLogoRelationshipsXml(logo)));
   }
   return files;

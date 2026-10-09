@@ -15,6 +15,52 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it("gives long wrapped text enough height even when the row has an image", async () => {
+  const source = { ...model, rows: [{ ...model.rows[0], cells: model.rows[0].cells.map(cell =>
+    cell.fieldId === "content" ? { ...cell, text: "完整的分镜内容".repeat(20) } : cell
+  ) }] };
+  const files = await buildXlsxPackage(source, async () => ({ bytes: validPngBytes(), extension: "png", width: 1920, height: 1080 }));
+  const sheet = new DOMParser().parseFromString(new TextDecoder().decode(files.get("xl/worksheets/sheet1.xml")), "application/xml");
+  expect(Number(sheet.querySelector('row[r="5"]')?.getAttribute("ht"))).toBeGreaterThan(160);
+  expect(new TextDecoder().decode(files.get("xl/styles.xml"))).toContain('vertical="top"');
+});
+
+it("anchors photos at their original aspect ratio inside their cells", async () => {
+  const files = await buildXlsxPackage(model, async () => ({ bytes: validPngBytes(), extension: "png", width: 1920, height: 1080 }));
+  const drawing = new DOMParser().parseFromString(new TextDecoder().decode(files.get("xl/drawings/drawing1.xml")), "application/xml");
+  const extents = Array.from(drawing.getElementsByTagName("xdr:ext"));
+  expect(extents).toHaveLength(2);
+  extents.forEach(ext => expect(Number(ext.getAttribute("cx")) / Number(ext.getAttribute("cy"))).toBeCloseTo(16 / 9, 4));
+});
+
+it("continues oversized text and five photos without exceeding Excel's maximum row height", async () => {
+  const source = { ...model, rows: [{ ...model.rows[0], cells: model.rows[0].cells.map(cell => cell.fieldId === "content" ? { ...cell, text: Array.from({ length: 60 }, (_, i) => `内容${i}`).join("\n") } : cell.fieldId === "frame" ? { ...cell, images: Array.from({ length: 5 }, (_, i) => ({ ...cell.images[0], path: `frame-${i}` })) } : cell) }] };
+  const files = await buildXlsxPackage(source, async () => ({ bytes: validPngBytes(), extension: "png", width: 1920, height: 1080 }));
+  const sheet = new DOMParser().parseFromString(new TextDecoder().decode(files.get("xl/worksheets/sheet1.xml")), "application/xml");
+  const rows = Array.from(sheet.getElementsByTagName("row")).filter(row => Number(row.getAttribute("r")) >= 5);
+  expect(rows).toHaveLength(3);
+  rows.forEach(row => expect(Number(row.getAttribute("ht"))).toBeLessThanOrEqual(409));
+  const text = rows.flatMap(row => Array.from(row.getElementsByTagName("c")).filter(cell => cell.getAttribute("r")?.startsWith("B")).map(cell => cell.textContent)).join("\n");
+  expect(text).toBe(source.rows[0].cells[1].text);
+  expect([...files.keys()].filter(name => /xl\/media\/image\d/.test(name))).toHaveLength(5);
+});
+
+it("exports a black-backed default logo with the correct printed aspect ratio", async () => {
+  const fillRect = vi.fn();
+  const drawImage = vi.fn();
+  const context = { fillStyle: "", fillRect, drawImage };
+  const files = await buildXlsxPackage({ ...model, rows: [] }, async () => ({ bytes: validPngBytes(), extension: "png", width: 600, height: 110 }), undefined, {
+    createImageBitmap: async () => ({ width: 600, height: 110, close: vi.fn() }) as unknown as ImageBitmap,
+    createCanvas: () => ({ getContext: () => context, toBlob: (callback: BlobCallback) => callback(new Blob([new Uint8Array(validPngBytes())], { type: "image/png" })) }) as unknown as HTMLCanvasElement,
+  }, { logo: { name: "大拍档logo.png", url: "blob:logo", type: "image/png" } });
+  expect(context.fillStyle).toBe("#000000");
+  expect(fillRect).toHaveBeenCalledWith(0, 0, 600, 110);
+  expect(drawImage).toHaveBeenCalled();
+  const vml = new TextDecoder().decode(files.get("xl/drawings/vmlDrawing1.vml"));
+  const size = vml.match(/width:([\d.]+)pt;height:([\d.]+)pt/);
+  expect(Number(size?.[1]) / Number(size?.[2])).toBeCloseTo(600 / 110, 2);
+});
+
 it("builds a two-sheet workbook for a shoot day", async () => {
   const project = { ...createProject(), title: "广告片" };
   project.shootDays = [{ id: "day-1", projectId: project.id, title: "首日外景", shootDate: "2026-08-23", location: "测试棚 A", callTime: "09:00", wrapTime: "18:00", coordinator: "制片", notes: "", weather: "阵雨", rainPlan: "", safetyNotes: "天台作业系安全绳", emergencyContactName: "王制片", emergencyContactRole: "制片", emergencyContactPhone: "13800000000", order: 0 }];
@@ -71,11 +117,11 @@ it("builds a workbook with inline text and embedded images", async () => {
   expect(sheet).toContain("项目名称：测试 &amp; 项目");
   expect(sheet).toContain("画幅比例：16:9");
   expect(sheet).toContain("镜头总数：1");
-  expect(sheet).toContain('ht="160"');
+  expect(sheet).toContain('ht="208"');
   expect(files.has("xl/media/image1.png")).toBe(true);
   expect(files.has("xl/media/image2.png")).toBe(true);
   expect(new TextDecoder().decode(files.get("xl/drawings/drawing1.xml")))
-    .toContain("xdr:twoCellAnchor");
+    .toContain("xdr:oneCellAnchor");
   expect(new TextDecoder().decode(files.get("xl/workbook.xml")))
     .toContain("_xlnm.Print_Titles");
   expect(sheet).toContain('fitToWidth="1"');
@@ -133,11 +179,13 @@ it("keeps mixed image slots stable and embeds a visible placeholder for each fai
   );
 
   const drawing = new TextDecoder().decode(files.get("xl/drawings/drawing1.xml"));
-  const startOffsets = [...drawing.matchAll(
-    /<xdr:from><xdr:col>2<\/xdr:col><xdr:colOff>0<\/xdr:colOff><xdr:row>4<\/xdr:row><xdr:rowOff>(\d+)<\/xdr:rowOff>/g,
-  )].map((match) => Number(match[1]));
-
-  expect(startOffsets).toEqual([0, 1016000, 2032000]);
+  const xml = new DOMParser().parseFromString(drawing, "application/xml");
+  const centers = Array.from(xml.getElementsByTagName("xdr:oneCellAnchor")).map(anchor =>
+    Number(anchor.getElementsByTagName("xdr:rowOff")[0].textContent) + Number(anchor.getElementsByTagName("xdr:ext")[0].getAttribute("cy")) / 2
+  );
+  expect(centers).toHaveLength(3);
+  expect(centers[1] - centers[0]).toBeCloseTo(104 * 12700, 0);
+  expect(centers[2] - centers[1]).toBeCloseTo(104 * 12700, 0);
   expect(files.get("xl/media/image1.png")).toEqual(new TextEncoder().encode("FIRST"));
   expect(files.get("xl/media/image2.png")).toEqual(placeholderBytes);
   expect(files.get("xl/media/image3.png")).toEqual(new TextEncoder().encode("THIRD"));
@@ -238,7 +286,7 @@ it("draws the default Chinese failure tile into a valid PNG media slot", async (
   expect(files.get("xl/media/image1.png")).toEqual(pngBytes);
   expect(files.get("xl/media/image2.png")).toEqual(pngBytes);
   expect(new TextDecoder().decode(files.get("xl/drawings/drawing1.xml"))
-    .match(/<xdr:twoCellAnchor/g)).toHaveLength(2);
+    .match(/<xdr:oneCellAnchor/g)).toHaveLength(2);
 });
 
 it("encodes forbidden controls and preserves literal SpreadsheetML escape tokens", async () => {

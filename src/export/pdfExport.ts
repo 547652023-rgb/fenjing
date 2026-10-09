@@ -15,7 +15,9 @@ const PDF_PAGE_HEIGHT = 595;
 const PAGE_MARGIN = 32;
 const TITLE_HEIGHT = 50;
 const HEADER_HEIGHT = 42;
-const IMAGE_ROW_HEIGHT = 96;
+const IMAGE_ROW_HEIGHT = 144;
+const RENDER_SCALE = 3;
+const METADATA_HEIGHT = 28;
 const TEXT_ROW_HEIGHT = 52;
 const TEXT_PADDING = 8;
 const TEXT_LINE_HEIGHT = 19;
@@ -45,7 +47,10 @@ export type PdfPageImage = {
   width: number;
   height: number;
   jpeg: Uint8Array;
+  textRuns?: PdfTextRun[];
 };
+
+type PdfTextRun = { text: string; x: number; y: number; fontSize: number; width: number };
 
 export type PdfRenderDependencies = {
   createCanvas?: (width: number, height: number) => HTMLCanvasElement;
@@ -126,6 +131,7 @@ export function buildPdfLayout(
   const baseHeight = minimumRowHeight(model.fields);
   let page: PdfLayoutPage = { rows: [] };
   let usedHeight = 0;
+  const capacity = () => BODY_HEIGHT - (pages.length === 0 ? METADATA_HEIGHT : 0);
 
   const finishPage = () => {
     pages.push(page);
@@ -145,8 +151,8 @@ export function buildPdfLayout(
     const maximumLineCount = Math.max(0, ...allCellLines.map((lines) => lines.length));
     const fullHeight = Math.max(baseHeight, imageRowHeight(row, model.fields), textHeight(maximumLineCount));
 
-    if (fullHeight <= BODY_HEIGHT) {
-      if (page.rows.length > 0 && usedHeight + fullHeight > BODY_HEIGHT) finishPage();
+    if (fullHeight <= capacity()) {
+      if (page.rows.length > 0 && usedHeight + fullHeight > capacity()) finishPage();
       page.rows.push({
         ...row,
         height: fullHeight,
@@ -158,32 +164,33 @@ export function buildPdfLayout(
     }
 
     let lineOffset = 0;
-    let firstSegment = true;
-    while (lineOffset < maximumLineCount) {
-      const minimumHeight = firstSegment ? baseHeight : TEXT_ROW_HEIGHT;
-      if (page.rows.length > 0 && BODY_HEIGHT - usedHeight < minimumHeight) finishPage();
-
-      const availableHeight = BODY_HEIGHT - usedHeight;
+    let imageOffset = 0;
+    const maximumImageCount = Math.max(0, ...row.cells.map(cell => cell.images.length));
+    while (lineOffset < maximumLineCount || imageOffset < maximumImageCount) {
+      if (page.rows.length > 0) finishPage();
+      const availableHeight = capacity();
       const lineCapacity = Math.max(
         1,
         Math.floor((availableHeight - TEXT_PADDING * 2) / TEXT_LINE_HEIGHT),
       );
       const lineCount = Math.min(lineCapacity, maximumLineCount - lineOffset);
+      const imageCount = Math.min(Math.floor(availableHeight / IMAGE_ROW_HEIGHT), maximumImageCount - imageOffset);
       const cellLines = allCellLines.map((lines) => lines.slice(lineOffset, lineOffset + lineCount));
       const segmentLineCount = Math.max(0, ...cellLines.map((lines) => lines.length));
-      const height = Math.max(minimumHeight, textHeight(segmentLineCount));
+      const height = Math.max(TEXT_ROW_HEIGHT, imageCount * IMAGE_ROW_HEIGHT, textHeight(segmentLineCount));
 
       page.rows.push({
         ...row,
+        cells: row.cells.map(cell => ({ ...cell, images: cell.images.slice(imageOffset, imageOffset + imageCount) })),
         height,
         cellLines,
-        showImages: firstSegment,
+        showImages: imageCount > 0,
       });
       usedHeight += height;
       lineOffset += lineCount;
-      firstSegment = false;
+      imageOffset += imageCount;
 
-      if (lineOffset < maximumLineCount) finishPage();
+      if (lineOffset < maximumLineCount || imageOffset < maximumImageCount) finishPage();
     }
   }
   if (page.rows.length > 0 || pages.length === 0) pages.push(page);
@@ -217,18 +224,28 @@ function drawTextLines(
   lines: string[],
   x: number,
   y: number,
+  textRuns: PdfTextRun[],
 ): void {
   context.fillStyle = "#111827";
   context.font = BODY_FONT;
   context.textAlign = "left";
   context.textBaseline = "top";
   lines.forEach((line, index) => {
-    context.fillText(
+    drawSelectableText(context, textRuns,
       line,
       x + TEXT_PADDING,
       y + TEXT_PADDING + index * TEXT_LINE_HEIGHT,
+      14,
     );
   });
+}
+
+function drawSelectableText(context: CanvasRenderingContext2D, runs: PdfTextRun[], text: string, x: number, y: number, fontSize: number): void {
+  context.fillText(text, x, y);
+  const width = context.measureText(text).width;
+  const left = x - (context.textAlign === "center" ? width / 2 : context.textAlign === "right" ? width : 0);
+  const baseline = y + (context.textBaseline === "top" ? fontSize * 0.85 : context.textBaseline === "middle" ? fontSize * 0.35 : 0);
+  if (text) runs.push({ text, x: left, y: baseline, fontSize, width });
 }
 
 function fitImageIntoSlot(
@@ -278,12 +295,13 @@ async function drawImageCell(
       return { image: null };
     }
   }));
-  const slotHeight = Math.min(height / images.length, IMAGE_ROW_HEIGHT);
+  const slotHeight = IMAGE_ROW_HEIGHT;
+  const stackY = y + (height - slotHeight * images.length) / 2;
 
   loaded.forEach(({ image }, index) => {
-    const slotY = y + slotHeight * index;
+    const slotY = stackY + slotHeight * index;
     if (image) {
-      const fitted = fitImageIntoSlot(image, x, slotY, width, slotHeight);
+      const fitted = fitImageIntoSlot(image, x + TEXT_PADDING, slotY + TEXT_PADDING, width - 2 * TEXT_PADDING, slotHeight - 2 * TEXT_PADDING);
       context.drawImage(image, fitted.x, fitted.y, fitted.width, fitted.height);
       return;
     }
@@ -315,7 +333,7 @@ function canvasJpeg(canvas: HTMLCanvasElement): Promise<Uint8Array> {
         return;
       }
       blobBytes(blob).then(resolve, reject);
-    }, "image/jpeg", 0.92);
+    }, "image/jpeg", 0.95);
   });
 }
 
@@ -326,7 +344,7 @@ export async function renderPdfPages(
 ): Promise<PdfPageImage[]> {
   const createCanvas = dependencies.createCanvas ?? createBrowserCanvas;
   const loadImage = dependencies.loadImage ?? loadRemoteImage;
-  const firstCanvas = createCanvas(PAGE_WIDTH, PAGE_HEIGHT);
+  const firstCanvas = createCanvas(PAGE_WIDTH * RENDER_SCALE, PAGE_HEIGHT * RENDER_SCALE);
   const firstContext = firstCanvas.getContext("2d");
   if (!firstContext) throw new Error("Canvas 2D context is unavailable");
   firstContext.font = BODY_FONT;
@@ -335,9 +353,11 @@ export async function renderPdfPages(
   const rendered: PdfPageImage[] = [];
 
   for (const [pageIndex, page] of layout.pages.entries()) {
-    const canvas = pageIndex === 0 ? firstCanvas : createCanvas(layout.width, layout.height);
+    const canvas = pageIndex === 0 ? firstCanvas : createCanvas(layout.width * RENDER_SCALE, layout.height * RENDER_SCALE);
     const context = canvas.getContext("2d");
     if (!context) throw new Error("Canvas 2D context is unavailable");
+    context.scale?.(RENDER_SCALE, RENDER_SCALE);
+    const textRuns: PdfTextRun[] = [];
 
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, layout.width, layout.height);
@@ -345,7 +365,7 @@ export async function renderPdfPages(
     context.font = `bold 24px ${FONT_FAMILY}`;
     context.textAlign = "left";
     context.textBaseline = "middle";
-    context.fillText(layout.title, PAGE_MARGIN, PAGE_MARGIN + TITLE_HEIGHT / 2);
+    drawSelectableText(context, textRuns, layout.title, PAGE_MARGIN, PAGE_MARGIN + TITLE_HEIGHT / 2, 24);
 
     if (options.logo) {
       try {
@@ -368,14 +388,15 @@ export async function renderPdfPages(
     if (pageIndex === 0) {
       context.font = `14px ${FONT_FAMILY}`;
       context.textAlign = "left";
-      context.fillText(
+      drawSelectableText(context, textRuns,
         `画幅比例：${layout.aspectRatio}    镜头总数：${layout.shotCount}`,
         PAGE_MARGIN,
         PAGE_MARGIN + TITLE_HEIGHT + 16,
+        14,
       );
     }
 
-    let y = PAGE_MARGIN + TITLE_HEIGHT + (pageIndex === 0 ? 28 : 0);
+    let y = PAGE_MARGIN + TITLE_HEIGHT + (pageIndex === 0 ? METADATA_HEIGHT : 0);
     let x = PAGE_MARGIN;
     layout.fields.forEach((field, index) => {
       const width = widths[index];
@@ -388,7 +409,7 @@ export async function renderPdfPages(
       context.font = `bold 15px ${FONT_FAMILY}`;
       context.textAlign = "center";
       context.textBaseline = "middle";
-      context.fillText(field.label, x + width / 2, y + HEADER_HEIGHT / 2);
+      drawSelectableText(context, textRuns, field.label, x + width / 2, y + HEADER_HEIGHT / 2, 15);
       x += width;
     });
     y += HEADER_HEIGHT;
@@ -404,7 +425,7 @@ export async function renderPdfPages(
             await drawImageCell(context, cell?.images ?? [], x, y, width, row.height, loadImage);
           }
         } else {
-          drawTextLines(context, row.cellLines[index] ?? [], x, y);
+          drawTextLines(context, row.cellLines[index] ?? [], x, y, textRuns);
         }
         context.strokeStyle = "#6b7280";
         context.lineWidth = 1;
@@ -415,9 +436,10 @@ export async function renderPdfPages(
     }
 
     rendered.push({
-      width: layout.width,
-      height: layout.height,
+      width: layout.width * RENDER_SCALE,
+      height: layout.height * RENDER_SCALE,
       jpeg: await canvasJpeg(canvas),
+      textRuns,
     });
   }
 
@@ -442,7 +464,9 @@ function joinBytes(parts: Uint8Array[]): Uint8Array {
 }
 
 export function encodePdfPages(pages: PdfPageImage[]): Uint8Array {
-  const objectCount = 2 + pages.length * 3;
+  const hasText = pages.some(page => page.textRuns?.length);
+  const fontId = 3 + pages.length * 3;
+  const objectCount = 2 + pages.length * 3 + (hasText ? 4 : 0);
   const objects: Uint8Array[] = Array.from({ length: objectCount + 1 });
   const pageIds = pages.map((_, index) => 3 + index * 3);
 
@@ -457,13 +481,19 @@ export function encodePdfPages(pages: PdfPageImage[]): Uint8Array {
     const contentId = pageId + 2;
     const width = Math.max(1, Math.round(page.width));
     const height = Math.max(1, Math.round(page.height));
+    const textContent = (page.textRuns ?? []).map(run => {
+      const encoded = Array.from({ length: run.text.length }, (_, i) => run.text.charCodeAt(i).toString(16).padStart(4, "0")).join("").toUpperCase();
+      const nominalWidth = [...run.text].reduce((sum, character) => sum + (character.charCodeAt(0) <= 255 ? 0.5 : 1) * run.fontSize, 0);
+      const horizontalScale = nominalWidth ? run.width / nominalWidth * 100 : 100;
+      return `BT /F1 ${(run.fontSize * PDF_PAGE_HEIGHT / PAGE_HEIGHT).toFixed(3)} Tf 3 Tr ${horizontalScale.toFixed(3)} Tz 1 0 0 1 ${(run.x * PDF_PAGE_WIDTH / PAGE_WIDTH).toFixed(3)} ${(PDF_PAGE_HEIGHT - run.y * PDF_PAGE_HEIGHT / PAGE_HEIGHT).toFixed(3)} Tm <${encoded}> Tj ET\n`;
+    }).join("");
     const content = bytes(
-      `q\n${PDF_PAGE_WIDTH} 0 0 ${PDF_PAGE_HEIGHT} 0 0 cm\n/Im0 Do\nQ\n`,
+      `q\n${PDF_PAGE_WIDTH} 0 0 ${PDF_PAGE_HEIGHT} 0 0 cm\n/Im0 Do\nQ\n${textContent}`,
     );
 
     objects[pageId] = bytes(
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PDF_PAGE_WIDTH} ${PDF_PAGE_HEIGHT}] `
-      + `/Resources << /XObject << /Im0 ${imageId} 0 R >> >> /Contents ${contentId} 0 R >>`,
+      + `/Resources << /XObject << /Im0 ${imageId} 0 R >> ${hasText ? `/Font << /F1 ${fontId} 0 R >>` : ""} >> /Contents ${contentId} 0 R >>`,
     );
     objects[imageId] = joinBytes([
       bytes(
@@ -480,6 +510,15 @@ export function encodePdfPages(pages: PdfPageImage[]): Uint8Array {
       bytes("endstream"),
     ]);
   });
+
+  if (hasText) {
+    // The invisible Unicode layer makes the high-resolution page searchable/selectable.
+    objects[fontId] = bytes(`<< /Type /Font /Subtype /Type0 /BaseFont /Arial /Encoding /Identity-H /DescendantFonts [${fontId + 1} 0 R] /ToUnicode ${fontId + 2} 0 R >>`);
+    objects[fontId + 1] = bytes(`<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Arial /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /CIDToGIDMap /Identity /FontDescriptor ${fontId + 3} 0 R /DW 1000 /W [0 255 500] >>`);
+    objects[fontId + 3] = bytes("<< /Type /FontDescriptor /FontName /Arial /Flags 4 /FontBBox [0 -250 1000 900] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 880 /StemV 80 >>");
+    const cmap = bytes("/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /StoryboardUnicode def\n/CMapType 2 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n1 beginbfrange\n<0000> <FFFF> <0000>\nendbfrange\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n");
+    objects[fontId + 2] = joinBytes([bytes(`<< /Length ${cmap.length} >>\nstream\n`), cmap, bytes("endstream")]);
+  }
 
   const header = joinBytes([
     bytes("%PDF-1.4\n"),
