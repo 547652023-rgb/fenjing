@@ -112,7 +112,19 @@ function inputTypeFor(field: FieldDefinition): "date" | "number" | "text" {
   return "text";
 }
 
+const shortColumnWidths: Record<string, string> = {
+  shotNumber: "7rem",
+  shotSize: "8rem",
+  durationSeconds: "9.5rem",
+  sceneNumber: "8rem",
+  lens: "10rem",
+  cameraMove: "9rem",
+  cameraAngle: "12rem",
+  productionStatus: "10rem",
+};
+
 function columnWidth(field: FieldDefinition, width: ColumnWidth): string {
+  if (shortColumnWidths[field.id] && width !== "wide") return shortColumnWidths[field.id];
   if (field.id === "frame") return "16rem";
   if (field.type === "image") return width === "wide" ? "24rem" : width === "standard" ? "18rem" : "14rem";
   if (width === "wide") return "24rem";
@@ -704,7 +716,10 @@ export function StoryboardTable({
                   }}
                   key={field.id}
                   scope="col"
-                  style={{ minWidth: columnWidth(field, column.width) }}
+                  style={{
+                    minWidth: columnWidth(field, column.width),
+                    width: shortColumnWidths[field.id] ? columnWidth(field, column.width) : undefined,
+                  }}
                 >
                   <ColumnHeader label={field.label} fixed={field.id === "shotNumber"}
                     canMoveLeft={field.id !== "shotNumber" && index > 0 && visibleFields[index - 1]?.field.id !== "shotNumber"}

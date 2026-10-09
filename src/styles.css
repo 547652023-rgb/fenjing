@@ -1404,6 +1404,16 @@ button:disabled {
   appearance: auto;
 }
 
+.storyboard-table td input,
+.storyboard-table td select,
+.storyboard-table td textarea {
+  text-align: center;
+}
+
+.storyboard-table td select {
+  text-align-last: center;
+}
+
 .storyboard-table .sticky-shot-actions {
   position: sticky;
   left: 0;
