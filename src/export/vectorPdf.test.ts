@@ -13,7 +13,7 @@ const model: ExportModel = {
 };
 
 it("uses vector output for the platform's default PDF download", async () => {
-  const fontData = readFileSync("src/assets/fonts/NotoSansCJKsc-Regular.otf");
+  const fontData = readFileSync("src/assets/fonts/NotoSansSC-Regular.ttf");
   const fetchFont = vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, arrayBuffer: async () => new Uint8Array(fontData).buffer } as Response);
   const save = vi.spyOn(download, "downloadBlob").mockImplementation(() => {});
   try {
@@ -35,7 +35,7 @@ it("uses vector output for the platform's default PDF download", async () => {
 it("keeps all five photo placements across pages instead of clipping a tall shot", async () => {
   const source: ExportModel = { ...model, fields: [{ id: "frame", label: "画面", type: "image", visible: true, order: 0 }], rows: [{ shotId: "one", cells: [{ fieldId: "frame", fieldType: "image", text: "", images: Array.from({ length: 5 }, (_, i) => ({ path: `photo-${i}`, url: `photo-${i}`, name: "photo.png", position: i })) }] }] };
   const image = new Uint8Array(readFileSync("src/assets/dapaidang-logo.png"));
-  const bytes = await pdfExport.buildVectorPdf(source, {}, { fontBytes: new Uint8Array(readFileSync("src/assets/fonts/NotoSansCJKsc-Regular.otf")), loadImage: async () => image });
+  const bytes = await pdfExport.buildVectorPdf(source, {}, { fontBytes: new Uint8Array(readFileSync("src/assets/fonts/NotoSansSC-Regular.ttf")), loadImage: async () => image });
   const pdf = await PDFDocument.load(bytes);
   expect(pdf.getPageCount()).toBe(2);
   const placements = pdf.context.enumerateIndirectObjects().flatMap(([, object]) => {
@@ -47,7 +47,7 @@ it("keeps all five photo placements across pages instead of clipping a tall shot
 
 it("makes wrapped headers tall enough instead of letting their last line escape the header", async () => {
   const source: ExportModel = { ...model, fields: Array.from({ length: 20 }, (_, order) => ({ id: `field-${order}`, label: "很长的自定义表头名称", type: "text", visible: true, order })), rows: [] };
-  const bytes = await pdfExport.buildVectorPdf(source, {}, { fontBytes: new Uint8Array(readFileSync("src/assets/fonts/NotoSansCJKsc-Regular.otf")) });
+  const bytes = await pdfExport.buildVectorPdf(source, {}, { fontBytes: new Uint8Array(readFileSync("src/assets/fonts/NotoSansSC-Regular.ttf")) });
   const pdf = await PDFDocument.load(bytes);
   const content = pdf.context.enumerateIndirectObjects().flatMap(([, object]) => {
     if (!(object instanceof PDFRawStream)) return [];
@@ -61,14 +61,25 @@ it("makes wrapped headers tall enough instead of letting their last line escape 
 
 it("rejects a header that leaves no room for a shot instead of hanging pagination", async () => {
   const source: ExportModel = { ...model, fields: Array.from({ length: 20 }, (_, order) => ({ id: `field-${order}`, label: "超长字段名称".repeat(50), type: "text", visible: true, order })), rows: [] };
-  await expect(pdfExport.buildVectorPdf(source, {}, { fontBytes: new Uint8Array(readFileSync("src/assets/fonts/NotoSansCJKsc-Regular.otf")) })).rejects.toThrow("字段名称");
+  await expect(pdfExport.buildVectorPdf(source, {}, { fontBytes: new Uint8Array(readFileSync("src/assets/fonts/NotoSansSC-Regular.ttf")) })).rejects.toThrow("字段名称");
 });
 
 it("exports visible embedded Chinese text and vector borders without a page screenshot", async () => {
   const build = (pdfExport as unknown as { buildVectorPdf?: Function }).buildVectorPdf;
   expect(build).toBeTypeOf("function");
-  const bytes = await build!(model, {}, { fontBytes: new Uint8Array(readFileSync("src/assets/fonts/NotoSansCJKsc-Regular.otf")) });
+  const bytes = await build!(model, {}, { fontBytes: new Uint8Array(readFileSync("src/assets/fonts/NotoSansSC-Regular.ttf")) });
   const pdf = await PDFDocument.load(bytes);
+  // A structural CMap check alone missed broken CJK subsets. Preserve the real
+  // complete TrueType program, whose CID glyph IDs match the visible outlines.
+  const fontResource = pdf.getPages()[0].node.Resources()!.lookup(PDFName.of("Font")) as any;
+  const embeddedFont = pdf.context.lookup(fontResource.values()[0]) as any;
+  const descendants = embeddedFont.lookup(PDFName.of("DescendantFonts")) as any;
+  const descriptor = descendants.lookup(0).lookup(PDFName.of("FontDescriptor")) as any;
+  const program = descriptor.lookup(PDFName.of("FontFile2")) as PDFRawStream;
+  const embeddedBytes = decodePDFRawStream(program).decode();
+  const sourceBytes = readFileSync("src/assets/fonts/NotoSansSC-Regular.ttf");
+  expect(embeddedBytes.byteLength).toBe(sourceBytes.byteLength);
+  expect(embeddedBytes.every((byte, index) => byte === sourceBytes[index])).toBe(true);
   expect(pdf.getPageCount()).toBe(1);
   const fonts: string[] = [];
   const contents: string[] = [];
@@ -94,7 +105,7 @@ it("embeds photos independently at native resolution, with a proportional black-
   const source: ExportModel = { ...model, fields: [...model.fields, { id: "frame", label: "画面", type: "image", visible: true, order: 1 }], rows: [{ ...model.rows[0], cells: [...model.rows[0].cells, { fieldId: "frame", fieldType: "image", text: "", images: [{ path: "photo", url: "photo", name: "photo.png", position: 0 }] }] }] };
   const logo = new Uint8Array(readFileSync("src/assets/dapaidang-logo.png"));
   const bytes = await build!(source, { logo: { name: "大拍档logo.png", url: "logo", type: "image/png" } }, {
-    fontBytes: new Uint8Array(readFileSync("src/assets/fonts/NotoSansCJKsc-Regular.otf")),
+    fontBytes: new Uint8Array(readFileSync("src/assets/fonts/NotoSansSC-Regular.ttf")),
     loadImage: async () => logo,
   });
   const pdf = await PDFDocument.load(bytes);

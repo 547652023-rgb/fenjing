@@ -579,7 +579,7 @@ let pdfFontRequest: Promise<Uint8Array> | undefined;
 
 function loadPdfFont(): Promise<Uint8Array> {
   if (!pdfFontRequest) {
-    pdfFontRequest = fetch(new URL("../assets/fonts/NotoSansCJKsc-Regular.otf", import.meta.url).href)
+    pdfFontRequest = fetch(new URL("../assets/fonts/NotoSansSC-Regular.ttf", import.meta.url).href)
       .then(async response => {
         if (!response.ok) throw new Error("无法加载 PDF 中文字体，请重试");
         return new Uint8Array(await response.arrayBuffer());
@@ -619,7 +619,9 @@ export async function buildVectorPdf(
   ]);
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
-  const font = await pdf.embedFont(fontBytes, { subset: true });
+  // fontkit's CJK subsets lose glyphs in common PDF readers; preserve the complete
+  // TrueType font so CID glyph IDs remain consistent with the embedded outlines.
+  const font = await pdf.embedFont(fontBytes, { subset: false });
   pdf.setTitle(model.title);
   pdf.setCreator("分镜工作台");
   const widths = fieldWidths(model.fields);
