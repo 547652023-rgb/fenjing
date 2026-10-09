@@ -2300,3 +2300,29 @@ button.storyboard-review__frame { cursor: zoom-in; }
   .storyboard-review__lightbox { padding: 1rem; }
   .storyboard-review__lightbox img { width: calc(100vw - 2rem); }
 }
+
+.column-header { display: flex; align-items: center; gap: 0.45rem; }
+.column-header__label { flex: 1; }
+.column-header button { border: 0; background: transparent; color: inherit; padding: 0.2rem; min-width: 1.5rem; border-radius: 4px; }
+.column-header__drag { cursor: grab; opacity: 0.4; }
+.column-header__drag:active { cursor: grabbing; }
+.column-header__toggle { opacity: 0.6; }
+.column-header:hover button, .column-header button:focus-visible { opacity: 1; background: #dae5dd; }
+.storyboard-table th[data-column-drop="before"] { box-shadow: inset 3px 0 #347653; }
+.storyboard-table th[data-column-drop="after"] { box-shadow: inset -3px 0 #347653; }
+.column-header-menu { position: fixed; z-index: 100; width: 220px; padding: 0.6rem; border: 1px solid #d3ded6; border-radius: 10px; background: #fff; color: #30473a; box-shadow: 0 8px 28px #14261a26; }
+.column-header-menu p { margin: 0 0 0.4rem; font-size: 0.72rem; color: #68796f; }
+.column-header-menu button { display: block; width: 100%; border: 0; background: transparent; color: inherit; text-align: left; padding: 0.6rem; border-radius: 5px; }
+.column-header-menu button:hover:not(:disabled) { background: #edf3ee; }
+.column-header-menu button:disabled { opacity: 0.4; cursor: default; }
+.column-header-menu label { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.6rem; }
+.column-header-menu select { padding: 0.3rem; border: 1px solid #d3ded6; border-radius: 5px; }
+.column-rename-dialog { width: min(420px, calc(100vw - 32px)); border: 1px solid #d3ded6; border-radius: 14px; padding: 1.4rem; background: #fff; color: #30473a; box-shadow: 0 12px 48px #14261a30; }
+.column-rename-dialog::backdrop { background: #14261a66; }
+.column-rename-dialog h2 { margin: 0 0 0.6rem; font-size: 1.2rem; }
+.column-rename-dialog p { font-size: 0.85rem; }
+.column-rename-dialog label { display: grid; gap: 0.5rem; }
+.column-rename-dialog input { width: 100%; padding: 0.65rem; border: 1px solid #b4c7b9; border-radius: 6px; }
+.column-rename-dialog [role="alert"] { color: #a63232; }
+.column-rename-dialog footer { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1rem; }
+.column-rename-dialog footer button { padding: 0.55rem 0.85rem; border: 1px solid #b4c7b9; border-radius: 6px; background: #edf3ee; color: inherit; }

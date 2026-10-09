@@ -420,6 +420,16 @@ export function toggleFieldVisibility(
   };
 }
 
+export function renameField(project: StoryboardProject, fieldId: string, name: string): StoryboardProject {
+  const label = name.trim();
+  if (!label) throw new Error("字段名称不能为空");
+  const normalized = label.normalize("NFKC").toLocaleLowerCase();
+  if (project.fields.some(field => field.id !== fieldId && field.label.trim().normalize("NFKC").toLocaleLowerCase() === normalized)) {
+    throw new Error("字段名称已存在");
+  }
+  return { ...project, fields: project.fields.map(field => field.id === fieldId ? { ...field, label } : field) };
+}
+
 export function moveField(
   project: StoryboardProject,
   fieldId: string,

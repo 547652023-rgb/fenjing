@@ -1,4 +1,4 @@
-import type { FieldDefinition } from "./storyboard";
+import type { FieldDefinition, StoryboardProject } from "./storyboard";
 
 export const STORYBOARD_VIEW_IDS = ["director", "producer", "cinematographer"] as const;
 
@@ -89,7 +89,9 @@ export function normalizeColumnPresentation(
     .map((column) => ({ ...column, ...savedByField.get(column.fieldId)! }))
     .sort((left, right) => left.order - right.order);
   const newColumns = known.filter((column) => !savedByField.has(column.fieldId));
-  return [...savedColumns, ...newColumns].map((column, order) => ({
+  const ordered = [...savedColumns, ...newColumns];
+  const shotNumber = ordered.find(column => column.fieldId === "shotNumber");
+  return [...(shotNumber ? [shotNumber] : []), ...ordered.filter(column => column.fieldId !== "shotNumber")].map((column, order) => ({
     ...column,
     order,
     pinned: column.fieldId === "shotNumber" ? true : column.pinned,
@@ -116,4 +118,15 @@ export function createNamedStoryboardView(
       pinned: column.fieldId === "shotNumber",
     })),
   };
+}
+
+/** Project copy for delivery: personal presentation never changes shared fields. */
+export function projectWithColumnPresentation(project: StoryboardProject, presentation?: ColumnPresentation[]): StoryboardProject {
+  if (!presentation) return project;
+  const columns = normalizeColumnPresentation(project.fields, presentation);
+  return { ...project, fields: columns.map(column => ({
+    ...project.fields.find(field => field.id === column.fieldId)!,
+    order: column.order,
+    visible: column.visible,
+  })) };
 }

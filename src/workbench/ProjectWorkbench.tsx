@@ -779,7 +779,7 @@ export function ProjectWorkbench({
           <button type="button" onClick={() => { setTemplateMessage(""); setShowSaveTemplate(true); }}>保存为模板</button>
           <button type="button" onClick={() => setIsReadOnlyReview(true)}>进入审阅模式</button>
         </div>
-        <div className="workbench-actions__group workbench-actions__group--delivery"><ExportActions project={project} documentLabel={callSheetDeliveryLabel} /></div>
+        <div className="workbench-actions__group workbench-actions__group--delivery"><ExportActions project={project} columnPresentation={columnPresentation ?? undefined} documentLabel={callSheetDeliveryLabel} /></div>
       </div>
       <nav aria-label="工作台视图" className="workspace-view-switcher">
         <button

@@ -7,6 +7,7 @@ import {
   deleteShot,
   getProductionSummary,
   moveShot,
+  renameField,
   PRODUCTION_STATUS_OPTIONS,
   toggleSceneCollapsed,
   updateShotValue,
@@ -15,6 +16,7 @@ import {
   type ProjectUpdate,
   type StoryboardProject,
 } from "../domain/storyboard";
+import { ColumnHeader } from "./ColumnHeader";
 import { ImageCell } from "./ImageCell";
 import { EditableSelect } from "../workbench/EditableSelect";
 import type { RemoteImage } from "../domain/models";
@@ -157,6 +159,8 @@ export function StoryboardTable({
   const [columnPresentation, setColumnPresentation] = useState<ColumnPresentation[]>(() =>
     normalizeColumnPresentation(project.fields, suppliedPresentation),
   );
+  const draggedColumnId = useRef<string | null>(null);
+  const [columnDrop, setColumnDrop] = useState<{ fieldId: string; after: boolean } | null>(null);
   const editableCellRefs = useRef(new Map<string, HTMLElement>());
   const visibleFields = columnPresentation
     .filter((column) => column.visible)
@@ -234,14 +238,24 @@ export function StoryboardTable({
     }));
   }
 
+  function reorderVisibleColumn(fieldId: string, targetId: string, after: boolean) {
+    if (fieldId === "shotNumber" || targetId === "shotNumber" || fieldId === targetId) return;
+    const visible = columnPresentation.filter(column => column.visible);
+    const moved = visible.find(column => column.fieldId === fieldId);
+    if (!moved) return;
+    const others = visible.filter(column => column.fieldId !== fieldId);
+    const targetIndex = others.findIndex(column => column.fieldId === targetId);
+    if (targetIndex < 0) return;
+    others.splice(targetIndex + (after ? 1 : 0), 0, moved);
+    let index = 0;
+    applyColumnPresentation(columnPresentation.map(column => column.visible ? { ...others[index++], order: column.order } : column));
+  }
+
   function moveColumn(fieldId: string, offset: number) {
-    const currentIndex = columnPresentation.findIndex((column) => column.fieldId === fieldId);
-    const nextIndex = currentIndex + offset;
-    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= columnPresentation.length) return;
-    const next = [...columnPresentation];
-    const [moved] = next.splice(currentIndex, 1);
-    next.splice(nextIndex, 0, moved);
-    applyColumnPresentation(next);
+    const visible = columnPresentation.filter(column => column.visible);
+    const index = visible.findIndex(column => column.fieldId === fieldId);
+    const target = visible[index + offset];
+    if (target) reorderVisibleColumn(fieldId, target.fieldId, offset > 0);
   }
 
   function applyBatchFieldValue() {
@@ -470,7 +484,7 @@ export function StoryboardTable({
                 ) : null}
                 {columnSettingsMessage ? <p role="status">{columnSettingsMessage}</p> : null}
                 <div className="column-settings__list">
-                  {columnPresentation.map((column, index) => {
+                  {columnPresentation.map((column) => {
                     const field = project.fields.find((candidate) => candidate.id === column.fieldId);
                     if (!field) return null;
                     return (
@@ -480,7 +494,7 @@ export function StoryboardTable({
                           <option value="compact">窄</option><option value="standard">标准</option><option value="wide">宽</option>
                         </select>
                         <label className="column-settings__pin"><input checked={column.pinned} disabled={field.id === "shotNumber"} type="checkbox" onChange={(event) => updateColumn(column.fieldId, { pinned: event.target.checked })} />固定</label>
-                        <span className="column-settings__move"><button aria-label={`上移 ${field.label}`} disabled={index === 0} type="button" onClick={() => moveColumn(column.fieldId, -1)}>↑</button><button aria-label={`下移 ${field.label}`} disabled={index === columnPresentation.length - 1} type="button" onClick={() => moveColumn(column.fieldId, 1)}>↓</button></span>
+                        <span className="column-settings__move"><button aria-label={`上移 ${field.label}`} disabled={!column.visible || field.id === "shotNumber" || visibleFields.findIndex(entry => entry.field.id === field.id) === 0 || visibleFields[visibleFields.findIndex(entry => entry.field.id === field.id) - 1]?.field.id === "shotNumber"} type="button" onClick={() => moveColumn(column.fieldId, -1)}>↑</button><button aria-label={`下移 ${field.label}`} disabled={!column.visible || field.id === "shotNumber" || visibleFields.findIndex(entry => entry.field.id === field.id) === visibleFields.length - 1} type="button" onClick={() => moveColumn(column.fieldId, 1)}>↓</button></span>
                       </div>
                     );
                   })}
@@ -667,15 +681,48 @@ export function StoryboardTable({
                   }
                 />
               </th>
-              {visibleFields.map(({ field, column }) => (
+              {visibleFields.map(({ field, column }, index) => (
                 <th
                   className={field.id === "shotNumber" ? "sticky-shot-number" : column.pinned ? "sticky-project-column" : undefined}
+                  aria-label={field.label}
                   data-field-type={field.type}
+                  data-column-drop={columnDrop?.fieldId === field.id ? (columnDrop.after ? "after" : "before") : undefined}
+                  onDragOver={event => {
+                    if (!draggedColumnId.current || field.id === "shotNumber") return;
+                    event.preventDefault();
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setColumnDrop({ fieldId: field.id, after: rect.width > 0 && event.clientX >= rect.left + rect.width / 2 });
+                  }}
+                  onDrop={event => {
+                    if (!draggedColumnId.current) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    reorderVisibleColumn(draggedColumnId.current, field.id, rect.width > 0 && event.clientX >= rect.left + rect.width / 2);
+                    draggedColumnId.current = null;
+                    setColumnDrop(null);
+                  }}
                   key={field.id}
                   scope="col"
                   style={{ minWidth: columnWidth(field, column.width) }}
                 >
-                  {field.label}
+                  <ColumnHeader label={field.label} fixed={field.id === "shotNumber"}
+                    canMoveLeft={field.id !== "shotNumber" && index > 0 && visibleFields[index - 1]?.field.id !== "shotNumber"}
+                    canMoveRight={field.id !== "shotNumber" && index < visibleFields.length - 1}
+                    width={column.width} onMove={offset => moveColumn(field.id, offset)}
+                    onHide={() => updateColumn(field.id, { visible: false })}
+                    onWidth={width => updateColumn(field.id, { width })}
+                    onRename={name => {
+                      // Validate synchronously so the dialog stays open on invalid names.
+                      renameField(project, field.id, name);
+                      onChange(latest => renameField(latest, field.id, name));
+                    }}
+                    onDragStart={event => {
+                      draggedColumnId.current = field.id;
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", field.id);
+                    }}
+                    onDragEnd={() => { draggedColumnId.current = null; setColumnDrop(null); }} />
                 </th>
               ))}
             </tr>

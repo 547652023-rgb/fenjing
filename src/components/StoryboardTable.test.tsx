@@ -494,3 +494,108 @@ it("filters the workbench to a clicked production status without changing shot o
   expect(screen.queryByLabelText("镜号-2")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "移除筛选 待拍" })).toBeVisible();
 });
+
+function ColumnEditingTable() {
+  const [project, setProject] = useState(() => {
+    const initial = createProject();
+    initial.shots[0].values.lens = "35mm";
+    initial.fields = initial.fields.map(field => field.id === "cameraGear" ? { ...field, visible: false } : field);
+    return initial;
+  });
+  return <StoryboardTable project={project} onChange={update => setProject(current => typeof update === "function" ? update(current) : update)} />;
+}
+
+it("moves a whole column across hidden fields without changing its values", async () => {
+  const user = userEvent.setup();
+  render(<ColumnEditingTable />);
+  await user.click(screen.getByRole("button", { name: "镜头焦段列操作" }));
+  await user.click(screen.getByRole("button", { name: "向左移动" }));
+  const headers = screen.getAllByRole("columnheader").map(header => header.getAttribute("aria-label") || header.textContent);
+  expect(headers.indexOf("镜头焦段")).toBeLessThan(headers.indexOf("运镜"));
+  expect(screen.getByLabelText("镜头焦段-1")).toHaveValue("35mm");
+  const rowCells = within(screen.getByRole("row", { name: "镜头 1" })).getAllByRole("cell");
+  expect(rowCells[headers.indexOf("镜头焦段")]).toContainElement(screen.getByLabelText("镜头焦段-1"));
+});
+
+it("drags a column to another header while keeping shot number fixed", () => {
+  render(<ColumnEditingTable />);
+  const dataTransfer = { setData: vi.fn(), effectAllowed: "" };
+  fireEvent.dragStart(screen.getByRole("button", { name: "拖动镜头焦段列" }), { dataTransfer });
+  fireEvent.dragOver(screen.getByRole("columnheader", { name: "景别" }));
+  fireEvent.drop(screen.getByRole("columnheader", { name: "景别" }));
+  const headers = screen.getAllByRole("columnheader");
+  expect(headers[1]).toHaveAccessibleName("镜号");
+  expect(headers[4]).toHaveAccessibleName("镜头焦段");
+  expect(headers[5]).toHaveAccessibleName("景别");
+  expect(screen.getByLabelText("镜头焦段-1")).toHaveValue("35mm");
+  expect(screen.queryByRole("button", { name: "拖动镜号列" })).not.toBeInTheDocument();
+});
+
+it("validates field names and preserves cell data when renamed", async () => {
+  const user = userEvent.setup();
+  render(<ColumnEditingTable />);
+  await user.click(screen.getByRole("button", { name: "镜头焦段列操作" }));
+  await user.click(screen.getByRole("button", { name: "重命名字段" }));
+  const name = screen.getByLabelText("新的字段名称");
+  await user.clear(name);
+  await user.click(screen.getByRole("button", { name: "保存名称" }));
+  expect(screen.getByRole("alert")).toBeVisible();
+  await user.type(name, "景别");
+  await user.click(screen.getByRole("button", { name: "保存名称" }));
+  expect(screen.getByRole("alert")).toBeVisible();
+  await user.clear(name);
+  await user.type(name, "焦距");
+  await user.click(screen.getByRole("button", { name: "保存名称" }));
+  expect(screen.getByRole("columnheader", { name: "焦距" })).toBeVisible();
+  expect(screen.getByLabelText("焦距-1")).toHaveValue("35mm");
+});
+
+it("inserts after the right half of a header and rejects dropping before shot number", () => {
+  render(<ColumnEditingTable />);
+  const target = screen.getByRole("columnheader", { name: "景别" });
+  Object.defineProperty(target, "getBoundingClientRect", { value: () => ({ left: 100, width: 200 }) });
+  const dataTransfer = { setData: vi.fn(), effectAllowed: "" };
+  fireEvent.dragStart(screen.getByRole("button", { name: "拖动镜头焦段列" }), { dataTransfer });
+  const drop = new Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(drop, "clientX", { value: 250 });
+  fireEvent(target, drop);
+  let headers = screen.getAllByRole("columnheader");
+  expect(headers[4]).toHaveAccessibleName("景别");
+  expect(headers[5]).toHaveAccessibleName("镜头焦段");
+  fireEvent.dragStart(screen.getByRole("button", { name: "拖动镜头焦段列" }), { dataTransfer });
+  fireEvent.drop(screen.getByRole("columnheader", { name: "镜号" }));
+  headers = screen.getAllByRole("columnheader");
+  expect(headers[1]).toHaveAccessibleName("镜号");
+  expect(headers[5]).toHaveAccessibleName("镜头焦段");
+});
+
+it("closes the header menu on Escape and restores a hidden column via settings", async () => {
+  const user = userEvent.setup();
+  render(<ColumnEditingTable />);
+  await user.click(screen.getByRole("button", { name: "镜头焦段列操作" }));
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog", { name: "镜头焦段列设置" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "镜头焦段列操作" }));
+  await user.click(screen.getByRole("button", { name: "隐藏此列" }));
+  expect(screen.queryByRole("columnheader", { name: "镜头焦段" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "列设置" }));
+  await user.click(screen.getByRole("checkbox", { name: "镜头焦段" }));
+  expect(screen.getByLabelText("镜头焦段-1")).toHaveValue("35mm");
+});
+
+it("focuses the first available menu action for keyboard navigation", async () => {
+  const user = userEvent.setup();
+  render(<ColumnEditingTable />);
+  await user.click(screen.getByRole("button", { name: "镜头焦段列操作" }));
+  expect(screen.getByRole("button", { name: "向左移动" })).toHaveFocus();
+  await user.keyboard("{Escape}");
+  expect(screen.getByRole("button", { name: "镜头焦段列操作" })).toHaveFocus();
+});
+
+it("closes the floating column menu when the browser is resized", async () => {
+  const user = userEvent.setup();
+  render(<ColumnEditingTable />);
+  await user.click(screen.getByRole("button", { name: "镜头焦段列操作" }));
+  fireEvent(window, new Event("resize"));
+  expect(screen.queryByRole("dialog", { name: "镜头焦段列设置" })).not.toBeInTheDocument();
+});

@@ -108,3 +108,19 @@ it("identifies a call-sheet delivery in the export dialog and exporter options",
   await user.click(screen.getByRole("button", { name: "导出 Excel" }));
   expect(exportExcel).toHaveBeenCalledWith(project, expect.objectContaining({ documentLabel: "拍摄通告 · 2026-08-13 · V2" }));
 });
+
+it("sends the current visible column order to both delivery formats", async () => {
+  const project = createProject();
+  const captured: string[][] = [];
+  const exporter = async (delivery: typeof project) => {
+    captured.push(delivery.fields.filter(field => field.visible).sort((a, b) => a.order - b.order).map(field => field.id));
+  };
+  const columns = project.fields.map(field => ({ fieldId: field.id, order: field.id === "lens" ? 1 : field.order + 2, visible: ["shotNumber", "lens", "frame"].includes(field.id), width: "standard" as const, pinned: field.id === "shotNumber" }));
+  const user = userEvent.setup();
+  render(<ExportActions project={project} columnPresentation={columns} exportExcel={exporter} exportPdf={exporter} />);
+  await user.click(screen.getByRole("button", { name: "导出文件" }));
+  await user.click(screen.getByRole("button", { name: "导出 Excel" }));
+  await user.click(screen.getByRole("button", { name: "导出文件" }));
+  await user.click(screen.getByRole("button", { name: "导出 PDF" }));
+  expect(captured).toEqual([["shotNumber", "lens", "frame"], ["shotNumber", "lens", "frame"]]);
+});

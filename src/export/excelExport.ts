@@ -83,7 +83,7 @@ function splitExcelRows(model: ExportModel): ExportModel["rows"] {
   // Excel limits a row to 409 points. Continue oversized cells instead of clipping them.
   const lineCapacity = 26;
   const imageCapacity = 3;
-  const shotNumberId = model.fields.find(field => field.label === "镜号")?.id;
+  const shotNumberId = model.fields.find(field => field.id === "shotNumber")?.id;
   return model.rows.flatMap(row => {
     const wrapped = row.cells.map(cell => wrapSpreadsheetText(cell.text, spreadsheetTextWidth(model.fields.find(field => field.id === cell.fieldId))));
     const parts = Math.max(1, ...row.cells.map((cell, index) => Math.max(Math.ceil(wrapped[index].length / lineCapacity), Math.ceil(cell.images.length / imageCapacity))));

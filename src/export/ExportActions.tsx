@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { projectWithColumnPresentation, type ColumnPresentation } from "../domain/storyboardViews";
 import type { StoryboardProject } from "../domain/storyboard";
 import { exportStoryboardExcel } from "./excelExport";
 import { exportStoryboardPdf } from "./pdfExport";
@@ -14,6 +15,7 @@ const defaultLogo: ExportLogo = {
 type ExportActionsProps = {
   project: StoryboardProject;
   documentLabel?: string;
+  columnPresentation?: ColumnPresentation[];
   exportExcel?: (project: StoryboardProject, options?: ExportOptions) => Promise<void>;
   exportPdf?: (project: StoryboardProject, options?: ExportOptions) => Promise<void>;
 };
@@ -21,6 +23,7 @@ type ExportActionsProps = {
 export function ExportActions({
   project,
   documentLabel,
+  columnPresentation,
   exportExcel = exportStoryboardExcel,
   exportPdf = exportStoryboardPdf,
 }: ExportActionsProps) {
@@ -60,7 +63,8 @@ export function ExportActions({
     setError("");
     try {
       const exportOptions = { logo: logo ?? defaultLogo, documentLabel };
-      await (format === "excel" ? exportExcel(project, exportOptions) : exportPdf(project, exportOptions));
+      const deliveryProject = projectWithColumnPresentation(project, columnPresentation);
+      await (format === "excel" ? exportExcel(deliveryProject, exportOptions) : exportPdf(deliveryProject, exportOptions));
       close();
     } catch {
       setError("导出失败，请稍后重试");

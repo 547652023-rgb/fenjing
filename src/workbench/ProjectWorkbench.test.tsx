@@ -734,3 +734,33 @@ it("enters a read-only storyboard review without project editing controls", asyn
   expect(screen.queryByRole("button", { name: "字段设置" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "确认镜头 1" })).not.toBeInTheDocument();
 });
+
+it("persists renamed fields and personal column movement across reloads", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const loaded = await gateway.loadProject(project.id);
+  await gateway.saveShot(project.id, { ...loaded.shots[0], values: { ...loaded.shots[0].values, lens: "35mm" } }, loaded.shots[0].version ?? 1);
+  const user = userEvent.setup();
+  const props = { gateway, onBack: vi.fn(), projectId: project.id, user: owner };
+  localStorage.setItem(`fenjing.storyboard-view.v1:${owner.id}:${project.id}`, JSON.stringify(createNamedStoryboardView("cinematographer", loaded.fields).columns));
+  const first = render(<ProjectWorkbench {...props} />);
+  await screen.findByRole("columnheader", { name: "镜头焦段" });
+  await user.click(screen.getByRole("button", { name: "镜头焦段列操作" }));
+  await user.click(screen.getByRole("button", { name: "向左移动" }));
+  await user.click(screen.getByRole("button", { name: "镜头焦段列操作" }));
+  await user.click(screen.getByRole("button", { name: "重命名字段" }));
+  await user.clear(screen.getByLabelText("新的字段名称"));
+  await user.type(screen.getByLabelText("新的字段名称"), "焦距");
+  await user.click(screen.getByRole("button", { name: "保存名称" }));
+  await waitFor(async () => {
+    const saved = await gateway.loadProject(project.id);
+    expect(saved.fields.find(field => field.id === "lens")?.label).toBe("焦距");
+    expect(saved.shots[0].values.lens).toBe("35mm");
+  });
+  first.unmount();
+  render(<ProjectWorkbench {...props} />);
+  await screen.findByRole("columnheader", { name: "焦距" });
+  const headers = screen.getAllByRole("columnheader");
+  expect(headers.findIndex(header => header.getAttribute("aria-label") === "焦距"))
+    .toBeLessThan(headers.findIndex(header => header.getAttribute("aria-label") === "摄影机装备"));
+  expect(screen.getByLabelText(`焦距-${loaded.shots[0].id}`)).toHaveValue("35mm");
+});

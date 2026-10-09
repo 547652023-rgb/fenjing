@@ -1,3 +1,4 @@
+import { projectWithColumnPresentation } from "../domain/storyboardViews";
 import { createProject } from "../domain/storyboard";
 import { buildExportModel, exportFilename } from "./storyboardExport";
 
@@ -69,4 +70,20 @@ it("includes a call-sheet date and version in delivery filenames", () => {
 
   expect(exportFilename(project, "pdf", new Date("2026-08-10T00:00:00Z"), "拍摄通告-2026-08-13-V2"))
     .toBe("夜景广告-拍摄通告-2026-08-13-V2-2026-08-10.pdf");
+});
+
+it("exports the personal column order, visibility and renamed labels without mutating project", () => {
+  const project = createProject();
+  project.fields.find(field => field.id === "lens")!.label = "焦距";
+  project.shots[0].values.lens = "35mm";
+  const presentation = [
+    { fieldId: "lens", order: 0, visible: true, pinned: false, width: "standard" as const },
+    { fieldId: "shotNumber", order: 1, visible: true, pinned: true, width: "compact" as const },
+    { fieldId: "frame", order: 2, visible: false, pinned: false, width: "wide" as const },
+  ];
+  const model = buildExportModel(projectWithColumnPresentation(project, presentation));
+  expect(model.fields.slice(0, 2).map(field => field.label)).toEqual(["镜号", "焦距"]);
+  expect(model.fields.map(field => field.id)).not.toContain("frame");
+  expect(model.rows[0].cells[1].text).toBe("35mm");
+  expect(project.fields.find(field => field.id === "frame")!.visible).toBe(true);
 });
