@@ -18,6 +18,7 @@ import {
 } from "../domain/storyboard";
 import { ColumnHeader } from "./ColumnHeader";
 import { CenteredTextCell } from "./CenteredTextCell";
+import { RowActionMenu } from "./RowActionMenu";
 import { ImageCell } from "./ImageCell";
 import { EditableSelect } from "../workbench/EditableSelect";
 import type { RemoteImage } from "../domain/models";
@@ -162,6 +163,7 @@ export function StoryboardTable({
   const [isCreationMenuOpen, setIsCreationMenuOpen] = useState(false);
   const [activeShotId, setActiveShotId] = useState<string | null>(null);
   const [openRowMenuShotId, setOpenRowMenuShotId] = useState<string | null>(null);
+  const rowMenuAnchor = useRef<HTMLButtonElement | null>(null);
   const [focusShotId, setFocusShotId] = useState<string | null>(null);
   const [sceneEditorId, setSceneEditorId] = useState<string | null>(null);
   const [rowScenePickerShotId, setRowScenePickerShotId] = useState<string | null>(null);
@@ -803,9 +805,9 @@ export function StoryboardTable({
                     aria-label={`更多镜头 ${shot.id}`}
                     className="shot-actions__more"
                     type="button"
-                    onClick={() => setOpenRowMenuShotId((current) =>
+                    onClick={(event) => { rowMenuAnchor.current = event.currentTarget; setOpenRowMenuShotId((current) =>
                       current === shot.id ? null : shot.id,
-                    )}
+                    ); }}
                   >
                     <svg aria-hidden="true" className="shot-actions__more-icon" viewBox="0 0 16 16">
                       <circle cx="3" cy="8" r="1" />
@@ -814,7 +816,7 @@ export function StoryboardTable({
                     </svg>
                   </button>
                   {openRowMenuShotId === shot.id ? (
-                    <div aria-label={`镜头 ${shot.id} 操作`} className="shot-actions__menu" role="menu">
+                    <RowActionMenu anchor={rowMenuAnchor.current!} label={`镜头 ${shot.id} 操作`} onClose={() => setOpenRowMenuShotId(null)}>
                       <button role="menuitem" type="button" onClick={() => void createShots({ beforeShotId: shot.id, count: 1 })}>在上方新增</button>
                       <button role="menuitem" type="button" onClick={() => void createShots({ afterShotId: shot.id, count: 1 })}>在下方新增</button>
                       <button role="menuitem" type="button" onClick={() => void createShots({ copyShotId: shot.id, count: 1 })}>复制镜头</button>
@@ -850,7 +852,7 @@ export function StoryboardTable({
                       <button disabled={shotIndex === 0} role="menuitem" type="button" onClick={() => moveShotByOffset(shot.id, -1)}>上移</button>
                       <button disabled={shotIndex === project.shots.length - 1} role="menuitem" type="button" onClick={() => moveShotByOffset(shot.id, 1)}>下移</button>
                       <button className="shot-actions__menu-delete" role="menuitem" type="button" onClick={() => deleteOneShot(shot.id)}>删除镜头</button>
-                    </div>
+                    </RowActionMenu>
                   ) : null}
                 </td>
                 {visibleFields.map(({ field, column }) => (

@@ -1479,10 +1479,11 @@ button:disabled {
 }
 
 .shot-actions__menu {
-  position: absolute;
-  z-index: 12;
-  top: calc(100% - 0.2rem);
-  left: 0.35rem;
+  position: fixed;
+  z-index: 100;
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  white-space: normal;
   display: grid;
   width: 10.5rem;
   padding: 0.35rem;
@@ -1494,6 +1495,10 @@ button:disabled {
 .shot-actions__menu button {
   width: 100%;
   margin: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 0.78rem;
   padding: 0.48rem 0.55rem;
   color: #211a15;
   text-align: left;
@@ -1744,7 +1749,7 @@ button:disabled {
 .scene-group-row__edit:focus-visible { outline: 2px solid #b07a56; outline-offset: 2px; }
 
 .shot-actions__scene-picker { display: grid; gap: 0.28rem; margin-top: 0.35rem; padding: 0.35rem 0.2rem 0.1rem; color: #765f50; font-size: 0.72rem; }
-.shot-actions__scene-picker select { min-height: 2rem; border: 1px solid #b99a7c; padding: 0.3rem; background: #fffaf2; font-size: 0.76rem; }
+.shot-actions__scene-picker select { width: 100%; min-height: 2rem; border: 1px solid #b99a7c; padding: 0.3rem; background: #fffaf2; font-size: 0.76rem; }
 
 @media (max-width: 760px) {
   .production-summary__metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
