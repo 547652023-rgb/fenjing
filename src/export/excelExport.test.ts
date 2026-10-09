@@ -15,6 +15,37 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it("uses the exported column width to fit long text without inflating image rows", async () => {
+  const source: ExportModel = {
+    ...model,
+    fields: [...model.fields, { id: "durationSeconds", label: "时长（秒）", type: "number", visible: true, order: 3 }],
+    rows: [{ ...model.rows[0], cells: model.rows[0].cells.map(cell =>
+      cell.fieldId === "content" ? { ...cell, text: "分镜内容".repeat(20) } : cell.fieldId === "frame" ? { ...cell, images: cell.images.slice(0, 1) } : cell
+    ) }],
+  };
+  const files = await buildXlsxPackage(source, async () => ({ bytes: validPngBytes(), extension: "png", width: 1920, height: 1080 }));
+  const sheet = new DOMParser().parseFromString(new TextDecoder().decode(files.get("xl/worksheets/sheet1.xml")), "application/xml");
+  const widths = Array.from(sheet.getElementsByTagName("col")).map(col => Number(col.getAttribute("width")));
+  expect(widths[1]).toBeGreaterThan(widths[0] * 2);
+  expect(widths[1]).toBeGreaterThan(widths[3] * 2);
+  expect(Number(sheet.querySelector('row[r="5"]')?.getAttribute("ht"))).toBe(104);
+  expect(sheet.querySelector('c[r="B5"]')?.textContent).toBe("分镜内容".repeat(20));
+});
+
+it("keeps long custom text readable while fitting ordinary select fields compactly", async () => {
+  const source: ExportModel = { ...model, fields: [
+    { id: "scene", label: "场景", type: "text", visible: true, order: 0 },
+    { id: "notes", label: "备注", type: "text", visible: true, order: 1 },
+    { id: "custom", label: "自定义说明", type: "text", visible: true, order: 2 },
+    { id: "shotSize", label: "景别", type: "singleSelect", visible: true, order: 3 },
+  ], rows: [] };
+  const files = await buildXlsxPackage(source);
+  const sheet = new DOMParser().parseFromString(new TextDecoder().decode(files.get("xl/worksheets/sheet1.xml")), "application/xml");
+  const widths = Array.from(sheet.getElementsByTagName("col")).map(col => Number(col.getAttribute("width")));
+  expect(widths.slice(0, 3).every(width => width >= 24)).toBe(true);
+  expect(widths.slice(0, 3).every(width => width >= widths[3] * 2)).toBe(true);
+});
+
 it("gives long wrapped text enough height even when the row has an image", async () => {
   const source = { ...model, rows: [{ ...model.rows[0], cells: model.rows[0].cells.map(cell =>
     cell.fieldId === "content" ? { ...cell, text: "完整的分镜内容".repeat(20) } : cell

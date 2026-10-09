@@ -42,14 +42,29 @@ const HEADER_ROWS = 4;
 const IMAGE_SLOT_HEIGHT = 104;
 const IMAGE_PADDING_EMU = 6 * POINT_TO_EMU;
 
-function wrapSpreadsheetText(text: string): string[] {
+function spreadsheetColumnWidth(field: ExportModel["fields"][number]): number {
+  if (field.type === "image") return 32;
+  if (field.id === "shotNumber" || field.label === "镜号") return 8;
+  if (field.type === "number") return 10;
+  if (field.type === "singleSelect") return 12;
+  if (field.id === "content" || field.label === "内容") return 32;
+  if (field.id === "lens" || field.label === "镜头焦段") return 28;
+  return 24;
+}
+
+function spreadsheetTextWidth(field: ExportModel["fields"][number] | undefined): number {
+  // Normal's Arial digit width defines Excel column units. Reserve cell padding.
+  return (field ? spreadsheetColumnWidth(field) : 24) * 7 * 0.75 - 8;
+}
+
+function wrapSpreadsheetText(text: string, availableWidth: number): string[] {
   const lines: string[] = [];
   for (const paragraph of text.split("\n")) {
       let width = 0;
       let line = "";
       for (const character of paragraph) {
         const advance = /[^\u0000-\u00ff]/.test(character) ? 10.5 : 6;
-        if (width + advance > 86) { lines.push(line); line = ""; width = 0; }
+        if (line && width + advance > availableWidth) { lines.push(line); line = ""; width = 0; }
         line += character;
         width += advance;
       }
@@ -58,9 +73,9 @@ function wrapSpreadsheetText(text: string): string[] {
   return lines;
 }
 
-function rowHeight(row: ExportModel["rows"][number]): number {
+function rowHeight(row: ExportModel["rows"][number], fields: ExportModel["fields"]): number {
   const imageCount = Math.max(0, ...row.cells.filter(cell => cell.fieldType === "image").map(cell => cell.images.length));
-  const lines = Math.max(1, ...row.cells.filter(cell => cell.fieldType !== "image").map(cell => wrapSpreadsheetText(cell.text).length));
+  const lines = Math.max(1, ...row.cells.filter(cell => cell.fieldType !== "image").map(cell => wrapSpreadsheetText(cell.text, spreadsheetTextWidth(fields.find(field => field.id === cell.fieldId))).length));
   return Math.max(32, imageCount * IMAGE_SLOT_HEIGHT, 12 + lines * 15);
 }
 
@@ -70,7 +85,7 @@ function splitExcelRows(model: ExportModel): ExportModel["rows"] {
   const imageCapacity = 3;
   const shotNumberId = model.fields.find(field => field.label === "镜号")?.id;
   return model.rows.flatMap(row => {
-    const wrapped = row.cells.map(cell => wrapSpreadsheetText(cell.text));
+    const wrapped = row.cells.map(cell => wrapSpreadsheetText(cell.text, spreadsheetTextWidth(model.fields.find(field => field.id === cell.fieldId))));
     const parts = Math.max(1, ...row.cells.map((cell, index) => Math.max(Math.ceil(wrapped[index].length / lineCapacity), Math.ceil(cell.images.length / imageCapacity))));
     if (parts === 1) return [row];
     return Array.from({ length: parts }, (_, part) => ({
@@ -247,7 +262,7 @@ function worksheetXml(model: ExportModel, failedCells: Set<string>, hasLogo: boo
   const metadataRows = HEADER_ROWS - 1;
   const lastRow = Math.max(metadataRows + 1, model.rows.length + metadataRows + 1);
   const columns = model.fields.map((field, index) =>
-    `<col min="${index + 1}" max="${index + 1}" width="${field.type === "image" ? 32 : 18}" customWidth="1"/>`,
+    `<col min="${index + 1}" max="${index + 1}" width="${spreadsheetColumnWidth(field)}" customWidth="1"/>`,
   ).join("");
   const header = model.fields.map((field, index) => inlineCell(index, metadataRows + 1, field.label, 1)).join("");
   const metadata = [
@@ -265,7 +280,7 @@ function worksheetXml(model: ExportModel, failedCells: Set<string>, hasLogo: boo
       }
       return inlineCell(columnIndex, excelRow, cell?.text ?? "", 3);
     }).join("");
-    const height = ` ht="${rowHeight(row)}" customHeight="1"`;
+    const height = ` ht="${rowHeight(row, model.fields)}" customHeight="1"`;
     return `<row r="${excelRow}"${height}>${cells}</row>`;
   }).join("");
 
@@ -374,7 +389,7 @@ export async function buildXlsxPackage(
         cellImages.push(embedded);
       }
       if (cellImages.length > 0) {
-        anchors.push({ column: columnIndex, row: rowIndex + 4, heightEmu: rowHeight(row) * POINT_TO_EMU, images: cellImages });
+        anchors.push({ column: columnIndex, row: rowIndex + 4, heightEmu: rowHeight(row, model.fields) * POINT_TO_EMU, images: cellImages });
       }
     }
   }
