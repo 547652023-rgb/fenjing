@@ -1,5 +1,6 @@
 import type { FieldDefinition, StoryboardProject } from "../domain/storyboard";
 import { downloadBlob } from "./download";
+import { jpegOrientation, orientedImageMatrix } from "./imageGeometry";
 import {
   buildExportModel,
   exportFilename,
@@ -125,13 +126,14 @@ function textHeight(lineCount: number): number {
 export function buildPdfLayout(
   model: ExportModel,
   measureText: (text: string) => number = (text) => text.length * 8,
+  headerHeight: number = HEADER_HEIGHT,
 ): PdfLayout {
   const pages: PdfLayoutPage[] = [];
   const widths = fieldWidths(model.fields);
   const baseHeight = minimumRowHeight(model.fields);
   let page: PdfLayoutPage = { rows: [] };
   let usedHeight = 0;
-  const capacity = () => BODY_HEIGHT - (pages.length === 0 ? METADATA_HEIGHT : 0);
+  const capacity = () => BODY_HEIGHT - (headerHeight - HEADER_HEIGHT) - (pages.length === 0 ? METADATA_HEIGHT : 0);
 
   const finishPage = () => {
     pages.push(page);
@@ -249,7 +251,7 @@ function drawSelectableText(context: CanvasRenderingContext2D, runs: PdfTextRun[
 }
 
 function fitImageIntoSlot(
-  image: CanvasImageSource,
+  image: CanvasImageSource | { width: number; height: number },
   x: number,
   y: number,
   width: number,
@@ -557,12 +559,146 @@ export function encodePdfPages(pages: PdfPageImage[]): Uint8Array {
 export async function exportStoryboardPdf(
   project: StoryboardProject,
   options: ExportOptions = {},
-  render: PdfRenderer = (model, exportOptions) => renderPdfPages(model, {}, exportOptions),
+  render?: PdfRenderer,
 ): Promise<void> {
   const exportProject = options.documentLabel ? { ...project, title: `${project.title} · ${options.documentLabel}` } : project;
-  const pages = await render(buildExportModel(exportProject), options);
+  const model = buildExportModel(exportProject);
+  const output = render ? encodePdfPages(await render(model, options)) : await buildVectorPdf(model, options);
   downloadBlob(
-    new Blob([new Uint8Array(encodePdfPages(pages))], { type: "application/pdf" }),
+    new Blob([new Uint8Array(output)], { type: "application/pdf" }),
     exportFilename(project, "pdf", new Date(), options.documentLabel),
   );
+}
+
+export type VectorPdfDependencies = {
+  fontBytes?: Uint8Array;
+  loadImage?: (url: string) => Promise<Uint8Array>;
+};
+
+let pdfFontRequest: Promise<Uint8Array> | undefined;
+
+function loadPdfFont(): Promise<Uint8Array> {
+  if (!pdfFontRequest) {
+    pdfFontRequest = fetch(new URL("../assets/fonts/NotoSansCJKsc-Regular.otf", import.meta.url).href)
+      .then(async response => {
+        if (!response.ok) throw new Error("无法加载 PDF 中文字体，请重试");
+        return new Uint8Array(await response.arrayBuffer());
+      }).catch(error => { pdfFontRequest = undefined; throw error; });
+  }
+  return pdfFontRequest;
+}
+
+async function loadPdfImage(url: string): Promise<Uint8Array> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Image request failed with ${response.status}`);
+  const blob = await response.blob();
+  const data = await blobBytes(blob);
+  // Preserve original PNG/JPEG pixels. Only unsupported formats need transcoding.
+  if ((data[0] === 137 && data[1] === 80) || (data[0] === 255 && data[1] === 216)) return data;
+  const image = await createImageBitmap(blob);
+  try {
+    const canvas = createBrowserCanvas(image.width, image.height);
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Canvas 2D context is unavailable");
+    context.drawImage(image, 0, 0);
+    return await new Promise<Uint8Array>((resolve, reject) => canvas.toBlob(encoded => {
+      if (!encoded) { reject(new Error("Image PNG encoding failed")); return; }
+      blobBytes(encoded).then(resolve, reject);
+    }, "image/png"));
+  } finally { image.close(); }
+}
+
+/** Visible text and borders are PDF vectors; no full-page screenshot is embedded. */
+export async function buildVectorPdf(
+  model: ExportModel,
+  options: ExportOptions = {},
+  dependencies: VectorPdfDependencies = {},
+): Promise<Uint8Array> {
+  const [{ PDFDocument, rgb, pushGraphicsState, popGraphicsState, concatTransformationMatrix }, { default: fontkit }, fontBytes] = await Promise.all([
+    import("pdf-lib"), import("@pdf-lib/fontkit"), dependencies.fontBytes ?? loadPdfFont(),
+  ]);
+  const pdf = await PDFDocument.create();
+  pdf.registerFontkit(fontkit);
+  const font = await pdf.embedFont(fontBytes, { subset: true });
+  pdf.setTitle(model.title);
+  pdf.setCreator("分镜工作台");
+  const widths = fieldWidths(model.fields);
+  const headerLines = model.fields.map((field, index) => wrapText(field.label, Math.max(1, widths[index] - 8), value => font.widthOfTextAtSize(value, 14)));
+  const headerHeight = Math.max(HEADER_HEIGHT, ...headerLines.map(lines => 16 + lines.length * 16));
+  if (BODY_HEIGHT - (headerHeight - HEADER_HEIGHT) - METADATA_HEIGHT < minimumRowHeight(model.fields)) {
+    throw new Error("字段名称过长或导出列过多，请缩短字段名称或减少导出字段");
+  }
+  const layout = buildPdfLayout(model, text => font.widthOfTextAtSize(text, 14), headerHeight);
+  const scale = PDF_PAGE_WIDTH / PAGE_WIDTH;
+  const color = (hex: string) => rgb(parseInt(hex.slice(1, 3), 16) / 255, parseInt(hex.slice(3, 5), 16) / 255, parseInt(hex.slice(5, 7), 16) / 255);
+  type OrientedImage = { image: import("pdf-lib").PDFImage; orientation: number };
+  const imageCache = new Map<string, Promise<OrientedImage>>();
+  const load = (url: string) => {
+    if (!imageCache.has(url)) imageCache.set(url, (dependencies.loadImage ?? loadPdfImage)(url).then(async data => ({
+      image: await (data[0] === 255 && data[1] === 216 ? pdf.embedJpg(data) : pdf.embedPng(data)), orientation: jpegOrientation(data),
+    })));
+    return imageCache.get(url)!;
+  };
+  for (const [pageIndex, section] of layout.pages.entries()) {
+    const page = pdf.addPage([PDF_PAGE_WIDTH, PDF_PAGE_HEIGHT]);
+    const text = (value: string, x: number, baseline: number, size = 14, fill = "#111827", centered = false) => {
+      if (!value) return;
+      const left = centered ? x - font.widthOfTextAtSize(value, size) / 2 : x;
+      page.drawText(value, { x: left * scale, y: PDF_PAGE_HEIGHT - baseline * scale, size: size * scale, font, color: color(fill) });
+    };
+    const rectangle = (x: number, y: number, width: number, height: number, fill?: string, border?: string) => {
+      page.drawRectangle({ x: x * scale, y: PDF_PAGE_HEIGHT - (y + height) * scale, width: width * scale, height: height * scale,
+        color: fill ? color(fill) : undefined, borderColor: border ? color(border) : undefined, borderWidth: border ? scale : 0 });
+    };
+    const picture = ({ image, orientation }: OrientedImage, x: number, y: number, width: number, height: number) => {
+      const size = orientation >= 5 ? { width: image.height, height: image.width } : image;
+      const fitted = fitImageIntoSlot(size, x, y, width, height);
+      const matrix = orientedImageMatrix(orientation, fitted.x * scale, PDF_PAGE_HEIGHT - (fitted.y + fitted.height) * scale, fitted.width * scale, fitted.height * scale);
+      page.pushOperators(pushGraphicsState(), concatTransformationMatrix(...matrix));
+      page.drawImage(image, { x: 0, y: 0, width: 1, height: 1 });
+      page.pushOperators(popGraphicsState());
+    };
+    text(layout.title, PAGE_MARGIN, PAGE_MARGIN + TITLE_HEIGHT / 2 + 8, 24);
+    if (options.logo) {
+      try {
+        const logo = await load(options.logo.url);
+        const x = PAGE_WIDTH - PAGE_MARGIN - 180;
+        const y = PAGE_MARGIN + 7;
+        if (options.logo.name === "大拍档logo.png") rectangle(x, y, 180, 34, "#000000");
+        picture(logo, x, y, 180, 34);
+      } catch { /* A failed temporary logo must not prevent storyboard export. */ }
+    }
+    if (pageIndex === 0) text(`画幅比例：${layout.aspectRatio}    镜头总数：${layout.shotCount}`, PAGE_MARGIN, PAGE_MARGIN + TITLE_HEIGHT + 21);
+    let y = PAGE_MARGIN + TITLE_HEIGHT + (pageIndex === 0 ? METADATA_HEIGHT : 0);
+    let x = PAGE_MARGIN;
+    for (const [index, field] of layout.fields.entries()) {
+      const width = widths[index];
+      rectangle(x, y, width, headerHeight, "#15803d", "#374151");
+      const lines = headerLines[index];
+      lines.forEach((line, lineIndex) => text(line, x + width / 2, y + (headerHeight - lines.length * 16) / 2 + 13 + lineIndex * 16, 14, "#ffffff", true));
+      x += width;
+    }
+    y += headerHeight;
+    for (const row of section.rows) {
+      x = PAGE_MARGIN;
+      for (const [index, field] of layout.fields.entries()) {
+        const width = widths[index];
+        if (field.type === "image" && row.showImages) {
+          const images = row.cells[index]?.images ?? [];
+          const stackY = y + (row.height - IMAGE_ROW_HEIGHT * images.length) / 2;
+          for (const [slot, image] of images.entries()) {
+            const slotY = stackY + slot * IMAGE_ROW_HEIGHT;
+            try { picture(await load(image.url), x + TEXT_PADDING, slotY + TEXT_PADDING, width - TEXT_PADDING * 2, IMAGE_ROW_HEIGHT - TEXT_PADDING * 2); }
+            catch { text("图片加载失败", x + width / 2, slotY + IMAGE_ROW_HEIGHT / 2, 13, "#b91c1c", true); }
+          }
+        } else if (field.type !== "image") {
+          (row.cellLines[index] ?? []).forEach((line, lineIndex) => text(line, x + TEXT_PADDING, y + TEXT_PADDING + 14 + lineIndex * TEXT_LINE_HEIGHT));
+        }
+        rectangle(x, y, width, row.height, undefined, "#6b7280");
+        x += width;
+      }
+      y += row.height;
+    }
+  }
+  return pdf.save({ useObjectStreams: false });
 }
