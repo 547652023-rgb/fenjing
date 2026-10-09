@@ -41,12 +41,12 @@ it("stacks multiple storyboard images in one capped-width column aligned to the 
   expect(styles).toMatch(/\.storyboard-table td\s*\{[^}]*vertical-align:\s*top/s);
 });
 
-it("fills each storyboard text cell before scrolling overflow inside the field", () => {
+it("centers storyboard text in the cell and scrolls overflow inside the field", () => {
   expect(styles).toMatch(
     /\.storyboard-table td\[data-field-type="text"\]\s*\{[^}]*position:\s*relative/s,
   );
   expect(styles).toMatch(
-    /\.storyboard-table td\[data-field-type="text"\] textarea\s*\{[^}]*position:\s*absolute[^}]*inset:\s*0[^}]*height:\s*100%[^}]*overflow:\s*auto/s,
+    /\.storyboard-table td\[data-field-type="text"\] textarea\s*\{[^}]*position:\s*absolute[^}]*top:\s*50%[^}]*transform:\s*translateY\(-50%\)[^}]*overflow:\s*auto/s,
   );
   expect(styles).toMatch(
     /\.storyboard-table td\[data-field-type="text"\]\.sticky-project-column\s*\{[^}]*position:\s*sticky/s,

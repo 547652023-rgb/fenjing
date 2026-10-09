@@ -37,7 +37,7 @@ it("renders text storyboard fields as multiline inputs", () => {
   expect(screen.getByLabelText("镜号-1").tagName).toBe("INPUT");
 });
 
-it("keeps a text field at its original height when content wraps", () => {
+it("fits text inside the cell and shrinks again when content is removed", () => {
   const project = createProject();
 
   function StatefulTable() {
@@ -54,11 +54,15 @@ it("keeps a text field at its original height when content wraps", () => {
 
   render(<StatefulTable />);
   const contentField = screen.getByLabelText("内容-1");
+  Object.defineProperty(contentField.closest("td"), "clientHeight", { configurable: true, value: 60 });
   Object.defineProperty(contentField, "scrollHeight", { configurable: true, value: 180 });
 
   fireEvent.change(contentField, { target: { value: "一段足够长、需要折行显示的镜头描述" } });
 
-  expect((contentField as HTMLTextAreaElement).style.height).toBe("");
+  expect((contentField as HTMLTextAreaElement).style.height).toBe("60px");
+  Object.defineProperty(contentField, "scrollHeight", { configurable: true, value: 40 });
+  fireEvent.change(contentField, { target: { value: "短描述" } });
+  expect((contentField as HTMLTextAreaElement).style.height).toBe("40px");
 });
 
 it("switches to the cinematography view without mutating storyboard fields", async () => {

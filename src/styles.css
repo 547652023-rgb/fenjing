@@ -965,12 +965,15 @@ select:focus-visible { outline: 2px solid var(--copper-bright); outline-offset: 
 .storyboard-table td[data-field-type="text"] { position: relative; }
 .storyboard-table td[data-field-type="text"] textarea {
   position: absolute;
-  inset: 0;
-  height: 100%;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
   min-height: 0;
   max-height: none;
+  padding: 0.65rem 0.75rem;
   overflow: auto;
 }
+.centered-text-cell__minimum { min-height: 3.5rem; }
 .storyboard-table td[data-field-type="text"].sticky-project-column { position: sticky; }
 .storyboard-table input[type="checkbox"] {
   display: inline-block;
@@ -1412,6 +1415,11 @@ button:disabled {
 
 .storyboard-table td select {
   text-align-last: center;
+}
+
+.storyboard-table td[data-field-type="number"],
+.storyboard-table td[data-field-type="singleSelect"] {
+  vertical-align: middle;
 }
 
 .storyboard-table .sticky-shot-actions {

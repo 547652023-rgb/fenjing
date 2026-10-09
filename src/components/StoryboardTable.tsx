@@ -17,6 +17,7 @@ import {
   type StoryboardProject,
 } from "../domain/storyboard";
 import { ColumnHeader } from "./ColumnHeader";
+import { CenteredTextCell } from "./CenteredTextCell";
 import { ImageCell } from "./ImageCell";
 import { EditableSelect } from "../workbench/EditableSelect";
 import type { RemoteImage } from "../domain/models";
@@ -917,12 +918,11 @@ export function StoryboardTable({
                         }
                       />
                     ) : field.type === "text" ? (
-                      <textarea
-                        aria-label={`${field.label}-${shot.id}`}
-                        rows={2}
+                      <CenteredTextCell
+                        label={`${field.label}-${shot.id}`}
                         value={shot.values[field.id] ?? ""}
-                        onChange={(event) =>
-                          onChange(updateShotValue(project, shot.id, field.id, event.target.value))
+                        onChange={(value) =>
+                          onChange(updateShotValue(project, shot.id, field.id, value))
                         }
                       />
                     ) : (
