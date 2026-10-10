@@ -4,6 +4,7 @@ import { PDFDocument, PDFName, PDFRawStream, decodePDFRawStream } from "pdf-lib"
 import * as pdfExport from "./pdfExport";
 import * as download from "./download";
 import { vi } from "vitest";
+import fontkit from "@pdf-lib/fontkit";
 import type { ExportModel } from "./storyboardExport";
 
 const model: ExportModel = {
@@ -11,6 +12,42 @@ const model: ExportModel = {
   fields: [{ id: "content", label: "内容", type: "text", visible: true, order: 0 }],
   rows: [{ shotId: "one", cells: [{ fieldId: "content", fieldType: "text", text: "中文清晰，English 123", images: [] }] }],
 };
+
+it("centers numbers and multiline Chinese text inside a tall photo cell row", async () => {
+  const source: ExportModel = { ...model, fields: [
+    { id: "duration", label: "时长", type: "number", visible: true, order: 0 },
+    { id: "frame", label: "画面", type: "image", visible: true, order: 1 },
+    { id: "content", label: "内容", type: "text", visible: true, order: 2 },
+  ], rows: [{ shotId: "one", cells: [
+    { fieldId: "duration", fieldType: "number", text: "6", images: [] },
+    { fieldId: "frame", fieldType: "image", text: "", images: [0, 1].map(position => ({ path: `photo-${position}`, url: "photo", name: "photo.png", position })) },
+    { fieldId: "content", fieldType: "text", text: "中文\n说明", images: [] },
+  ] }] };
+  const fontBytes = new Uint8Array(readFileSync("src/assets/fonts/NotoSansSC-Regular.ttf"));
+  const bytes = await pdfExport.buildVectorPdf(source, {}, { fontBytes, loadImage: async () => new Uint8Array(readFileSync("src/assets/dapaidang-logo.png")) });
+  const pdf = await PDFDocument.load(bytes);
+  const content = pdf.context.enumerateIndirectObjects().flatMap(([, object]) => {
+    if (!(object instanceof PDFRawStream) || object.dict.get(PDFName.of("Subtype"))) return [];
+    const decoded = new TextDecoder().decode(decodePDFRawStream(object).decode());
+    return decoded.includes("\nBT\n") ? [decoded] : [];
+  }).join("\n");
+  const body = [...content.matchAll(/1 0 0 1 ([\d.-]+) ([\d.-]+) Tm\n<[^>]+> Tj/g)].slice(-3);
+  expect(body).toHaveLength(3);
+  pdf.registerFontkit(fontkit);
+  const font = await pdf.embedFont(fontBytes, { subset: false });
+  const scale = 842 / 1123;
+  const ascent = font.heightAtSize(14, { descender: false });
+  const glyphHeight = font.heightAtSize(14, { descender: true });
+  const centerOffset = (ascent - glyphHeight / 2) * scale;
+  const xCenters = [122.255681818, 940.573863636, 940.573863636];
+  for (const [index, value] of ["6", "中文", "说明"].entries()) {
+    expect(Number(body[index][1]) + font.widthOfTextAtSize(value, 14) * scale / 2).toBeCloseTo(xCenters[index] * scale, 3);
+  }
+  const rowCenter = 595 - 296 * scale;
+  expect(Number(body[0][2]) + centerOffset).toBeCloseTo(rowCenter, 3);
+  expect((Number(body[1][2]) + Number(body[2][2])) / 2 + centerOffset).toBeCloseTo(rowCenter, 3);
+  expect(Number(body[1][2]) - Number(body[2][2])).toBeCloseTo(19 * scale, 3);
+});
 
 it("uses vector output for the platform's default PDF download", async () => {
   const fontData = readFileSync("src/assets/fonts/NotoSansSC-Regular.ttf");

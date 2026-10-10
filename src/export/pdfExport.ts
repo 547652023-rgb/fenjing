@@ -631,6 +631,9 @@ export async function buildVectorPdf(
     throw new Error("字段名称过长或导出列过多，请缩短字段名称或减少导出字段");
   }
   const layout = buildPdfLayout(model, text => font.widthOfTextAtSize(text, 14), headerHeight);
+  // Position the visible glyph block, including descenders, around the cell center.
+  const bodyBaselineOffset = font.heightAtSize(14, { descender: false })
+    - font.heightAtSize(14, { descender: true }) / 2;
   const scale = PDF_PAGE_WIDTH / PAGE_WIDTH;
   const color = (hex: string) => rgb(parseInt(hex.slice(1, 3), 16) / 255, parseInt(hex.slice(3, 5), 16) / 255, parseInt(hex.slice(5, 7), 16) / 255);
   type OrientedImage = { image: import("pdf-lib").PDFImage; orientation: number };
@@ -694,7 +697,11 @@ export async function buildVectorPdf(
             catch { text("图片加载失败", x + width / 2, slotY + IMAGE_ROW_HEIGHT / 2, 13, "#b91c1c", true); }
           }
         } else if (field.type !== "image") {
-          (row.cellLines[index] ?? []).forEach((line, lineIndex) => text(line, x + TEXT_PADDING, y + TEXT_PADDING + 14 + lineIndex * TEXT_LINE_HEIGHT));
+          const lines = row.cellLines[index] ?? [];
+          const firstBaseline = y + row.height / 2
+            - (lines.length - 1) * TEXT_LINE_HEIGHT / 2 + bodyBaselineOffset;
+          lines.forEach((line, lineIndex) => text(line, x + width / 2,
+            firstBaseline + lineIndex * TEXT_LINE_HEIGHT, 14, "#111827", true));
         }
         rectangle(x, y, width, row.height, undefined, "#6b7280");
         x += width;
