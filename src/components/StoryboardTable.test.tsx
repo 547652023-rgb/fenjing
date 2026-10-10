@@ -603,3 +603,24 @@ it("closes the floating column menu when the browser is resized", async () => {
   fireEvent(window, new Event("resize"));
   expect(screen.queryByRole("dialog", { name: "镜头焦段列设置" })).not.toBeInTheDocument();
 });
+
+it("gives every compact column the same explicit width, including image and short fields", () => {
+  const project = createProject();
+  const columns = project.fields.map((field, order) => ({ fieldId: field.id, order, visible: true, width: "compact" as const, pinned: field.id === "shotNumber" }));
+  render(<StoryboardTable project={project} columnPresentation={columns} onChange={vi.fn()} />);
+  for (const field of project.fields) {
+    const header = screen.getByRole("columnheader", { name: field.label });
+    expect(header.style.width).toBe("10rem");
+    expect(header.style.minWidth).toBe("10rem");
+  }
+  expect(screen.getByRole("table").style.minWidth).toBe("0px");
+});
+
+
+it("positions pinned columns after the actual widths of earlier pinned columns", () => {
+  const project = createProject();
+  const columns = project.fields.map((field, order) => ({ fieldId: field.id, order, visible: true, width: field.id === "shotNumber" ? "wide" as const : "compact" as const, pinned: ["shotNumber", "frame", "shotSize"].includes(field.id) }));
+  render(<StoryboardTable project={project} columnPresentation={columns} onChange={vi.fn()} />);
+  expect(screen.getByRole("columnheader", { name: "画面" }).style.left).toBe("33.5rem");
+  expect(screen.getByRole("columnheader", { name: "景别" }).style.left).toBe("43.5rem");
+});

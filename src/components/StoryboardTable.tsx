@@ -126,11 +126,11 @@ const shortColumnWidths: Record<string, string> = {
 };
 
 function columnWidth(field: FieldDefinition, width: ColumnWidth): string {
+  if (width === "compact") return "10rem";
   if (shortColumnWidths[field.id] && width !== "wide") return shortColumnWidths[field.id];
   if (field.id === "frame") return "16rem";
   if (field.type === "image") return width === "wide" ? "24rem" : width === "standard" ? "18rem" : "14rem";
   if (width === "wide") return "24rem";
-  if (width === "compact") return "10rem";
   return `${Math.max(field.type === "number" ? 10 : 14, field.label.length * 2 + 4)}rem`;
 }
 
@@ -182,6 +182,15 @@ export function StoryboardTable({
     .sort((left, right) => left.order - right.order)
     .map((column) => ({ field: project.fields.find((field) => field.id === column.fieldId), column }))
     .filter((entry): entry is { field: FieldDefinition; column: ColumnPresentation } => Boolean(entry.field));
+  const tableWidth = `calc(9.5rem + ${visibleFields.map(({ field, column }) => columnWidth(field, column.width)).join(" + ") || "0rem"})`;
+  const pinnedOffsets = new Map<string, string>();
+  let pinnedWidth = 9.5;
+  visibleFields.forEach(({ field, column }) => {
+    if (field.id === "shotNumber" || column.pinned) {
+      pinnedOffsets.set(field.id, `${pinnedWidth}rem`);
+      pinnedWidth += parseFloat(columnWidth(field, column.width));
+    }
+  });
   const batchFields = visibleFields.filter(
     ({ field }) => field.type !== "image" && field.id !== "shotNumber",
   );
@@ -681,7 +690,7 @@ export function StoryboardTable({
         </div>
       ) : null}
       <div className="storyboard-table-scroll">
-        <table className="storyboard-table">
+        <table className="storyboard-table" style={{ width: tableWidth, minWidth: 0 }}>
           <thead>
             <tr>
               <th className="sticky-shot-actions" scope="col">
@@ -721,7 +730,8 @@ export function StoryboardTable({
                   scope="col"
                   style={{
                     minWidth: columnWidth(field, column.width),
-                    width: shortColumnWidths[field.id] ? columnWidth(field, column.width) : undefined,
+                    width: columnWidth(field, column.width),
+                    left: pinnedOffsets.get(field.id),
                   }}
                 >
                   <ColumnHeader label={field.label} fixed={field.id === "shotNumber"}
@@ -867,6 +877,7 @@ export function StoryboardTable({
                           : undefined
                     }
                     data-field-type={field.type}
+                    style={{ left: pinnedOffsets.get(field.id) }}
                     key={field.id}
                   >
                     {field.type === "image" && imageActions ? (
