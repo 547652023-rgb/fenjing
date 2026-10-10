@@ -53,7 +53,23 @@ it("gives long wrapped text enough height even when the row has an image", async
   const files = await buildXlsxPackage(source, async () => ({ bytes: validPngBytes(), extension: "png", width: 1920, height: 1080 }));
   const sheet = new DOMParser().parseFromString(new TextDecoder().decode(files.get("xl/worksheets/sheet1.xml")), "application/xml");
   expect(Number(sheet.querySelector('row[r="5"]')?.getAttribute("ht"))).toBeGreaterThan(160);
-  expect(new TextDecoder().decode(files.get("xl/styles.xml"))).toContain('vertical="top"');
+});
+
+it("centers exported text and numbers in tall image rows while preserving wrapping", async () => {
+  const files = await buildXlsxPackage(model, async () => ({ bytes: validPngBytes(), extension: "png", width: 1920, height: 1080 }));
+  const parse = (name: string) => new DOMParser().parseFromString(new TextDecoder().decode(files.get(name)), "application/xml");
+  const sheet = parse("xl/worksheets/sheet1.xml");
+  const styles = Array.from(parse("xl/styles.xml").querySelectorAll("cellXfs > xf"));
+  expect(Number(sheet.querySelector('row[r="5"]')?.getAttribute("ht"))).toBe(208);
+  for (const address of ["A5", "B5"]) {
+    const cell = sheet.querySelector(`c[r="${address}"]`)!;
+    const style = styles[Number(cell.getAttribute("s"))];
+    expect(style.getAttribute("applyAlignment")).toBe("1");
+    const alignment = style.querySelector("alignment")!;
+    expect(alignment.getAttribute("horizontal")).toBe("center");
+    expect(alignment.getAttribute("vertical")).toBe("center");
+    expect(alignment.getAttribute("wrapText")).toBe("1");
+  }
 });
 
 it("anchors photos at their original aspect ratio inside their cells", async () => {
