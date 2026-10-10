@@ -114,24 +114,14 @@ function inputTypeFor(field: FieldDefinition): "date" | "number" | "text" {
   return "text";
 }
 
-const shortColumnWidths: Record<string, string> = {
-  shotNumber: "7rem",
-  shotSize: "8rem",
-  durationSeconds: "9.5rem",
-  sceneNumber: "8rem",
-  lens: "10rem",
-  cameraMove: "9rem",
-  cameraAngle: "12rem",
-  productionStatus: "10rem",
+const columnWidths: Record<ColumnWidth, string> = {
+  compact: "10rem",
+  standard: "14rem",
+  wide: "24rem",
 };
 
-function columnWidth(field: FieldDefinition, width: ColumnWidth): string {
-  if (width === "compact") return "10rem";
-  if (shortColumnWidths[field.id] && width !== "wide") return shortColumnWidths[field.id];
-  if (field.id === "frame") return "16rem";
-  if (field.type === "image") return width === "wide" ? "24rem" : width === "standard" ? "18rem" : "14rem";
-  if (width === "wide") return "24rem";
-  return `${Math.max(field.type === "number" ? 10 : 14, field.label.length * 2 + 4)}rem`;
+function columnWidth(_field: FieldDefinition, width: ColumnWidth): string {
+  return columnWidths[width];
 }
 
 function maxImagesFor(field: FieldDefinition): number {

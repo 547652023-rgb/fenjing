@@ -237,7 +237,7 @@ it("allows five images in both frame and reference columns", () => {
   expect(screen.getByLabelText("参考-1")).toHaveAttribute("multiple");
   expect(screen.getByRole("columnheader", { name: "画面" })).toHaveAttribute(
     "style",
-    expect.stringContaining("min-width: 16rem"),
+    expect.stringContaining("min-width: 24rem"),
   );
 });
 
@@ -604,18 +604,21 @@ it("closes the floating column menu when the browser is resized", async () => {
   expect(screen.queryByRole("dialog", { name: "镜头焦段列设置" })).not.toBeInTheDocument();
 });
 
-it("gives every compact column the same explicit width, including image and short fields", () => {
+it.each([
+  ["compact", "10rem"],
+  ["standard", "14rem"],
+  ["wide", "24rem"],
+] as const)("gives every %s column the same explicit width, including image and short fields", (width, expectedWidth) => {
   const project = createProject();
-  const columns = project.fields.map((field, order) => ({ fieldId: field.id, order, visible: true, width: "compact" as const, pinned: field.id === "shotNumber" }));
-  render(<StoryboardTable project={project} columnPresentation={columns} onChange={vi.fn()} />);
+  const columns = project.fields.map((field, order) => ({ fieldId: field.id, order, visible: true, width, pinned: field.id === "shotNumber" }));
+  render(<StoryboardTable project={project} onChange={vi.fn()} columnPresentation={columns} />);
   for (const field of project.fields) {
     const header = screen.getByRole("columnheader", { name: field.label });
-    expect(header.style.width).toBe("10rem");
-    expect(header.style.minWidth).toBe("10rem");
+    expect(header.style.width).toBe(expectedWidth);
+    expect(header.style.minWidth).toBe(expectedWidth);
   }
   expect(screen.getByRole("table").style.minWidth).toBe("0px");
 });
-
 
 it("positions pinned columns after the actual widths of earlier pinned columns", () => {
   const project = createProject();
