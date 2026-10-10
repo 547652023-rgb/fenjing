@@ -52,8 +52,8 @@ it("shows unplanned shot metadata beside a shoot-day summary", () => {
   expect(screen.getByText("待排镜头")).toBeVisible();
   expect(screen.getByText("演员走入咖啡馆")).toBeVisible();
   expect(screen.getAllByText("首日外景")).toHaveLength(2);
-  expect(screen.getByText("2 个镜头 · 9 秒")).toBeVisible();
-  expect(screen.getByText("1/2 已确认")).toBeVisible();
+  expect(screen.getByText("1 个镜头 · 3 秒")).toBeVisible();
+  expect(screen.getByText("1/1 已确认")).toBeVisible();
 });
 
 it("creates a shoot day without a typed title and exposes its production details for editing", () => {
@@ -123,4 +123,14 @@ it("confirms before deleting a shoot day", () => {
   expect(confirm).toHaveBeenCalled();
   expect(onDeleteShootDay).toHaveBeenCalledWith("day-1");
   confirm.mockRestore();
+});
+
+
+it("shows an empty day summary until a shoot day is selected", () => {
+  const project = createProject();
+  project.shots[0].values.durationSeconds = "8";
+  render(<ShootPlan project={project} onUpdateScene={vi.fn()} />);
+  const summary = document.querySelector(".shoot-plan__summary")!;
+  expect(summary).toHaveTextContent("选择拍摄日后查看当天统计");
+  expect(summary).not.toHaveTextContent("个镜头");
 });

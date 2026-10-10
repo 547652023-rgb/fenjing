@@ -8,6 +8,7 @@ import { ProjectWorkbench } from "./ProjectWorkbench";
 
 afterEach(() => {
   localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 async function setupProject() {
@@ -89,6 +90,7 @@ it("applies field visibility changes to the active storyboard columns after savi
 
   expect(screen.queryByRole("columnheader", { name: "内容" })).not.toBeInTheDocument();
   localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 it("replaces an older personal column view with the saved field visibility", async () => {
@@ -113,6 +115,7 @@ it("replaces an older personal column view with the saved field visibility", asy
 
   expect(screen.queryByRole("columnheader", { name: "摄影机装备" })).not.toBeInTheDocument();
   localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 it("shows the active column visibility in field settings when an older view differs", async () => {
@@ -662,6 +665,7 @@ it("persists a row-menu reorder through the project gateway", async () => {
 
 it("restores a personal storyboard view after the workbench remounts", async () => {
   localStorage.clear();
+  vi.restoreAllMocks();
   const { gateway, owner, project } = await setupProject();
   const user = userEvent.setup();
   const firstMount = render(
@@ -763,4 +767,163 @@ it("persists renamed fields and personal column movement across reloads", async 
   expect(headers.findIndex(header => header.getAttribute("aria-label") === "焦距"))
     .toBeLessThan(headers.findIndex(header => header.getAttribute("aria-label") === "摄影机装备"));
   expect(screen.getByLabelText(`焦距-${loaded.shots[0].id}`)).toHaveValue("35mm");
+});
+
+
+it("marks edited cells as pending immediately and saves before returning", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const loaded = await gateway.loadProject(project.id);
+  const onBack = vi.fn();
+  let finishSave!: () => void;
+  const originalSave = gateway.saveShot.bind(gateway);
+  vi.spyOn(gateway, "saveShot").mockImplementation(async (...args) => {
+    await new Promise<void>((resolve) => { finishSave = resolve; });
+    return originalSave(...args);
+  });
+  render(<ProjectWorkbench gateway={gateway} user={owner} projectId={project.id} onBack={onBack} />);
+  const input = await screen.findByLabelText(`内容-${loaded.shots[0].id}`);
+  fireEvent.change(input, { target: { value: "最后一笔输入" } });
+  expect(screen.getByRole("status")).toHaveTextContent("正在保存");
+  fireEvent.click(screen.getByRole("button", { name: "返回项目" }));
+  expect(onBack).not.toHaveBeenCalled();
+  await waitFor(() => expect(finishSave).toBeTypeOf("function"));
+  await act(async () => { finishSave(); });
+  await waitFor(() => expect(onBack).toHaveBeenCalledOnce());
+  expect((await gateway.loadProject(project.id)).shots[0].values.content).toBe("最后一笔输入");
+});
+
+it("keeps a failed edit and retries it instead of replacing it with server content", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const loaded = await gateway.loadProject(project.id);
+  const onBack = vi.fn();
+  const save = vi.spyOn(gateway, "saveShot").mockRejectedValueOnce(new Error("network"));
+  render(<ProjectWorkbench gateway={gateway} user={owner} projectId={project.id} onBack={onBack} />);
+  const input = await screen.findByLabelText(`内容-${loaded.shots[0].id}`);
+  fireEvent.change(input, { target: { value: "网络失败也保留" } });
+  fireEvent.click(screen.getByRole("button", { name: "返回项目" }));
+  await screen.findByRole("button", { name: "重试保存" });
+  expect(input).toHaveValue("网络失败也保留");
+  expect(onBack).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("已在线保存"));
+  expect(save).toHaveBeenCalledTimes(2);
+  expect((await gateway.loadProject(project.id)).shots[0].values.content).toBe("网络失败也保留");
+});
+
+it("restores an unsaved cell draft after the workbench is reopened", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const loaded = await gateway.loadProject(project.id);
+  const props = { gateway, user: owner, projectId: project.id, onBack: vi.fn() };
+  const view = render(<ProjectWorkbench {...props} />);
+  fireEvent.change(await screen.findByLabelText(`内容-${loaded.shots[0].id}`), { target: { value: "刷新前草稿" } });
+  const beforeUnload = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(beforeUnload);
+  expect(beforeUnload.defaultPrevented).toBe(true);
+  view.unmount();
+  render(<ProjectWorkbench {...props} />);
+  expect(await screen.findByLabelText(`内容-${loaded.shots[0].id}`)).toHaveValue("刷新前草稿");
+  fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("已在线保存"));
+  expect((await gateway.loadProject(project.id)).shots[0].values.content).toBe("刷新前草稿");
+});
+
+
+it("waits for edits made while a return save is in flight", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const loaded = await gateway.loadProject(project.id);
+  const originalSave = gateway.saveShot.bind(gateway);
+  let finishFirst!: () => void;
+  vi.spyOn(gateway, "saveShot").mockImplementationOnce(async (...args) => {
+    await new Promise<void>((resolve) => { finishFirst = resolve; });
+    return originalSave(...args);
+  });
+  const onBack = vi.fn();
+  render(<ProjectWorkbench gateway={gateway} user={owner} projectId={project.id} onBack={onBack} />);
+  const input = await screen.findByLabelText(`内容-${loaded.shots[0].id}`);
+  fireEvent.change(input, { target: { value: "第一笔" } });
+  fireEvent.click(screen.getByRole("button", { name: "返回项目" }));
+  await waitFor(() => expect(finishFirst).toBeTypeOf("function"));
+  fireEvent.change(input, { target: { value: "第二笔" } });
+  await act(async () => { finishFirst(); });
+  await waitFor(() => expect(onBack).toHaveBeenCalledOnce());
+  expect((await gateway.loadProject(project.id)).shots[0].values.content).toBe("第二笔");
+});
+
+it("keeps a conflicted input visible and refreshes the version for an explicit retry", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const loaded = await gateway.loadProject(project.id);
+  vi.spyOn(gateway, "saveShot").mockRejectedValueOnce({ code: "conflict" });
+  render(<ProjectWorkbench gateway={gateway} user={owner} projectId={project.id} onBack={vi.fn()} />);
+  const input = await screen.findByLabelText(`内容-${loaded.shots[0].id}`);
+  fireEvent.change(input, { target: { value: "保留冲突输入" } });
+  fireEvent.click(screen.getByRole("button", { name: "返回项目" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("你的输入已保留");
+  expect(input).toHaveValue("保留冲突输入");
+  fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("已在线保存"));
+  expect((await gateway.loadProject(project.id)).shots[0].values.content).toBe("保留冲突输入");
+});
+
+
+it("returns to saved when an edit is reverted before the debounce", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const loaded = await gateway.loadProject(project.id);
+  render(<ProjectWorkbench gateway={gateway} user={owner} projectId={project.id} onBack={vi.fn()} />);
+  const input = await screen.findByLabelText(`内容-${loaded.shots[0].id}`);
+  fireEvent.change(input, { target: { value: "临时内容" } });
+  fireEvent.change(input, { target: { value: "" } });
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("已在线保存"));
+});
+
+it("merges queued local fields with a newer remote field instead of overwriting it", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const loaded = await gateway.loadProject(project.id);
+  const originalMeta = gateway.saveProjectMeta.bind(gateway);
+  let release!: () => void;
+  vi.spyOn(gateway, "saveProjectMeta").mockImplementationOnce(async (...args) => {
+    await new Promise<void>((resolve) => { release = resolve; });
+    return originalMeta(...args);
+  });
+  render(<ProjectWorkbench gateway={gateway} user={owner} projectId={project.id} onBack={vi.fn()} />);
+  const content = await screen.findByLabelText(`内容-${loaded.shots[0].id}`);
+  fireEvent.change(screen.getByLabelText("项目名称"), { target: { value: "本地标题" } });
+  await waitFor(() => expect(release).toBeTypeOf("function"));
+  fireEvent.change(content, { target: { value: "排队的本地内容" } });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 450)); });
+  await act(async () => {
+    await gateway.saveShot(project.id, {
+      ...loaded.shots[0], values: { ...loaded.shots[0].values, notes: "其他成员的新备注" },
+    }, loaded.shots[0].version ?? 1);
+    release();
+  });
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("已在线保存"));
+  const saved = await gateway.loadProject(project.id);
+  expect(saved.shots[0].values.content).toBe("排队的本地内容");
+  expect(saved.shots[0].values.notes).toBe("其他成员的新备注");
+});
+
+
+it("merges remote changes received midway through a multi-shot save", async () => {
+  const { gateway, owner, project } = await setupProject();
+  await gateway.addShot(project.id);
+  const loaded = await gateway.loadProject(project.id);
+  const originalSave = gateway.saveShot.bind(gateway);
+  let release!: () => void;
+  vi.spyOn(gateway, "saveShot").mockImplementationOnce(async (...args) => {
+    await new Promise<void>((resolve) => { release = resolve; });
+    return originalSave(...args);
+  });
+  render(<ProjectWorkbench gateway={gateway} user={owner} projectId={project.id} onBack={vi.fn()} />);
+  fireEvent.change(await screen.findByLabelText(`内容-${loaded.shots[0].id}`), { target: { value: "本地第一镜头" } });
+  fireEvent.change(screen.getByLabelText(`内容-${loaded.shots[1].id}`), { target: { value: "本地第二镜头" } });
+  fireEvent.click(screen.getByRole("button", { name: "返回项目" }));
+  await waitFor(() => expect(release).toBeTypeOf("function"));
+  await act(async () => {
+    await originalSave(project.id, { ...loaded.shots[1], values: { ...loaded.shots[1].values, notes: "保存中收到的远端备注" } }, loaded.shots[1].version ?? 1);
+    release();
+  });
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("已在线保存"));
+  const saved = await gateway.loadProject(project.id);
+  expect(saved.shots[1].values.content).toBe("本地第二镜头");
+  expect(saved.shots[1].values.notes).toBe("保存中收到的远端备注");
 });

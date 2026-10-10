@@ -1,8 +1,10 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { FakeStoryboardGateway } from "../data/fakeGateway";
 import { ProjectWorkbench } from "./ProjectWorkbench";
+
+afterEach(() => { localStorage.clear(); });
 
 async function setupProject() {
   const gateway = new FakeStoryboardGateway();
@@ -41,7 +43,7 @@ it("applies a remote cell change without losing a different local value", async 
   expect(await screen.findByLabelText("内容-1")).toHaveValue("远端新内容");
 });
 
-it("reports a version conflict and reloads the server shot", async () => {
+it("reports a version conflict while retaining the local input for retry", async () => {
   const { gateway, owner, summary, project } = await setupProject();
   const serverShot = {
     ...project.shots[0],
@@ -61,5 +63,6 @@ it("reports a version conflict and reloads the server shot", async () => {
   await userEvent.type(await screen.findByLabelText("备注-1"), "冲突内容");
 
   expect(await screen.findByText("内容已被其他成员更新")).toBeVisible();
-  expect(screen.getByLabelText("备注-1")).toHaveValue("服务器备注");
+  expect(screen.getByLabelText("备注-1")).toHaveValue("冲突内容");
+  expect(screen.getByRole("button", { name: "重试保存" })).toBeVisible();
 });

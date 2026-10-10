@@ -850,10 +850,12 @@ select:focus-visible { outline: 2px solid var(--copper-bright); outline-offset: 
 .workbench-actions__group { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
 .workbench-actions__group--delivery { margin-left: auto; }
 .workbench-actions__account { padding-left: 0.55rem; font-size: 0.75rem; }
-.workbench-actions button { border-color: transparent; color: var(--paper); background: transparent; }
-.workbench-actions button:hover:not(:disabled) { color: var(--ink); background: var(--copper); }
+.workbench-actions__group > button,
+.workbench-actions .export-actions > button { border-color: transparent; color: var(--paper); background: transparent; }
+.workbench-actions__group > button:hover:not(:disabled) { color: var(--ink); background: var(--copper); }
 .workbench-actions .button-secondary { border-color: rgb(246 240 231 / 38%); }
-.workbench-actions .export-actions button { border-color: var(--wine); background: var(--wine); }
+.workbench-actions .export-actions > button { border-color: var(--wine); color: var(--paper); background: var(--wine); }
+.workbench-actions .export-actions > button:hover:not(:disabled) { border-color: var(--wine-deep); color: var(--paper); background: var(--wine-deep); }
 
 .storyboard-panel { margin: clamp(1.25rem, 3vw, 3rem); border: 1px solid #b9a994; border-radius: 0; background: var(--paper); box-shadow: 0 18px 44px rgb(0 0 0 / 24%); }
 .storyboard-toolbar { padding: 0.8rem 1rem; border-color: #b9a994; background: #eee2d3; }
@@ -1223,6 +1225,7 @@ button:disabled {
   padding: 1.25rem 1.5rem;
   border: 1px solid #dfe6df;
   border-radius: 14px;
+  color: var(--ink);
   background: #fff;
   box-shadow: 0 10px 30px rgb(24 48 35 / 6%);
 }
@@ -1233,9 +1236,25 @@ button:disabled {
 }
 
 .project-header h1 {
+  color: var(--ink);
   font-size: 1.7rem;
   line-height: 1.2;
 }
+
+.project-header__subtitle { color: #5d4637; }
+
+.pending-save-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  color: #4e1722;
+  background: #fff0dd;
+  border: 1px solid #b99a7c;
+}
+.pending-save-notice p { margin: 0; line-height: 1.5; }
+.pending-save-notice button { flex-shrink: 0; }
 
 .project-header__eyebrow {
   margin-bottom: 0.35rem !important;
@@ -1288,7 +1307,7 @@ button:disabled {
   justify-content: space-between;
 }
 
-.workbench-actions button {
+.workbench-actions__group > button {
   color: #1f5a3d;
   background: #fff;
 }
@@ -2259,7 +2278,7 @@ button:disabled {
   gap: 1rem;
   align-items: start;
 }
-.storyboard-review__scene-heading { grid-column: 1 / -1; margin: 1.25rem 0 -0.25rem; color: #4e1722; font-family: var(--font-display); font-size: 1rem; letter-spacing: 0.035em; }
+.storyboard-review__scene-heading { grid-column: 1 / -1; margin: 1.25rem 0 -0.25rem; color: var(--paper); font-family: var(--font-display); font-size: 1rem; letter-spacing: 0.035em; }
 .storyboard-review__scene-heading:first-child { margin-top: 0; }
 
 .storyboard-review__card {
@@ -2298,10 +2317,10 @@ button.storyboard-review__frame { cursor: zoom-in; }
 .storyboard-review__lightbox img { width: min(76rem, calc(100vw - 4rem)); max-height: calc(100vh - 12rem); object-fit: contain; }
 .storyboard-review__lightbox button { width: fit-content; border-color: #cfad86; color: #fffaf2; background: #4e1722; }
 .shoot-plan { display: grid; gap: 1.2rem; color: var(--ink); }
-.shoot-plan > header { border-bottom: 1px solid var(--copper); padding: 0.4rem 0 0.8rem; }
-.shoot-plan > header p { margin: 0; color: var(--wine); font-size: 0.7rem; font-weight: 800; letter-spacing: .14em; }
+.shoot-plan > header { color: var(--paper); border-bottom: 1px solid var(--copper); padding: 0.4rem 0 0.8rem; }
+.shoot-plan > header p { margin: 0; color: var(--copper-bright); font-size: 0.7rem; font-weight: 800; letter-spacing: .14em; }
 .shoot-plan > header h2 { margin: .25rem 0; font-family: var(--font-display); }
-.shoot-plan > header span { color: #725f4d; font-size: .85rem; }
+.shoot-plan > header span { color: var(--paper-deep); font-size: .85rem; }
 .shoot-plan__day { border: 1px solid #dfd4c4; background: #fffaf3; }
 .shoot-plan__day h3 { margin: 0; padding: .7rem 1rem; color: var(--paper); background: var(--ink); font-family: var(--font-display); font-size: 1rem; }
 .shoot-plan__scene { display: grid; grid-template-columns: minmax(12rem, 1fr) auto auto; gap: 1rem; align-items: center; padding: 1rem; border-top: 1px solid #eadfce; }
@@ -2349,3 +2368,5 @@ button.storyboard-review__frame { cursor: zoom-in; }
 .column-rename-dialog [role="alert"] { color: #a63232; }
 .column-rename-dialog footer { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1rem; }
 .column-rename-dialog footer button { padding: 0.55rem 0.85rem; border: 1px solid #b4c7b9; border-radius: 6px; background: #edf3ee; color: inherit; }
+
+.storyboard-review-shell__header { color: var(--paper); }

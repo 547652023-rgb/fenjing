@@ -28,6 +28,7 @@ import {
 } from "../domain/storyboardViews";
 import type { ProjectEvent } from "../domain/models";
 import { useProjectRealtime } from "./useProjectRealtime";
+import { applyShotDraft, type ProjectDraft, applyProjectDraft, collectProjectDraft, hasProjectDraft, readProjectDraft, writeProjectDraft } from "./projectDraft";
 import { SaveTemplateDialog } from "./SaveTemplateDialog";
 import type { TemplateSnapshot } from "../domain/models";
 
@@ -78,6 +79,9 @@ export function ProjectWorkbench({
   const [templateMessage, setTemplateMessage] = useState("");
   const [role, setRole] = useState<ProjectRole>("editor");
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
+  const [isLeaving, setIsLeaving] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [draftMessage, setDraftMessage] = useState("");
   const [error, setError] = useState("");
   const [columnPresentation, setColumnPresentation] = useState<ColumnPresentation[] | null>(null);
   const [workspaceView, setWorkspaceView] = useState<"table" | "review" | "shoot-plan" | "call-sheet">("table");
@@ -91,6 +95,10 @@ export function ProjectWorkbench({
   const projectRef = useRef<StoryboardProject | null>(null);
   const dirtyFields = useRef(new Set<string>());
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const saveQueue = useRef<Promise<boolean>>(Promise.resolve(true));
+  const activeSaves = useRef(0);
+  const saveBlocked = useRef(false);
+  const draftKey = `fenjing.pending-project.v1:${user.id}:${projectId}`;
   const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const membersLoadedForProject = useRef<string | null>(null);
   const acknowledgementRequestVersionId = useRef<string | null>(null);
@@ -105,9 +113,22 @@ export function ProjectWorkbench({
       if (normalized !== loaded) {
         await gateway.saveProjectMeta(projectId, { fields: normalized.fields });
       }
-      setProject(normalized);
-      projectRef.current = normalized;
+      const recoveringDraft = !projectRef.current;
+      const draft = projectRef.current && serverProject.current
+        ? collectProjectDraft(serverProject.current, projectRef.current)
+        : readProjectDraft(draftKey);
+      const restored = draft ? applyProjectDraft(normalized, draft) : normalized;
+      setProject(restored);
+      projectRef.current = restored;
       serverProject.current = normalized;
+      if (draft && hasProjectDraft(collectProjectDraft(normalized, restored))) {
+        draft.cells.forEach(({ shotId, fieldId }) => dirtyFields.current.add(`${shotId}:${fieldId}`));
+        if (recoveringDraft && !activeSaves.current && !saveTimers.current.size) {
+          saveBlocked.current = true;
+          setSaveStatus("error");
+          setDraftMessage("已恢复未保存的输入，请检查后重试保存。");
+        }
+      }
       setRole(
         summaries.find((summary) => summary.id === projectId)?.role ?? "editor",
       );
@@ -121,10 +142,16 @@ export function ProjectWorkbench({
         versions.current.set(shot.id, shot.version ?? 1);
       });
       setError("");
+      return true;
     } catch {
-      setError("项目加载失败或你已失去访问权限");
+      if (projectRef.current) {
+        saveBlocked.current = true;
+        setSaveStatus("error");
+        setDraftMessage("无法重新获取项目，你的输入已保留。请检查网络和访问权限后重试。");
+      } else setError("项目加载失败或你已失去访问权限");
+      return false;
     }
-  }, [gateway, projectId, user.id]);
+  }, [draftKey, gateway, projectId, user.id]);
 
   function handleColumnPresentationChange(nextPresentation: ColumnPresentation[]) {
     setColumnPresentation(nextPresentation);
@@ -151,6 +178,19 @@ export function ProjectWorkbench({
   async function handleSetProjectDefaultView(nextPresentation: ColumnPresentation[]) {
     await gateway.setProjectDefaultView(projectId, nextPresentation);
   }
+
+  useEffect(() => {
+    const protectPendingInput = (event: BeforeUnloadEvent) => {
+      const current = projectRef.current;
+      const server = serverProject.current;
+      if (activeSaves.current || saveTimers.current.size || (current && server && hasProjectDraft(collectProjectDraft(server, current)))) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", protectPendingInput);
+    return () => window.removeEventListener("beforeunload", protectPendingInput);
+  }, []);
 
   useEffect(() => {
     void reload();
@@ -264,9 +304,10 @@ export function ProjectWorkbench({
           if (shot.id !== event.shot.shot.id) return shot;
           const values = { ...event.shot.shot.values };
           if (previousServerShot) {
-            Object.keys(shot.values).forEach((fieldId) => {
+            new Set([...Object.keys(values), ...Object.keys(shot.values)]).forEach((fieldId) => {
               if (dirtyFields.current.has(`${shot.id}:${fieldId}`)) {
-                values[fieldId] = shot.values[fieldId];
+                if (shot.values[fieldId] === undefined) delete values[fieldId];
+                else values[fieldId] = shot.values[fieldId];
               }
             });
           }
@@ -286,9 +327,84 @@ export function ProjectWorkbench({
 
   useProjectRealtime({ gateway, projectId, onEvent: handleProjectEvent });
 
-  async function persistChange(
+  function backupPendingInput() {
+    if (serverProject.current && projectRef.current) {
+      writeProjectDraft(draftKey, collectProjectDraft(serverProject.current, projectRef.current));
+    }
+  }
+
+  function persistChange(previous: StoryboardProject, next: StoryboardProject): Promise<boolean> {
+    const patch = collectProjectDraft(previous, next);
+    const structureChanged = previous.shots.map(({ id }) => id).join("|") !== next.shots.map(({ id }) => id).join("|");
+    activeSaves.current += 1;
+    if (!saveBlocked.current) setSaveStatus("saving");
+    const task = saveQueue.current.then(async () => {
+      if (saveBlocked.current) return false;
+      const latestServer = serverProject.current ?? previous;
+      const target = applyProjectDraft(latestServer, patch);
+      if (structureChanged) target.shots = next.shots;
+      return persistSnapshot(latestServer, target, patch);
+    }).finally(() => {
+      activeSaves.current -= 1;
+      backupPendingInput();
+      const current = projectRef.current;
+      const server = serverProject.current;
+      if (current && server) {
+        for (const key of dirtyFields.current) {
+          const split = key.indexOf(":");
+          const shotId = key.slice(0, split);
+          const fieldId = key.slice(split + 1);
+          if (current.shots.find(({ id }) => id === shotId)?.values[fieldId] === server.shots.find(({ id }) => id === shotId)?.values[fieldId]) {
+            dirtyFields.current.delete(key);
+          }
+        }
+      }
+      if (!saveBlocked.current && !activeSaves.current && !saveTimers.current.size && !dirtyFields.current.size) {
+        setSaveStatus("saved");
+        setDraftMessage("");
+      }
+    });
+    saveQueue.current = task;
+    return task;
+  }
+
+  async function flushPendingChanges(): Promise<boolean> {
+    while (true) {
+      saveTimers.current.forEach(clearTimeout);
+      saveTimers.current.clear();
+      await saveQueue.current;
+      if (saveBlocked.current) return false;
+      const current = projectRef.current;
+      const server = serverProject.current;
+      if (!current || !server || !hasProjectDraft(collectProjectDraft(server, current))) return true;
+      if (!await persistChange(server, current)) return false;
+    }
+  }
+
+  async function handleBack() {
+    if (isLeaving) return;
+    setIsLeaving(true);
+    try { if (await flushPendingChanges()) onBack(); }
+    finally { setIsLeaving(false); }
+  }
+
+  async function retryPendingChanges() {
+    if (isRetrying) return;
+    setIsRetrying(true);
+    try {
+      await saveQueue.current;
+      // Refresh versions and merge the retained input before an explicit retry.
+      if (!await reload()) return;
+      saveBlocked.current = false;
+      setDraftMessage("");
+      await flushPendingChanges();
+    } finally { setIsRetrying(false); }
+  }
+
+  async function persistSnapshot(
     previous: StoryboardProject,
     next: StoryboardProject,
+    patch: ProjectDraft,
   ) {
     setSaveStatus("saving");
     try {
@@ -302,6 +418,9 @@ export function ProjectWorkbench({
           aspectRatio: next.aspectRatio,
           fields: next.fields,
         });
+        if (serverProject.current) {
+          serverProject.current = { ...serverProject.current, title: next.title, aspectRatio: next.aspectRatio, fields: next.fields };
+        }
       }
 
       const previousIds = previous.shots.map(({ id }) => id);
@@ -323,9 +442,12 @@ export function ProjectWorkbench({
             previousShot &&
             JSON.stringify(previousShot.values) !== JSON.stringify(nextShot.values)
           ) {
+            const latestServerShot = serverProject.current?.shots.find(({ id }) => id === nextShot.id);
+            if (!latestServerShot) throw { code: "conflict" };
+            const mergedShot = applyShotDraft(latestServerShot, patch);
             const saved = await gateway.saveShot(
               projectId,
-              nextShot,
+              mergedShot,
               versions.current.get(nextShot.id) ?? 1,
             );
             versions.current.set(nextShot.id, saved.version);
@@ -335,11 +457,11 @@ export function ProjectWorkbench({
                 saved.shot,
               );
             }
-            Object.keys(nextShot.values).forEach((fieldId) => {
+            new Set([...Object.keys(previousShot.values), ...Object.keys(mergedShot.values)]).forEach((fieldId) => {
               const key = `${nextShot.id}:${fieldId}`;
               if (
                 projectRef.current?.shots.find((shot) => shot.id === nextShot.id)
-                  ?.values[fieldId] === nextShot.values[fieldId]
+                  ?.values[fieldId] === mergedShot.values[fieldId]
               ) {
                 dirtyFields.current.delete(key);
               }
@@ -347,14 +469,19 @@ export function ProjectWorkbench({
           }
         }
       }
-      setSaveStatus("saved");
+      return true;
     } catch (caughtError) {
       const code =
         caughtError && typeof caughtError === "object" && "code" in caughtError
           ? caughtError.code
           : "error";
+      saveBlocked.current = true;
       setSaveStatus(code === "conflict" ? "conflict" : "error");
-      await reload();
+      setDraftMessage(code === "conflict"
+        ? "其他成员已更新内容，你的输入已保留。重试会将你的输入保存到最新版本。"
+        : "保存未完成，你的输入已保留。连接恢复后请重试保存。");
+      backupPendingInput();
+      return false;
     }
   }
 
@@ -363,6 +490,8 @@ export function ProjectWorkbench({
       if (!current) return current;
       const next = typeof update === "function" ? update(current) : update;
       projectRef.current = next;
+      backupPendingInput();
+      if (!saveBlocked.current) setSaveStatus("saving");
       const changedShots = next.shots.filter((nextShot) => {
         const previousShot = current.shots.find((shot) => shot.id === nextShot.id);
         return previousShot &&
@@ -370,7 +499,7 @@ export function ProjectWorkbench({
       });
       changedShots.forEach((nextShot) => {
         const previousShot = current.shots.find((shot) => shot.id === nextShot.id)!;
-        Object.keys(nextShot.values).forEach((fieldId) => {
+        new Set([...Object.keys(previousShot.values), ...Object.keys(nextShot.values)]).forEach((fieldId) => {
           if (previousShot.values[fieldId] !== nextShot.values[fieldId]) {
             dirtyFields.current.add(`${nextShot.id}:${fieldId}`);
           }
@@ -767,9 +896,15 @@ export function ProjectWorkbench({
           updateProject((current) => ({ ...current, title }))
         }
       />
+      {draftMessage ? (
+        <section className="pending-save-notice" aria-label="未保存输入">
+          <p role="alert">{draftMessage}</p>
+          <button type="button" disabled={isRetrying} onClick={() => void retryPendingChanges()}>重试保存</button>
+        </section>
+      ) : null}
       <div className="workbench-actions">
         <div className="workbench-actions__group">
-          <button className="button-secondary" type="button" onClick={onBack}>返回项目</button>
+          <button className="button-secondary" type="button" disabled={isLeaving} onClick={() => void handleBack()}>返回项目</button>
           <span className="workbench-actions__account">{user.email}</span>
         </div>
         <div className="workbench-actions__group">
