@@ -9,10 +9,18 @@ type StoryboardReviewProps = {
 
 export function StoryboardReview({ project, onReviewStateChange }: StoryboardReviewProps) {
   const [activeShotId, setActiveShotId] = useState<string | null>(null);
+  const [frameIndex, setFrameIndex] = useState(0);
   const reviewableShots = project.shots.filter((shot) => readFrames(shot.values.frame).length > 0);
   const activeShot = reviewableShots.find((shot) => shot.id === activeShotId) ?? null;
-  const activeFrame = activeShot ? readFrames(activeShot.values.frame)[0] : null;
+  const activeFrames = readFrames(activeShot?.values.frame);
+  const visibleFrameIndex = Math.min(frameIndex, activeFrames.length - 1);
+  const activeFrame = activeFrames[visibleFrameIndex];
   const activeShotIndex = activeShot ? reviewableShots.findIndex((shot) => shot.id === activeShot.id) : -1;
+  function openShot(shotId: string | null) {
+    setFrameIndex(0);
+    setActiveShotId(shotId);
+  }
+
   const sceneGroups = [
     ...project.scenes.map((scene) => ({
       id: scene.id,
@@ -33,7 +41,8 @@ export function StoryboardReview({ project, onReviewStateChange }: StoryboardRev
         ...group.shots.map((shot) => {
         const values = shot.values;
         const shotNumber = values.shotNumber || "未编号";
-        const frame = readFrames(values.frame)[0];
+        const frames = readFrames(values.frame);
+        const frame = frames[0];
 
         return (
           <article key={shot.id} aria-label={`镜头 ${shotNumber}`} className="storyboard-review__card">
@@ -42,9 +51,10 @@ export function StoryboardReview({ project, onReviewStateChange }: StoryboardRev
                 aria-label={`查看镜头 ${shotNumber} 画面`}
                 className="storyboard-review__frame"
                 type="button"
-                onClick={() => setActiveShotId(shot.id)}
+                onClick={() => openShot(shot.id)}
               >
                 <img alt={`镜头 ${shotNumber} 画面`} src={frame.url} />
+                {frames.length > 1 ? <span className="storyboard-review__frame-count">{frames.length} 张</span> : null}
               </button>
             ) : <div className="storyboard-review__frame" aria-label="暂无画面">暂无画面</div>}
             <div className="storyboard-review__card-head">
@@ -68,12 +78,12 @@ export function StoryboardReview({ project, onReviewStateChange }: StoryboardRev
       ])}
       {activeShot && activeFrame ? (
         <div aria-label={`镜头 ${activeShot.values.shotNumber || "未编号"} 画面审阅`} className="storyboard-review__lightbox" role="dialog">
-          <button aria-label="关闭画面审阅" type="button" onClick={() => setActiveShotId(null)}>关闭</button>
+          <button aria-label="关闭画面审阅" type="button" onClick={() => openShot(null)}>关闭</button>
           <button
             aria-label="上一镜头"
             disabled={activeShotIndex <= 0}
             type="button"
-            onClick={() => setActiveShotId(reviewableShots[activeShotIndex - 1]?.id ?? null)}
+            onClick={() => openShot(reviewableShots[activeShotIndex - 1]?.id ?? null)}
           >
             上一镜头
           </button>
@@ -81,10 +91,17 @@ export function StoryboardReview({ project, onReviewStateChange }: StoryboardRev
             aria-label="下一镜头"
             disabled={activeShotIndex >= reviewableShots.length - 1}
             type="button"
-            onClick={() => setActiveShotId(reviewableShots[activeShotIndex + 1]?.id ?? null)}
+            onClick={() => openShot(reviewableShots[activeShotIndex + 1]?.id ?? null)}
           >
             下一镜头
           </button>
+          {activeFrames.length > 1 ? (
+            <div className="storyboard-review__frame-navigation" role="group" aria-label="当前镜头图片">
+              <button type="button" disabled={visibleFrameIndex === 0} onClick={() => setFrameIndex(visibleFrameIndex - 1)}>上一张</button>
+              <span aria-live="polite">{visibleFrameIndex + 1} / {activeFrames.length}</span>
+              <button type="button" disabled={visibleFrameIndex === activeFrames.length - 1} onClick={() => setFrameIndex(visibleFrameIndex + 1)}>下一张</button>
+            </div>
+          ) : null}
           <img alt={`镜头 ${activeShot.values.shotNumber || "未编号"} 画面`} src={activeFrame.url} />
           <p>镜头 {activeShot.values.shotNumber || "未编号"} · {activeShot.values.content || "尚未填写镜头内容"}</p>
         </div>

@@ -116,3 +116,29 @@ it("reports an approved review state for the selected shot", async () => {
 
   expect(onReviewStateChange).toHaveBeenCalledWith("1", "已确认");
 });
+
+it("browses all frames within a shot and starts each shot on its first frame", async () => {
+  const project = createProject();
+  project.shots = ["1", "2"].map((id) => ({
+    id,
+    values: {
+      shotNumber: id,
+      frame: JSON.stringify(["a", "b"].map((suffix) => ({ url: `/${id}-${suffix}.jpg` }))),
+    },
+  }));
+  const user = userEvent.setup();
+  render(<StoryboardReview project={project} />);
+  await user.click(screen.getByRole("button", { name: "查看镜头 1 画面" }));
+  expect(screen.getByText("1 / 2")).toBeVisible();
+  expect(screen.getByRole("button", { name: "上一张" })).toBeDisabled();
+
+  await user.click(screen.getByRole("button", { name: "下一张" }));
+  let dialog = within(screen.getByRole("dialog", { name: "镜头 1 画面审阅" }));
+  expect(dialog.getByRole("img")).toHaveAttribute("src", "/1-b.jpg");
+  expect(dialog.getByText("2 / 2")).toBeVisible();
+  expect(dialog.getByRole("button", { name: "下一张" })).toBeDisabled();
+
+  await user.click(dialog.getByRole("button", { name: "下一镜头" }));
+  dialog = within(screen.getByRole("dialog", { name: "镜头 2 画面审阅" }));
+  expect(dialog.getByRole("img")).toHaveAttribute("src", "/2-a.jpg");
+});

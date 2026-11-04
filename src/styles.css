@@ -2316,7 +2316,17 @@ button:disabled {
   background: linear-gradient(135deg, #29211f, #4a3730);
 }
 
-button.storyboard-review__frame { cursor: zoom-in; }
+button.storyboard-review__frame { position: relative; cursor: zoom-in; }
+.storyboard-review__frame-count {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  border-radius: 0.3rem;
+  padding: 0.15rem 0.45rem;
+  color: #fffaf2;
+  background: #29211f;
+  font-size: 0.75rem;
+}
 .storyboard-review__frame img { width: 100%; height: 100%; object-fit: cover; }
 .storyboard-review__card-head { display: flex; justify-content: space-between; gap: 0.75rem; margin-top: 0.75rem; }
 .storyboard-review__card-head span { border-radius: 999px; padding: 0.16rem 0.45rem; color: #7a342c; background: #f2ddd4; font-size: 0.75rem; }
@@ -2329,6 +2339,7 @@ button.storyboard-review__frame { cursor: zoom-in; }
 .storyboard-review__lightbox { position: fixed; z-index: 20; inset: 0; display: grid; place-content: center; gap: 0.7rem; padding: 2rem; color: #fffaf2; background: rgb(18 13 12 / 88%); }
 .storyboard-review__lightbox img { width: min(76rem, calc(100vw - 4rem)); max-height: calc(100vh - 12rem); object-fit: contain; }
 .storyboard-review__lightbox button { width: fit-content; border-color: #cfad86; color: #fffaf2; background: #4e1722; }
+.storyboard-review__frame-navigation { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem; }
 .shoot-plan { display: grid; gap: 1.2rem; color: var(--ink); }
 .shoot-plan > header { color: var(--paper); border-bottom: 1px solid var(--copper); padding: 0.4rem 0 0.8rem; }
 .shoot-plan > header p { margin: 0; color: var(--copper-bright); font-size: 0.7rem; font-weight: 800; letter-spacing: .14em; }
