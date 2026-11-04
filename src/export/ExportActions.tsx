@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { projectWithColumnPresentation, type ColumnPresentation } from "../domain/storyboardViews";
 import type { StoryboardProject } from "../domain/storyboard";
 import { exportStoryboardExcel } from "./excelExport";
-import { exportStoryboardPdf } from "./pdfExport";
-import type { ExportLogo, ExportOptions } from "./storyboardExport";
+import { createStoryboardPdf, exportStoryboardPdf } from "./pdfExport";
+import { exportFilename, type ExportLogo, type ExportOptions, type PdfSettings } from "./storyboardExport";
+import { downloadBlob } from "./download";
 import defaultLogoUrl from "../assets/dapaidang-logo.png";
 
 const defaultLogo: ExportLogo = {
@@ -33,11 +34,14 @@ export function ExportActions({
   exportExcel = exportStoryboardExcel,
   exportPdf = exportStoryboardPdf,
 }: ExportActionsProps) {
-  const [active, setActive] = useState<"excel" | "pdf" | null>(null);
+  const [active, setActive] = useState<"excel" | "pdf" | "preview" | null>(null);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
   const [logo, setLogo] = useState<ExportLogo | undefined>();
 
+  const [pdf, setPdf] = useState<PdfSettings>({ orientation: "landscape", textSize: 14, imageHeight: 144 });
+  const [pdfColumns, setPdfColumns] = useState<string[]>();
+  const [preview, setPreview] = useState<{ url: string; blob: Blob; key: string }>();
   const [scope, setScope] = useState<ExportScope>("all");
   const scopedIds = scope === "filtered" ? filteredShotIds : scope === "selected" ? selectedShotIds : undefined;
   const idSet = new Set(scopedIds);
@@ -48,11 +52,51 @@ export function ExportActions({
     if (logo) URL.revokeObjectURL(logo.url);
   }, [logo]);
 
+  useEffect(() => () => {
+    if (preview) URL.revokeObjectURL(preview.url);
+  }, [preview]);
+
+  const deliveryProject = projectWithColumnPresentation(scope === "all" ? project : { ...project, shots }, columnPresentation);
+  const availableFields = [...deliveryProject.fields].sort((left, right) => left.order - right.order);
+  const selectedColumns = pdfColumns ?? availableFields.filter(field => field.visible).map(field => field.id);
+  const pdfProject = pdfColumns ? {
+    ...deliveryProject,
+    fields: availableFields.map(field => ({
+      ...field, visible: selectedColumns.includes(field.id), order: selectedColumns.indexOf(field.id),
+    })),
+  } : deliveryProject;
+  const pdfOptions = { logo: logo ?? defaultLogo, documentLabel, pdf };
+  const previewKey = open ? JSON.stringify([pdfProject, pdfOptions]) : "";
+  const currentPreview = preview?.key === previewKey ? preview : undefined;
+
+  async function generatePreview() {
+    setError("");
+    setActive("preview");
+    try {
+      const blob = await createStoryboardPdf(pdfProject, pdfOptions);
+      setPreview({ url: URL.createObjectURL(blob), blob, key: previewKey });
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "生成 PDF 预览失败");
+    } finally {
+      setActive(null);
+    }
+  }
+
+  function movePdfColumn(id: string, offset: number) {
+    const order = [...selectedColumns];
+    const index = order.indexOf(id);
+    const destination = index + offset;
+    if (index < 0 || destination < 0 || destination >= order.length) return;
+    [order[index], order[destination]] = [order[destination], order[index]];
+    setPdfColumns(order);
+  }
+
   function close() {
     if (active) return;
     setOpen(false);
     setError("");
     setLogo(undefined);
+    setPreview(undefined);
   }
 
   function chooseLogo(file: File | undefined) {
@@ -74,9 +118,13 @@ export function ExportActions({
     setActive(format);
     setError("");
     try {
-      const exportOptions = { logo: logo ?? defaultLogo, documentLabel };
-      const deliveryProject = projectWithColumnPresentation(scope === "all" ? project : { ...project, shots }, columnPresentation);
-      await (format === "excel" ? exportExcel(deliveryProject, exportOptions) : exportPdf(deliveryProject, exportOptions));
+      if (format === "excel") {
+        await exportExcel(deliveryProject, { logo: logo ?? defaultLogo, documentLabel });
+      } else if (currentPreview && exportPdf === exportStoryboardPdf) {
+        downloadBlob(currentPreview.blob, exportFilename(project, "pdf", new Date(), documentLabel));
+      } else {
+        await exportPdf(pdfProject, pdfOptions);
+      }
       close();
     } catch {
       setError("导出失败，请稍后重试");
@@ -119,12 +167,49 @@ export function ExportActions({
             <input aria-label="本次导出 Logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => chooseLogo(event.currentTarget.files?.[0])} />
           </label>
           <div className="export-dialog__logo-preview"><img src={logo?.url ?? defaultLogo.url} alt="Logo 预览" /><span>{logo?.name ?? defaultLogo.name}</span>{logo ? <button className="button-quiet" type="button" onClick={() => setLogo(undefined)}>恢复默认 Logo</button> : null}</div>
+          <details className="export-pdf-settings">
+            <summary>PDF 排版与预览</summary>
+            <fieldset disabled={active !== null}>
+              <legend>页面设置</legend>
+              <label>纸张方向<select value={pdf.orientation} onChange={event => setPdf({ ...pdf, orientation: event.target.value as PdfSettings["orientation"] })}>
+                <option value="landscape">横版</option><option value="portrait">竖版</option>
+              </select></label>
+              <label>文字大小<select value={pdf.textSize} onChange={event => setPdf({ ...pdf, textSize: Number(event.target.value) as PdfSettings["textSize"] })}>
+                <option value={12}>小</option><option value={14}>中</option><option value={16}>大</option>
+              </select></label>
+              <label>图片大小<select value={pdf.imageHeight} onChange={event => setPdf({ ...pdf, imageHeight: Number(event.target.value) as PdfSettings["imageHeight"] })}>
+                <option value={104}>小</option><option value={144}>中</option><option value={184}>大</option>
+              </select></label>
+            </fieldset>
+            <details>
+              <summary>导出列（{selectedColumns.length}）</summary>
+              <fieldset disabled={active !== null}>
+                <legend>选择和排列 PDF 列</legend>
+                {[...selectedColumns, ...availableFields.map(field => field.id).filter(id => !selectedColumns.includes(id))].map(id => {
+                  const field = availableFields.find(item => item.id === id);
+                  if (!field) return null;
+                  const index = selectedColumns.indexOf(id);
+                  return <div key={id} className="export-pdf-column">
+                    <label><input type="checkbox" checked={index >= 0} onChange={event => setPdfColumns(event.target.checked ? [...selectedColumns, id] : selectedColumns.filter(column => column !== id))} />{field.label}</label>
+                    {index >= 0 ? <><button type="button" aria-label={`上移 ${field.label}`} disabled={index === 0} onClick={() => movePdfColumn(id, -1)}>↑</button>
+                    <button type="button" aria-label={`下移 ${field.label}`} disabled={index === selectedColumns.length - 1} onClick={() => movePdfColumn(id, 1)}>↓</button></> : null}
+                  </div>;
+                })}
+              </fieldset>
+            </details>
+            <button type="button" disabled={active !== null || emptyScope || !selectedColumns.length} onClick={() => void generatePreview()}>
+              {active === "preview" ? "正在生成 PDF 预览…" : "生成 PDF 预览"}
+            </button>
+            {currentPreview ? <><iframe title="分镜 PDF 分页预览" src={currentPreview.url} />
+              <a href={currentPreview.url} target="_blank" rel="noreferrer">在新标签页打开预览</a></> : null}
+            {preview && !currentPreview ? <p role="status">设置已变更，请重新生成预览。</p> : null}
+          </details>
           {error ? <p className="export-actions__error" role="alert">{error}</p> : null}
           <div className="export-dialog__formats">
             <button aria-label="导出 Excel" className="export-format-option" disabled={active !== null || emptyScope} type="button" onClick={() => void run("excel")}>
               <span>Excel</span><strong>可编辑镜头清单</strong><small>{active === "excel" ? "正在生成文件…" : "供制片、排期与现场协作使用"}</small>
             </button>
-            <button aria-label="导出 PDF" className="export-format-option export-format-option--dark" disabled={active !== null || emptyScope} type="button" onClick={() => void run("pdf")}>
+            <button aria-label="导出 PDF" className="export-format-option export-format-option--dark" disabled={active !== null || emptyScope || !selectedColumns.length} type="button" onClick={() => void run("pdf")}>
               <span>PDF</span><strong>审阅用制片稿</strong><small>{active === "pdf" ? "正在生成文件…" : "供导演、客户与团队确认使用"}</small>
             </button>
           </div>

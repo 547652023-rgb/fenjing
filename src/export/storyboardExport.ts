@@ -24,7 +24,13 @@ export type ExportLogo = {
   type: "image/png" | "image/jpeg" | "image/webp";
 };
 
-export type ExportOptions = { logo?: ExportLogo; documentLabel?: string };
+export type PdfSettings = {
+  orientation: "landscape" | "portrait";
+  textSize: 12 | 14 | 16;
+  imageHeight: 104 | 144 | 184;
+};
+
+export type ExportOptions = { logo?: ExportLogo; documentLabel?: string; pdf?: PdfSettings };
 
 export function buildExportModel(project: StoryboardProject): ExportModel {
   const fields = project.fields

@@ -16,6 +16,7 @@ import {
   type ProjectUpdate,
   type StoryboardProject,
 } from "../domain/storyboard";
+import { applyGridChanges, parseClipboardGrid, validateGridValue, type GridChange } from "./storyboardGrid";
 import { ColumnHeader } from "./ColumnHeader";
 import { CenteredTextCell } from "./CenteredTextCell";
 import { RowActionMenu } from "./RowActionMenu";
@@ -307,8 +308,108 @@ export function StoryboardTable({
     if (target) reorderVisibleColumn(fieldId, target.fieldId, offset > 0);
   }
 
+  const [batchUndo, setBatchUndo] = useState<GridChange[]>([]);
+  const [gridMessage, setGridMessage] = useState("");
+  const [range, setRange] = useState<{ anchor: HTMLTableCellElement; end: HTMLTableCellElement }>();
+
+  function recordBatch(changes: GridChange[]) {
+    if (!changes.length) return;
+    setBatchUndo(changes);
+    setGridMessage(`已编辑 ${changes.length} 个单元格`);
+  }
+
+  function undoBatch() {
+    onChange(current => applyGridChanges(current, batchUndo, true));
+    setBatchUndo([]);
+    setGridMessage("已撤销批量编辑");
+  }
+
+  function gridPosition(cell: HTMLTableCellElement) {
+    const row = cell.parentElement as HTMLTableRowElement;
+    const rows = Array.from(row.closest("tbody")?.rows ?? []).filter(candidate => candidate.dataset.shotId);
+    return { rows, rowIndex: rows.indexOf(row), columnIndex: cell.cellIndex - 1 };
+  }
+
+  function handleGridPaste(event: React.ClipboardEvent<HTMLElement>) {
+    if (event.defaultPrevented) return;
+    const cell = (event.target as HTMLElement).closest<HTMLTableCellElement>("td[data-grid-field]");
+    const clipboard = event.clipboardData.getData("text/plain");
+    if (!clipboard) return;
+    const multiCell = range && range.anchor !== range.end;
+    if (!cell || (!clipboard.includes("\t") && !clipboard.includes("\n") && !multiCell)) return;
+    // A multiline plain-text note still pastes into its own cell.
+    if (!multiCell && !clipboard.includes("\t") && (event.target as HTMLElement).tagName === "TEXTAREA") return;
+    event.preventDefault();
+    const { rows, rowIndex, columnIndex } = gridPosition(multiCell && range.anchor.isConnected ? range.anchor : cell);
+    const values = parseClipboardGrid(clipboard);
+    const changes: GridChange[] = [];
+    const end = multiCell && range.end.isConnected ? gridPosition(range.end) : undefined;
+    const scalar = values.length === 1 && values[0].length === 1 && end;
+    const startRow = scalar ? Math.min(rowIndex, end.rowIndex) : rowIndex;
+    const startColumn = scalar ? Math.min(columnIndex, end.columnIndex) : columnIndex;
+    const height = scalar ? Math.abs(end.rowIndex - rowIndex) + 1 : values.length;
+    for (let y = 0; y < height; y++) {
+      const shot = project.shots.find(item => item.id === rows[startRow + y]?.dataset.shotId);
+      const width = scalar ? Math.abs(end.columnIndex - columnIndex) + 1 : values[y].length;
+      for (let x = 0; x < width; x++) {
+        const field = visibleFields[startColumn + x]?.field;
+        const value = scalar ? values[0][0] : values[y][x];
+        if (!shot || !field || !validateGridValue(field, value)) {
+          setGridMessage(`无法粘贴第 ${y + 1} 行、第 ${x + 1} 列${field ? `（${field.label}）` : ""}，请检查范围和字段格式。`);
+          return;
+        }
+        const before = shot.values[field.id];
+        if ((before ?? "") !== value) changes.push({ shotId: shot.id, fieldId: field.id, before, value });
+      }
+    }
+    if (!changes.length) return;
+    onChange(current => applyGridChanges(current, changes));
+    recordBatch(changes);
+    setRange(undefined);
+  }
+
+  function handleGridClick(event: React.MouseEvent<HTMLElement>) {
+    const cell = (event.target as HTMLElement).closest<HTMLTableCellElement>("td[data-grid-field]");
+    if (!cell) return;
+    if (!event.shiftKey) {
+      setRange({ anchor: cell, end: cell });
+      return;
+    }
+    if (!range?.anchor.isConnected) return;
+    event.preventDefault();
+    setRange({ anchor: range.anchor, end: cell });
+  }
+
+  useEffect(() => {
+    if (!range || !range.anchor.isConnected || !range.end.isConnected) return;
+    const start = gridPosition(range.anchor);
+    const end = gridPosition(range.end);
+    if (start.rowIndex < 0 || end.rowIndex < 0) return;
+    const selected: HTMLTableCellElement[] = [];
+    for (let y = Math.min(start.rowIndex, end.rowIndex); y <= Math.max(start.rowIndex, end.rowIndex); y++) {
+      for (let x = Math.min(start.columnIndex, end.columnIndex); x <= Math.max(start.columnIndex, end.columnIndex); x++) {
+        const cell = start.rows[y]?.cells[x + 1];
+        if (!cell) continue;
+        cell.dataset.gridSelected = "true";
+        selected.push(cell);
+      }
+    }
+    return () => { selected.forEach(cell => delete cell.dataset.gridSelected); };
+  }, [range, filteredShots, columnPresentation]);
+
   function applyBatchFieldValue() {
     if (!batchFieldId || selectedShotIds.length === 0) return;
+    const field = project.fields.find(item => item.id === batchFieldId);
+    if (!field || !validateGridValue(field, batchFieldValue)) {
+      setGridMessage("字段值格式不正确");
+      return;
+    }
+    const changes = project.shots.flatMap(shot => {
+      const before = shot.values[batchFieldId];
+      return selectedShotIds.includes(shot.id) && (before ?? "") !== batchFieldValue
+        ? [{ shotId: shot.id, fieldId: batchFieldId, before, value: batchFieldValue }] : [];
+    });
+    recordBatch(changes);
     if (onBatchUpdate) {
       void onBatchUpdate(selectedShotIds, batchFieldId, batchFieldValue);
       return;
@@ -384,6 +485,20 @@ export function StoryboardTable({
   }
 
   function handleTableKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+    if (event.nativeEvent.isComposing) return;
+    const target = event.target as HTMLElement;
+    if ((event.key === "Escape" || event.key === "Tab") && range) setRange(undefined);
+    const textCell = target.closest<HTMLTableCellElement>("td[data-field-type='text']");
+    if (textCell && target.tagName === "TEXTAREA" && event.key === "Enter"
+      && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault();
+      const { rows, rowIndex, columnIndex } = gridPosition(textCell);
+      const next = rows[rowIndex + 1]?.cells[columnIndex + 1]?.querySelector("textarea");
+      if (next) next.focus();
+      else target.blur();
+      setRange(undefined);
+      return;
+    }
     if (isEditingField(event.target)) return;
     if (!activeShotId) return;
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "d") {
@@ -504,9 +619,11 @@ export function StoryboardTable({
       className="storyboard-panel"
       aria-label="分镜表格区域"
       onKeyDown={handleTableKeyDown}
+      onPaste={handleGridPaste}
+      onClick={handleGridClick}
     >
       <div className="storyboard-toolbar">
-        <p>{filteredShots.length === project.shots.length ? `${project.shots.length} 个镜头` : `显示 ${filteredShots.length} / ${project.shots.length} 个镜头`}</p>
+        <p title="Shift 点击可选区域，支持从 Excel 粘贴。文字格 Enter 跳到下一镜，Shift+Enter 换行。">{filteredShots.length === project.shots.length ? `${project.shots.length} 个镜头` : `显示 ${filteredShots.length} / ${project.shots.length} 个镜头`}</p>
         <div className="storyboard-toolbar__actions">
           <button aria-pressed={compactImages} className="button-quiet" type="button" onClick={toggleImageDensity}>
             紧凑模式
@@ -650,6 +767,10 @@ export function StoryboardTable({
           <button type="button" onClick={() => { setStatusFilter(null); setCoverageFilter(null); }}>清除筛选</button>
         </div>
       ) : null}
+      {gridMessage || batchUndo.length > 0 ? <div className="storyboard-grid-message">
+        <span role="status">{gridMessage}</span>
+        {batchUndo.length > 0 ? <button type="button" onClick={undoBatch}>撤销批量编辑</button> : null}
+      </div> : null}
       {selectedShotIds.length > 0 ? (
         <div aria-label="批量操作" className="storyboard-batch-bar" role="toolbar">
           <strong>已选择 {selectedShotIds.length} 个镜头</strong>
@@ -806,7 +927,7 @@ export function StoryboardTable({
                 {showUngroupedHeader
                   ? renderSceneHeader("未分组镜头", ungroupedShotCount)
                   : null}
-                {scene?.collapsed ? null : <tr
+                {scene?.collapsed ? null : <tr data-shot-id={shot.id}
                 aria-label={`镜头 ${shot.id}`}
                 onFocusCapture={() => setActiveShotId(shot.id)}
                 onDragOver={(event) => event.preventDefault()}
@@ -909,6 +1030,7 @@ export function StoryboardTable({
                           : undefined
                     }
                     data-field-type={field.type}
+                    data-grid-field={field.id}
                     style={{ left: pinnedOffsets.get(field.id) }}
                     key={field.id}
                   >
@@ -969,7 +1091,7 @@ export function StoryboardTable({
                         label={`${field.label}-${shot.id}`}
                         value={shot.values[field.id] ?? ""}
                         onChange={(value) =>
-                          onChange(updateShotValue(project, shot.id, field.id, value))
+                          onChange(current => updateShotValue(current, shot.id, field.id, value))
                         }
                       />
                     ) : (
@@ -983,11 +1105,10 @@ export function StoryboardTable({
                         }}
                         type={inputTypeFor(field)}
                         value={shot.values[field.id] ?? ""}
-                        onChange={(event) =>
-                          onChange(
-                            updateShotValue(project, shot.id, field.id, event.target.value),
-                          )
-                        }
+                        onChange={(event) => {
+                          const value = event.currentTarget.value;
+                          onChange(current => updateShotValue(current, shot.id, field.id, value));
+                        }}
                       />
                     )}
                   </td>

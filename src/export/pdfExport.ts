@@ -7,6 +7,7 @@ import {
   type ExportOptions,
   type ExportModel,
   type ExportRow,
+  type PdfSettings,
 } from "./storyboardExport";
 
 const PAGE_WIDTH = 1123;
@@ -60,13 +61,13 @@ export type PdfRenderDependencies = {
 
 export type PdfRenderer = (model: ExportModel, options?: ExportOptions) => Promise<PdfPageImage[]>;
 
-function minimumRowHeight(fields: FieldDefinition[]): number {
+function minimumRowHeight(fields: FieldDefinition[], imageHeight = IMAGE_ROW_HEIGHT): number {
   return fields.some((field) => field.type === "image")
-    ? IMAGE_ROW_HEIGHT
+    ? imageHeight
     : TEXT_ROW_HEIGHT;
 }
 
-function imageRowHeight(row: ExportRow, fields: FieldDefinition[]): number {
+function imageRowHeight(row: ExportRow, fields: FieldDefinition[], imageHeight: number): number {
   const imageCount = Math.max(
     1,
     ...row.cells
@@ -74,7 +75,7 @@ function imageRowHeight(row: ExportRow, fields: FieldDefinition[]): number {
       .map((cell) => Math.max(1, cell.images.length)),
   );
   return fields.some((field) => field.type === "image")
-    ? IMAGE_ROW_HEIGHT * imageCount
+    ? imageHeight * imageCount
     : TEXT_ROW_HEIGHT;
 }
 
@@ -86,9 +87,9 @@ function fieldWeights(fields: FieldDefinition[]): number[] {
   });
 }
 
-function fieldWidths(fields: FieldDefinition[]): number[] {
+function fieldWidths(fields: FieldDefinition[], pageWidth = PAGE_WIDTH): number[] {
   if (fields.length === 0) return [];
-  const available = PAGE_WIDTH - PAGE_MARGIN * 2;
+  const available = pageWidth - PAGE_MARGIN * 2;
   const weights = fieldWeights(fields);
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   const widths = weights.map((weight) => available * weight / totalWeight);
@@ -119,21 +120,28 @@ function wrapText(
   return lines;
 }
 
-function textHeight(lineCount: number): number {
-  return TEXT_PADDING * 2 + Math.max(1, lineCount) * TEXT_LINE_HEIGHT;
+function textHeight(lineCount: number, lineHeight: number): number {
+  return TEXT_PADDING * 2 + Math.max(1, lineCount) * lineHeight;
 }
 
 export function buildPdfLayout(
   model: ExportModel,
   measureText: (text: string) => number = (text) => text.length * 8,
   headerHeight: number = HEADER_HEIGHT,
+  settings?: PdfSettings,
 ): PdfLayout {
+  const portrait = settings?.orientation === "portrait";
+  const width = portrait ? PAGE_HEIGHT : PAGE_WIDTH;
+  const height = portrait ? PAGE_WIDTH : PAGE_HEIGHT;
+  const lineHeight = (settings?.textSize ?? 14) + 5;
+  const imageHeight = settings?.imageHeight ?? IMAGE_ROW_HEIGHT;
+  const bodyHeight = height - PAGE_MARGIN * 2 - TITLE_HEIGHT - HEADER_HEIGHT;
   const pages: PdfLayoutPage[] = [];
-  const widths = fieldWidths(model.fields);
-  const baseHeight = minimumRowHeight(model.fields);
+  const widths = fieldWidths(model.fields, width);
+  const baseHeight = minimumRowHeight(model.fields, imageHeight);
   let page: PdfLayoutPage = { rows: [] };
   let usedHeight = 0;
-  const capacity = () => BODY_HEIGHT - (headerHeight - HEADER_HEIGHT) - (pages.length === 0 ? METADATA_HEIGHT : 0);
+  const capacity = () => bodyHeight - (headerHeight - HEADER_HEIGHT) - (pages.length === 0 ? METADATA_HEIGHT : 0);
 
   const finishPage = () => {
     pages.push(page);
@@ -151,7 +159,7 @@ export function buildPdfLayout(
       );
     });
     const maximumLineCount = Math.max(0, ...allCellLines.map((lines) => lines.length));
-    const fullHeight = Math.max(baseHeight, imageRowHeight(row, model.fields), textHeight(maximumLineCount));
+    const fullHeight = Math.max(baseHeight, imageRowHeight(row, model.fields, imageHeight), textHeight(maximumLineCount, lineHeight));
 
     if (fullHeight <= capacity()) {
       if (page.rows.length > 0 && usedHeight + fullHeight > capacity()) finishPage();
@@ -173,13 +181,13 @@ export function buildPdfLayout(
       const availableHeight = capacity();
       const lineCapacity = Math.max(
         1,
-        Math.floor((availableHeight - TEXT_PADDING * 2) / TEXT_LINE_HEIGHT),
+        Math.floor((availableHeight - TEXT_PADDING * 2) / lineHeight),
       );
       const lineCount = Math.min(lineCapacity, maximumLineCount - lineOffset);
-      const imageCount = Math.min(Math.floor(availableHeight / IMAGE_ROW_HEIGHT), maximumImageCount - imageOffset);
+      const imageCount = Math.min(Math.floor(availableHeight / imageHeight), maximumImageCount - imageOffset);
       const cellLines = allCellLines.map((lines) => lines.slice(lineOffset, lineOffset + lineCount));
       const segmentLineCount = Math.max(0, ...cellLines.map((lines) => lines.length));
-      const height = Math.max(TEXT_ROW_HEIGHT, imageCount * IMAGE_ROW_HEIGHT, textHeight(segmentLineCount));
+      const height = Math.max(TEXT_ROW_HEIGHT, imageCount * imageHeight, textHeight(segmentLineCount, lineHeight));
 
       page.rows.push({
         ...row,
@@ -198,8 +206,8 @@ export function buildPdfLayout(
   if (page.rows.length > 0 || pages.length === 0) pages.push(page);
 
   return {
-    width: PAGE_WIDTH,
-    height: PAGE_HEIGHT,
+    width,
+    height,
     title: model.title,
     aspectRatio: model.aspectRatio,
     shotCount: model.shotCount,
@@ -561,13 +569,19 @@ export async function exportStoryboardPdf(
   options: ExportOptions = {},
   render?: PdfRenderer,
 ): Promise<void> {
+  const blob = await createStoryboardPdf(project, options, render);
+  downloadBlob(blob, exportFilename(project, "pdf", new Date(), options.documentLabel));
+}
+
+export async function createStoryboardPdf(
+  project: StoryboardProject,
+  options: ExportOptions = {},
+  render?: PdfRenderer,
+): Promise<Blob> {
   const exportProject = options.documentLabel ? { ...project, title: `${project.title} · ${options.documentLabel}` } : project;
   const model = buildExportModel(exportProject);
   const output = render ? encodePdfPages(await render(model, options)) : await buildVectorPdf(model, options);
-  downloadBlob(
-    new Blob([new Uint8Array(output)], { type: "application/pdf" }),
-    exportFilename(project, "pdf", new Date(), options.documentLabel),
-  );
+  return new Blob([new Uint8Array(output)], { type: "application/pdf" });
 }
 
 export type VectorPdfDependencies = {
@@ -624,17 +638,25 @@ export async function buildVectorPdf(
   const font = await pdf.embedFont(fontBytes, { subset: false });
   pdf.setTitle(model.title);
   pdf.setCreator("分镜工作台");
-  const widths = fieldWidths(model.fields);
-  const headerLines = model.fields.map((field, index) => wrapText(field.label, Math.max(1, widths[index] - 8), value => font.widthOfTextAtSize(value, 14)));
-  const headerHeight = Math.max(HEADER_HEIGHT, ...headerLines.map(lines => 16 + lines.length * 16));
-  if (BODY_HEIGHT - (headerHeight - HEADER_HEIGHT) - METADATA_HEIGHT < minimumRowHeight(model.fields)) {
+  const settings = options.pdf;
+  const portrait = settings?.orientation === "portrait";
+  const width = portrait ? PAGE_HEIGHT : PAGE_WIDTH;
+  const height = portrait ? PAGE_WIDTH : PAGE_HEIGHT;
+  const pdfWidth = portrait ? PDF_PAGE_HEIGHT : PDF_PAGE_WIDTH;
+  const pdfHeight = portrait ? PDF_PAGE_WIDTH : PDF_PAGE_HEIGHT;
+  const fontSize = settings?.textSize ?? 14;
+  const lineHeight = fontSize + 5;
+  const imageHeight = settings?.imageHeight ?? IMAGE_ROW_HEIGHT;
+  const widths = fieldWidths(model.fields, width);
+  const headerLines = model.fields.map((field, index) => wrapText(field.label, Math.max(1, widths[index] - 8), value => font.widthOfTextAtSize(value, fontSize)));
+  const headerHeight = Math.max(HEADER_HEIGHT, ...headerLines.map(lines => 16 + lines.length * (fontSize + 2)));
+  if (height - PAGE_MARGIN * 2 - TITLE_HEIGHT - headerHeight - METADATA_HEIGHT < minimumRowHeight(model.fields, imageHeight)) {
     throw new Error("字段名称过长或导出列过多，请缩短字段名称或减少导出字段");
   }
-  const layout = buildPdfLayout(model, text => font.widthOfTextAtSize(text, 14), headerHeight);
-  // Position the visible glyph block, including descenders, around the cell center.
-  const bodyBaselineOffset = font.heightAtSize(14, { descender: false })
-    - font.heightAtSize(14, { descender: true }) / 2;
-  const scale = PDF_PAGE_WIDTH / PAGE_WIDTH;
+  const layout = buildPdfLayout(model, text => font.widthOfTextAtSize(text, fontSize), headerHeight, settings);
+  const bodyBaselineOffset = font.heightAtSize(fontSize, { descender: false })
+    - font.heightAtSize(fontSize, { descender: true }) / 2;
+  const scale = pdfWidth / width;
   const color = (hex: string) => rgb(parseInt(hex.slice(1, 3), 16) / 255, parseInt(hex.slice(3, 5), 16) / 255, parseInt(hex.slice(5, 7), 16) / 255);
   type OrientedImage = { image: import("pdf-lib").PDFImage; orientation: number };
   const imageCache = new Map<string, Promise<OrientedImage>>();
@@ -645,20 +667,20 @@ export async function buildVectorPdf(
     return imageCache.get(url)!;
   };
   for (const [pageIndex, section] of layout.pages.entries()) {
-    const page = pdf.addPage([PDF_PAGE_WIDTH, PDF_PAGE_HEIGHT]);
+    const page = pdf.addPage([pdfWidth, pdfHeight]);
     const text = (value: string, x: number, baseline: number, size = 14, fill = "#111827", centered = false) => {
       if (!value) return;
       const left = centered ? x - font.widthOfTextAtSize(value, size) / 2 : x;
-      page.drawText(value, { x: left * scale, y: PDF_PAGE_HEIGHT - baseline * scale, size: size * scale, font, color: color(fill) });
+      page.drawText(value, { x: left * scale, y: pdfHeight - baseline * scale, size: size * scale, font, color: color(fill) });
     };
     const rectangle = (x: number, y: number, width: number, height: number, fill?: string, border?: string) => {
-      page.drawRectangle({ x: x * scale, y: PDF_PAGE_HEIGHT - (y + height) * scale, width: width * scale, height: height * scale,
+      page.drawRectangle({ x: x * scale, y: pdfHeight - (y + height) * scale, width: width * scale, height: height * scale,
         color: fill ? color(fill) : undefined, borderColor: border ? color(border) : undefined, borderWidth: border ? scale : 0 });
     };
     const picture = ({ image, orientation }: OrientedImage, x: number, y: number, width: number, height: number) => {
       const size = orientation >= 5 ? { width: image.height, height: image.width } : image;
       const fitted = fitImageIntoSlot(size, x, y, width, height);
-      const matrix = orientedImageMatrix(orientation, fitted.x * scale, PDF_PAGE_HEIGHT - (fitted.y + fitted.height) * scale, fitted.width * scale, fitted.height * scale);
+      const matrix = orientedImageMatrix(orientation, fitted.x * scale, pdfHeight - (fitted.y + fitted.height) * scale, fitted.width * scale, fitted.height * scale);
       page.pushOperators(pushGraphicsState(), concatTransformationMatrix(...matrix));
       page.drawImage(image, { x: 0, y: 0, width: 1, height: 1 });
       page.pushOperators(popGraphicsState());
@@ -667,7 +689,7 @@ export async function buildVectorPdf(
     if (options.logo) {
       try {
         const logo = await load(options.logo.url);
-        const x = PAGE_WIDTH - PAGE_MARGIN - 180;
+        const x = width - PAGE_MARGIN - 180;
         const y = PAGE_MARGIN + 7;
         if (options.logo.name === "大拍档logo.png") rectangle(x, y, 180, 34, "#000000");
         picture(logo, x, y, 180, 34);
@@ -680,7 +702,7 @@ export async function buildVectorPdf(
       const width = widths[index];
       rectangle(x, y, width, headerHeight, "#15803d", "#374151");
       const lines = headerLines[index];
-      lines.forEach((line, lineIndex) => text(line, x + width / 2, y + (headerHeight - lines.length * 16) / 2 + 13 + lineIndex * 16, 14, "#ffffff", true));
+      lines.forEach((line, lineIndex) => text(line, x + width / 2, y + (headerHeight - lines.length * (fontSize + 2)) / 2 + fontSize - 1 + lineIndex * (fontSize + 2), fontSize, "#ffffff", true));
       x += width;
     }
     y += headerHeight;
@@ -690,18 +712,18 @@ export async function buildVectorPdf(
         const width = widths[index];
         if (field.type === "image" && row.showImages) {
           const images = row.cells[index]?.images ?? [];
-          const stackY = y + (row.height - IMAGE_ROW_HEIGHT * images.length) / 2;
+          const stackY = y + (row.height - imageHeight * images.length) / 2;
           for (const [slot, image] of images.entries()) {
-            const slotY = stackY + slot * IMAGE_ROW_HEIGHT;
-            try { picture(await load(image.url), x + TEXT_PADDING, slotY + TEXT_PADDING, width - TEXT_PADDING * 2, IMAGE_ROW_HEIGHT - TEXT_PADDING * 2); }
-            catch { text("图片加载失败", x + width / 2, slotY + IMAGE_ROW_HEIGHT / 2, 13, "#b91c1c", true); }
+            const slotY = stackY + slot * imageHeight;
+            try { picture(await load(image.url), x + TEXT_PADDING, slotY + TEXT_PADDING, width - TEXT_PADDING * 2, imageHeight - TEXT_PADDING * 2); }
+            catch { text("图片加载失败", x + width / 2, slotY + imageHeight / 2, 13, "#b91c1c", true); }
           }
         } else if (field.type !== "image") {
           const lines = row.cellLines[index] ?? [];
           const firstBaseline = y + row.height / 2
-            - (lines.length - 1) * TEXT_LINE_HEIGHT / 2 + bodyBaselineOffset;
+            - (lines.length - 1) * lineHeight / 2 + bodyBaselineOffset;
           lines.forEach((line, lineIndex) => text(line, x + width / 2,
-            firstBaseline + lineIndex * TEXT_LINE_HEIGHT, 14, "#111827", true));
+            firstBaseline + lineIndex * lineHeight, fontSize, "#111827", true));
         }
         rectangle(x, y, width, row.height, undefined, "#6b7280");
         x += width;
