@@ -944,3 +944,56 @@ it("uses the workbench selection and filter for delivery counts", async () => {
   expect(dialog.getByText("1 个")).toBeVisible();
   expect(dialog.getByRole("button", { name: "导出 Excel" })).toBeEnabled();
 });
+
+it("can undo a staged single-shot deletion and commits only after the grace period", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const [shot] = (await gateway.loadProject(project.id)).shots;
+  const remove = vi.spyOn(gateway, "deleteShot");
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+  const menu = await screen.findByRole("button", { name: /^更多镜头 / });
+  vi.useFakeTimers();
+  try {
+    function stageDeletion() {
+      fireEvent.click(menu);
+      fireEvent.click(screen.getByRole("menuitem", { name: "删除镜头" }));
+    }
+
+    stageDeletion();
+    expect(remove).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "撤销删除" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(8000); });
+    expect(remove).not.toHaveBeenCalled();
+    expect(screen.getByRole("checkbox", { name: /^选择镜头 / })).toBeVisible();
+
+    stageDeletion();
+    await act(async () => { await vi.advanceTimersByTimeAsync(8000); });
+    expect(remove).toHaveBeenCalledWith(project.id, shot.id);
+    expect(screen.queryByRole("checkbox", { name: /^选择镜头 / })).not.toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("cancels a pending batch deletion when returning to the project list", async () => {
+  const { gateway, owner, project } = await setupProject();
+  await gateway.addShot(project.id);
+  const remove = vi.spyOn(gateway, "deleteShot");
+  const onBack = vi.fn();
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  render(<ProjectWorkbench gateway={gateway} onBack={onBack} projectId={project.id} user={owner} />);
+  const checkboxes = await screen.findAllByRole("checkbox", { name: /^选择镜头 / });
+
+  vi.useFakeTimers();
+  try {
+    checkboxes.forEach((checkbox) => fireEvent.click(checkbox));
+    fireEvent.click(within(screen.getByRole("toolbar", { name: "批量操作" })).getByRole("button", { name: "删除镜头" }));
+    expect(screen.getByRole("region", { name: "待删除镜头" })).toHaveTextContent("2 个镜头");
+    fireEvent.click(screen.getByRole("button", { name: "返回项目" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(8000); });
+    expect(onBack).toHaveBeenCalledOnce();
+    expect(remove).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});

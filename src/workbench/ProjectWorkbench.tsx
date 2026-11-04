@@ -80,6 +80,11 @@ export function ProjectWorkbench({
   const [templateMessage, setTemplateMessage] = useState("");
   const [role, setRole] = useState<ProjectRole>("editor");
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
+  const [pendingDeleteCount, setPendingDeleteCount] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const pendingDeleteIds = useRef(new Set<string>());
+  const deleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deletingShots = useRef(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [draftMessage, setDraftMessage] = useState("");
@@ -198,6 +203,9 @@ export function ProjectWorkbench({
     void reload();
     return () => {
       if (reloadTimer.current) clearTimeout(reloadTimer.current);
+      if (deleteTimer.current) clearTimeout(deleteTimer.current);
+      deleteTimer.current = null;
+      pendingDeleteIds.current.clear();
       saveTimers.current.forEach(clearTimeout);
       saveTimers.current.clear();
     };
@@ -384,7 +392,8 @@ export function ProjectWorkbench({
   }
 
   async function handleBack() {
-    if (isLeaving) return;
+    if (isLeaving || deletingShots.current) return;
+    cancelPendingDeletion();
     setIsLeaving(true);
     try { if (await flushPendingChanges()) onBack(); }
     finally { setIsLeaving(false); }
@@ -632,19 +641,42 @@ export function ProjectWorkbench({
     }
   }
 
-  async function deleteSelectedShots(shotIds: string[]) {
-    if (shotIds.length === 0) return;
-    setSaveStatus("saving");
+  function cancelPendingDeletion() {
+    if (deleteTimer.current) clearTimeout(deleteTimer.current);
+    deleteTimer.current = null;
+    pendingDeleteIds.current.clear();
+    setPendingDeleteCount(0);
+  }
+
+  async function commitPendingDeletion() {
+    const shotIds = [...pendingDeleteIds.current];
+    if (shotIds.length === 0 || deletingShots.current) return;
+    cancelPendingDeletion();
+    deletingShots.current = true;
+    setIsDeleting(true);
     try {
+      if (!await flushPendingChanges()) return;
+      setSaveStatus("saving");
       for (const shotId of shotIds) {
         await gateway.deleteShot(projectId, shotId);
       }
-      await reload();
-      setSaveStatus("saved");
+      const refreshed = await reload();
+      setSaveStatus(refreshed ? "saved" : "error");
     } catch {
       setSaveStatus("error");
       await reload();
+    } finally {
+      deletingShots.current = false;
+      setIsDeleting(false);
     }
+  }
+
+  function stageShotDeletion(shotIds: string[]) {
+    if (shotIds.length === 0 || deletingShots.current) return;
+    shotIds.forEach((id) => pendingDeleteIds.current.add(id));
+    setPendingDeleteCount(pendingDeleteIds.current.size);
+    if (deleteTimer.current) clearTimeout(deleteTimer.current);
+    deleteTimer.current = setTimeout(() => void commitPendingDeletion(), 8000);
   }
 
   async function createScene() {
@@ -906,7 +938,7 @@ export function ProjectWorkbench({
       ) : null}
       <div className="workbench-actions">
         <div className="workbench-actions__group">
-          <button className="button-secondary" type="button" disabled={isLeaving} onClick={() => void handleBack()}>返回项目</button>
+          <button className="button-secondary" type="button" disabled={isLeaving || isDeleting} onClick={() => void handleBack()}>返回项目</button>
           <span className="workbench-actions__account">{user.email}</span>
         </div>
         <div className="workbench-actions__group">
@@ -914,10 +946,16 @@ export function ProjectWorkbench({
           <button type="button" onClick={() => setShowFieldSettings(true)}>字段设置</button>
           <button type="button" onClick={() => setShowProjectSettings(true)}>项目设置</button>
           <button type="button" onClick={() => { setTemplateMessage(""); setShowSaveTemplate(true); }}>保存为模板</button>
-          <button type="button" onClick={() => setIsReadOnlyReview(true)}>进入审阅模式</button>
+          <button type="button" disabled={pendingDeleteCount > 0 || isDeleting} onClick={() => setIsReadOnlyReview(true)}>进入审阅模式</button>
         </div>
         <div className="workbench-actions__group workbench-actions__group--delivery"><ExportActions {...(workspaceView === "table" ? exportScope : undefined)} project={project} columnPresentation={columnPresentation ?? undefined} documentLabel={callSheetDeliveryLabel} /></div>
       </div>
+      {pendingDeleteCount > 0 ? (
+        <section className="shot-deletion-notice pending-save-notice" aria-label="待删除镜头">
+          <p role="status">{pendingDeleteCount} 个镜头将在 8 秒后删除</p>
+          <button type="button" onClick={cancelPendingDeletion}>撤销删除</button>
+        </section>
+      ) : null}
       <nav aria-label="工作台视图" className="workspace-view-switcher">
         <button
           aria-pressed={workspaceView === "table"}
@@ -951,7 +989,7 @@ export function ProjectWorkbench({
           imageDensityKey={`fenjing.storyboard-image-density.v1:${user.id}:${projectId}`}
           imageActions={imageActions}
           onBatchCopy={copySelectedShots}
-          onBatchDelete={deleteSelectedShots}
+          onBatchDelete={stageShotDeletion}
           onBatchUpdate={updateSelectedShots}
           onAssignShotsToScene={assignShotsToScene}
           onCreateScene={createScene}

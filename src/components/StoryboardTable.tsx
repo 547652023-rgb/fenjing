@@ -376,6 +376,10 @@ export function StoryboardTable({
   function deleteOneShot(shotId: string) {
     setOpenRowMenuShotId(null);
     if (!window.confirm("确定删除这个镜头吗？")) return;
+    if (onBatchDelete) {
+      void onBatchDelete([shotId]);
+      return;
+    }
     onChange((latestProject) => deleteShot(latestProject, shotId));
   }
 
