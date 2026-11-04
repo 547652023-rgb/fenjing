@@ -927,3 +927,20 @@ it("merges remote changes received midway through a multi-shot save", async () =
   expect(saved.shots[1].values.content).toBe("本地第二镜头");
   expect(saved.shots[1].values.notes).toBe("保存中收到的远端备注");
 });
+
+it("uses the workbench selection and filter for delivery counts", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const user = userEvent.setup();
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+
+  await user.click(await screen.findByRole("checkbox", { name: /^选择镜头 / }));
+  await user.click(screen.getByRole("button", { name: /已供画面/ }));
+  await user.click(screen.getByRole("button", { name: "导出文件" }));
+  const dialog = within(screen.getByRole("dialog", { name: "导出交付" }));
+  const scope = dialog.getByLabelText("导出范围");
+  await user.selectOptions(scope, "filtered");
+  expect(dialog.getByText("0 个")).toBeVisible();
+  await user.selectOptions(scope, "selected");
+  expect(dialog.getByText("1 个")).toBeVisible();
+  expect(dialog.getByRole("button", { name: "导出 Excel" })).toBeEnabled();
+});

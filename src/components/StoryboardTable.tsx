@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   addShot,
   assignShotsToScene,
@@ -52,7 +52,13 @@ export type ShotCreationOptions = {
   copyShotId?: string;
 };
 
+export type StoryboardExportScope = {
+  filteredShotIds: string[];
+  selectedShotIds: string[];
+};
+
 type StoryboardTableProps = {
+  onExportScopeChange?: (scope: StoryboardExportScope) => void;
   imageDensityKey?: string;
   project: StoryboardProject;
   onChange: (update: ProjectUpdate) => void;
@@ -134,6 +140,7 @@ export function StoryboardTable({
   onChange,
   imageActions,
   imageDensityKey,
+  onExportScopeChange,
   onBatchCopy,
   onBatchDelete,
   onBatchUpdate,
@@ -207,14 +214,20 @@ export function StoryboardTable({
     ({ field }) => field.type !== "image" && field.id !== "shotNumber",
   );
   const summary = getProductionSummary(project);
-  const filteredShots = project.shots.filter((shot) => {
+  const filteredShots = useMemo(() => project.shots.filter((shot) => {
     const status = shot.values.productionStatus || "待制作";
     if (statusFilter && status !== statusFilter) return false;
     if (coverageFilter === "frames") return Boolean(shot.values.frame?.trim());
     if (coverageFilter === "completed") return status === "已完成";
     if (coverageFilter === "pending") return status !== "已完成";
     return true;
-  });
+  }), [project.shots, statusFilter, coverageFilter]);
+  useEffect(() => {
+    onExportScopeChange?.({
+      filteredShotIds: filteredShots.map((shot) => shot.id),
+      selectedShotIds,
+    });
+  }, [filteredShots, selectedShotIds, onExportScopeChange]);
   const allSelected =
     filteredShots.length > 0 && filteredShots.every((shot) => selectedShotIds.includes(shot.id));
   const scenesById = new Map(project.scenes.map((scene) => [scene.id, scene]));

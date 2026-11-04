@@ -124,3 +124,29 @@ it("sends the current visible column order to both delivery formats", async () =
   await user.click(screen.getByRole("button", { name: "导出 PDF" }));
   expect(captured).toEqual([["shotNumber", "lens", "frame"], ["shotNumber", "lens", "frame"]]);
 });
+
+it("exports only the chosen scope in project order and prevents empty exports", async () => {
+  const project = createProject();
+  const first = project.shots[0];
+  project.shots = [first, { ...first, id: "2" }, { ...first, id: "3" }];
+  const excel = vi.fn(async () => {});
+  const pdf = vi.fn(async () => {});
+  const user = userEvent.setup();
+  render(<ExportActions project={project} filteredShotIds={[]} selectedShotIds={["3", first.id]} exportExcel={excel} exportPdf={pdf} />);
+
+  await user.click(screen.getByRole("button", { name: "导出文件" }));
+  const scope = screen.getByLabelText("导出范围");
+  expect(scope).toHaveValue("all");
+  await user.selectOptions(scope, "filtered");
+  expect(screen.getByText("0 个")).toBeVisible();
+  expect(screen.getByRole("button", { name: "导出 PDF" })).toBeDisabled();
+  await user.selectOptions(scope, "selected");
+  expect(screen.getByText("2 个")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "导出 PDF" }));
+  expect(pdf).toHaveBeenCalledWith(expect.objectContaining({ shots: [first, project.shots[2]] }), expect.anything());
+
+  await user.click(screen.getByRole("button", { name: "导出文件" }));
+  expect(screen.getByLabelText("导出范围")).toHaveValue("all");
+  await user.click(screen.getByRole("button", { name: "导出 Excel" }));
+  expect(excel).toHaveBeenCalledWith(project, expect.anything());
+});

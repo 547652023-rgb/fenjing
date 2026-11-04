@@ -6,6 +6,7 @@ import { ShootPlan } from "../components/ShootPlan";
 import { CallSheet } from "../components/CallSheet";
 import {
   StoryboardTable,
+  type StoryboardExportScope,
   type ShotCreationOptions,
   type StoryboardImageActions,
 } from "../components/StoryboardTable";
@@ -84,6 +85,7 @@ export function ProjectWorkbench({
   const [draftMessage, setDraftMessage] = useState("");
   const [error, setError] = useState("");
   const [columnPresentation, setColumnPresentation] = useState<ColumnPresentation[] | null>(null);
+  const [exportScope, setExportScope] = useState<StoryboardExportScope>();
   const [workspaceView, setWorkspaceView] = useState<"table" | "review" | "shoot-plan" | "call-sheet">("table");
   const [callSheetDate, setCallSheetDate] = useState("");
   const [callSheetVersions, setCallSheetVersions] = useState<CallSheetVersion[]>([]);
@@ -914,7 +916,7 @@ export function ProjectWorkbench({
           <button type="button" onClick={() => { setTemplateMessage(""); setShowSaveTemplate(true); }}>保存为模板</button>
           <button type="button" onClick={() => setIsReadOnlyReview(true)}>进入审阅模式</button>
         </div>
-        <div className="workbench-actions__group workbench-actions__group--delivery"><ExportActions project={project} columnPresentation={columnPresentation ?? undefined} documentLabel={callSheetDeliveryLabel} /></div>
+        <div className="workbench-actions__group workbench-actions__group--delivery"><ExportActions {...(workspaceView === "table" ? exportScope : undefined)} project={project} columnPresentation={columnPresentation ?? undefined} documentLabel={callSheetDeliveryLabel} /></div>
       </div>
       <nav aria-label="工作台视图" className="workspace-view-switcher">
         <button
@@ -945,6 +947,7 @@ export function ProjectWorkbench({
       ) : null}
       {workspaceView === "table" ? (
         <StoryboardTable
+          onExportScopeChange={setExportScope}
           imageDensityKey={`fenjing.storyboard-image-density.v1:${user.id}:${projectId}`}
           imageActions={imageActions}
           onBatchCopy={copySelectedShots}

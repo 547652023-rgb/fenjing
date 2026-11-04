@@ -12,7 +12,11 @@ const defaultLogo: ExportLogo = {
   type: "image/png",
 };
 
+type ExportScope = "all" | "filtered" | "selected";
+
 type ExportActionsProps = {
+  filteredShotIds?: string[];
+  selectedShotIds?: string[];
   project: StoryboardProject;
   documentLabel?: string;
   columnPresentation?: ColumnPresentation[];
@@ -22,6 +26,8 @@ type ExportActionsProps = {
 
 export function ExportActions({
   project,
+  filteredShotIds,
+  selectedShotIds,
   documentLabel,
   columnPresentation,
   exportExcel = exportStoryboardExcel,
@@ -31,6 +37,12 @@ export function ExportActions({
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
   const [logo, setLogo] = useState<ExportLogo | undefined>();
+
+  const [scope, setScope] = useState<ExportScope>("all");
+  const scopedIds = scope === "filtered" ? filteredShotIds : scope === "selected" ? selectedShotIds : undefined;
+  const idSet = new Set(scopedIds);
+  const shots = scope === "all" ? project.shots : project.shots.filter((shot) => idSet.has(shot.id));
+  const emptyScope = scope !== "all" && shots.length === 0;
 
   useEffect(() => () => {
     if (logo) URL.revokeObjectURL(logo.url);
@@ -58,12 +70,12 @@ export function ExportActions({
   }
 
   async function run(format: "excel" | "pdf") {
-    if (active) return;
+    if (active || emptyScope) return;
     setActive(format);
     setError("");
     try {
       const exportOptions = { logo: logo ?? defaultLogo, documentLabel };
-      const deliveryProject = projectWithColumnPresentation(project, columnPresentation);
+      const deliveryProject = projectWithColumnPresentation(scope === "all" ? project : { ...project, shots }, columnPresentation);
       await (format === "excel" ? exportExcel(deliveryProject, exportOptions) : exportPdf(deliveryProject, exportOptions));
       close();
     } catch {
@@ -75,7 +87,7 @@ export function ExportActions({
 
   return (
     <div className="export-actions">
-      <button aria-label="导出文件" type="button" onClick={() => setOpen(true)}>导出交付</button>
+      <button aria-label="导出文件" type="button" onClick={() => { setScope("all"); setOpen(true); }}>导出交付</button>
       {open ? <div className="export-overlay">
         <section className="export-dialog" role="dialog" aria-modal="true" aria-labelledby="export-dialog-title">
           <header className="export-dialog__header">
@@ -89,8 +101,19 @@ export function ExportActions({
             <div><dt>项目</dt><dd>{project.title}</dd></div>
             {documentLabel ? <div><dt>交付版本</dt><dd>{documentLabel}</dd></div> : null}
             <div><dt>画幅</dt><dd>{project.aspectRatio || "16:9"}</dd></div>
-            <div><dt>镜头</dt><dd>{project.shots.length} 个</dd></div>
+            <div><dt>镜头</dt><dd>{shots.length} 个</dd></div>
           </dl>
+          {filteredShotIds || selectedShotIds ? (
+            <label className="export-dialog__logo export-dialog__scope">
+              <span>导出范围</span>
+              <select disabled={active !== null} value={scope} onChange={(event) => setScope(event.target.value as ExportScope)}>
+                <option value="all">全部镜头</option>
+                {filteredShotIds ? <option value="filtered">当前筛选结果</option> : null}
+                {selectedShotIds ? <option value="selected">已勾选镜头</option> : null}
+              </select>
+              {emptyScope ? <span role="status">此范围没有镜头，请选择其他范围。</span> : null}
+            </label>
+          ) : null}
           <label className="export-dialog__logo">
             <span>本次导出 Logo</span>
             <input aria-label="本次导出 Logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => chooseLogo(event.currentTarget.files?.[0])} />
@@ -98,10 +121,10 @@ export function ExportActions({
           <div className="export-dialog__logo-preview"><img src={logo?.url ?? defaultLogo.url} alt="Logo 预览" /><span>{logo?.name ?? defaultLogo.name}</span>{logo ? <button className="button-quiet" type="button" onClick={() => setLogo(undefined)}>恢复默认 Logo</button> : null}</div>
           {error ? <p className="export-actions__error" role="alert">{error}</p> : null}
           <div className="export-dialog__formats">
-            <button aria-label="导出 Excel" className="export-format-option" disabled={active !== null} type="button" onClick={() => void run("excel")}>
+            <button aria-label="导出 Excel" className="export-format-option" disabled={active !== null || emptyScope} type="button" onClick={() => void run("excel")}>
               <span>Excel</span><strong>可编辑镜头清单</strong><small>{active === "excel" ? "正在生成文件…" : "供制片、排期与现场协作使用"}</small>
             </button>
-            <button aria-label="导出 PDF" className="export-format-option export-format-option--dark" disabled={active !== null} type="button" onClick={() => void run("pdf")}>
+            <button aria-label="导出 PDF" className="export-format-option export-format-option--dark" disabled={active !== null || emptyScope} type="button" onClick={() => void run("pdf")}>
               <span>PDF</span><strong>审阅用制片稿</strong><small>{active === "pdf" ? "正在生成文件…" : "供导演、客户与团队确认使用"}</small>
             </button>
           </div>
