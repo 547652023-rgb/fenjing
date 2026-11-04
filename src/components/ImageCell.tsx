@@ -6,6 +6,7 @@ import { prepareStoryboardFrame } from "../images/prepareStoryboardImage";
 type SharedImageCellProps = {
   label: string;
   maxImages?: number;
+  compact?: boolean;
 };
 
 type LocalImageCellProps = SharedImageCellProps & {
@@ -87,6 +88,7 @@ function LocalImageCell({
   value,
   label,
   maxImages = 1,
+  compact,
   onChange,
 }: LocalImageCellProps) {
   const [error, setError] = useState("");
@@ -146,6 +148,7 @@ function LocalImageCell({
 
   return (
     <ImageCellLayout
+      compact={compact}
       error={error}
       images={images.map((url, position) => ({
         key: `${url.slice(0, 48)}-${position}`,
@@ -164,6 +167,7 @@ function OnlineImageCell({
   images,
   label,
   maxImages = 1,
+  compact,
   onUpload,
   onRemove,
 }: OnlineImageCellProps) {
@@ -258,6 +262,7 @@ function OnlineImageCell({
 
   return (
     <ImageCellLayout
+      compact={compact}
       error={error}
       images={visibleImages.map((image) => ({ key: image.path, url: image.url }))}
       label={label}
@@ -273,6 +278,7 @@ function OnlineImageCell({
 }
 
 type ImageCellLayoutProps = {
+  compact?: boolean;
   error: string;
   images: Array<{ key: string; url: string }>;
   label: string;
@@ -286,6 +292,7 @@ type ImageCellLayoutProps = {
 };
 
 function ImageCellLayout({
+  compact,
   error,
   images,
   label,
@@ -297,12 +304,16 @@ function ImageCellLayout({
   pendingNames = [],
   retryFiles = [],
 }: ImageCellLayoutProps) {
+  const [expanded, setExpanded] = useState(false);
+  const canExpand = compact && images.length > 1;
+  const previews = canExpand && !expanded ? images.slice(0, 1) : images;
   const occupiedCount = images.length + pendingNames.length;
   return (
     <div
       className={`image-cell ${
         maxImages > 1 ? "image-cell--multiple" : "image-cell--single"
       }`}
+      data-compact={compact && !expanded ? true : undefined}
       data-testid="image-cell"
       onDragOver={(event) => event.preventDefault()}
       onDrop={onDrop}
@@ -312,7 +323,7 @@ function ImageCellLayout({
           className="image-cell__previews image-cell__previews--vertical"
           data-testid="image-cell-previews"
         >
-          {images.map((image, index) => {
+          {previews.map((image, index) => {
             const imageLabel = `${label}-图片${index + 1}`;
             return (
               <div
@@ -332,6 +343,17 @@ function ImageCellLayout({
             );
           })}
         </div>
+      ) : null}
+
+      {canExpand ? (
+        <button
+          aria-expanded={expanded}
+          className="image-cell__density-toggle button-quiet"
+          type="button"
+          onClick={() => setExpanded((current) => !current)}
+        >
+          {expanded ? "收起图片" : `查看全部 ${images.length} 张图片`}
+        </button>
       ) : null}
 
       {pendingNames.map((name) => (

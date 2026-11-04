@@ -1653,6 +1653,19 @@ button:disabled {
   border-radius: 0.5rem;
 }
 
+.image-cell--multiple[data-compact] .image-cell__previews {
+  grid-template-columns: minmax(0, 10rem);
+}
+
+.image-cell--multiple[data-compact] .image-cell__upload {
+  flex-basis: 2.25rem;
+  height: 2.25rem;
+}
+
+.image-cell__density-toggle {
+  align-self: flex-start;
+}
+
 .image-cell__upload:hover {
   background: #eef5f0;
 }

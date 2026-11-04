@@ -945,6 +945,7 @@ export function ProjectWorkbench({
       ) : null}
       {workspaceView === "table" ? (
         <StoryboardTable
+          imageDensityKey={`fenjing.storyboard-image-density.v1:${user.id}:${projectId}`}
           imageActions={imageActions}
           onBatchCopy={copySelectedShots}
           onBatchDelete={deleteSelectedShots}

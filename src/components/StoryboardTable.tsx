@@ -53,6 +53,7 @@ export type ShotCreationOptions = {
 };
 
 type StoryboardTableProps = {
+  imageDensityKey?: string;
   project: StoryboardProject;
   onChange: (update: ProjectUpdate) => void;
   imageActions?: StoryboardImageActions;
@@ -132,6 +133,7 @@ export function StoryboardTable({
   project,
   onChange,
   imageActions,
+  imageDensityKey,
   onBatchCopy,
   onBatchDelete,
   onBatchUpdate,
@@ -145,6 +147,26 @@ export function StoryboardTable({
   canSetProjectDefaultView = false,
   onSetProjectDefaultView,
 }: StoryboardTableProps) {
+  const [compactImages, setCompactImages] = useState(() => {
+    try {
+      return !!imageDensityKey && localStorage.getItem(imageDensityKey) === "compact";
+    } catch {
+      return false;
+    }
+  });
+
+  function toggleImageDensity() {
+    const next = !compactImages;
+    setCompactImages(next);
+    if (!imageDensityKey) return;
+    try {
+      if (next) localStorage.setItem(imageDensityKey, "compact");
+      else localStorage.removeItem(imageDensityKey);
+    } catch {
+      // The current view can still switch when browser storage is unavailable.
+    }
+  }
+
   const [draggedShotId, setDraggedShotId] = useState<string | null>(null);
   const [selectedShotIds, setSelectedShotIds] = useState<string[]>([]);
   const [batchFieldId, setBatchFieldId] = useState("");
@@ -469,6 +491,9 @@ export function StoryboardTable({
       <div className="storyboard-toolbar">
         <p>{filteredShots.length === project.shots.length ? `${project.shots.length} 个镜头` : `显示 ${filteredShots.length} / ${project.shots.length} 个镜头`}</p>
         <div className="storyboard-toolbar__actions">
+          <button aria-pressed={compactImages} className="button-quiet" type="button" onClick={toggleImageDensity}>
+            紧凑模式
+          </button>
           <div className="column-settings">
             <button
               aria-expanded={isColumnSettingsOpen}
@@ -872,6 +897,7 @@ export function StoryboardTable({
                   >
                     {field.type === "image" && imageActions ? (
                       <ImageCell
+                        compact={compactImages}
                         images={parseRemoteImages(shot.values[field.id] ?? "")}
                         label={`${field.label}-${shot.id}`}
                         maxImages={maxImagesFor(field)}
@@ -894,6 +920,7 @@ export function StoryboardTable({
                       />
                     ) : field.type === "image" ? (
                       <ImageCell
+                        compact={compactImages}
                         label={`${field.label}-${shot.id}`}
                         maxImages={maxImagesFor(field)}
                         value={shot.values[field.id] ?? ""}
