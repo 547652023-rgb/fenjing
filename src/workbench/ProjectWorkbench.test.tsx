@@ -479,9 +479,16 @@ it("uploads frame images through the online gateway and persists their metadata"
   );
 
   expect(await screen.findByText("还有 1 张图片正在上传")).toBeVisible();
+  expect(screen.getByRole("button", { name: "返回项目" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "导出文件" })).toBeDisabled();
+  const uploadUnload = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(uploadUnload);
+  expect(uploadUnload.defaultPrevented).toBe(true);
   expect(screen.queryByText("已在线保存")).not.toBeInTheDocument();
   await act(async () => finishUpload(uploaded));
   await waitFor(() => expect(screen.queryByText("还有 1 张图片正在上传")).not.toBeInTheDocument());
+  expect(screen.getByRole("button", { name: "返回项目" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "导出文件" })).toBeEnabled();
   expect(await screen.findByRole("img", { name: "画面-1-图片1" })).toHaveAttribute(
     "src",
     uploaded.url,
