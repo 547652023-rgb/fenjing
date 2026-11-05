@@ -430,7 +430,9 @@ it("shows member management only to the project owner", async () => {
   const projectActions = await screen.findByRole("button", { name: "项目操作" });
   expect(screen.queryByRole("menuitem", { name: "成员管理" })).not.toBeInTheDocument();
   fireEvent.click(projectActions);
-  expect(screen.getByRole("menuitem", { name: "成员管理" })).toBeVisible();
+  expect(screen.getByRole("menuitem", { name: "成员管理" })).toHaveFocus();
+  fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+  expect(screen.getByRole("menuitem", { name: "字段设置" })).toHaveFocus();
   fireEvent.keyDown(document.activeElement!, { key: "Escape" });
   expect(screen.queryByRole("menu", { name: "项目操作" })).not.toBeInTheDocument();
   expect(projectActions).toHaveFocus();

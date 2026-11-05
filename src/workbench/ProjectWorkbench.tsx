@@ -953,7 +953,7 @@ export function ProjectWorkbench({
             项目操作
           </button>
           {projectMenuAnchor ? (
-            <RowActionMenu anchor={projectMenuAnchor} label="项目操作" onClose={() => setProjectMenuAnchor(null)}>
+            <RowActionMenu anchor={projectMenuAnchor} keyboardNavigation label="项目操作" onClose={() => setProjectMenuAnchor(null)}>
               {role === "owner" ? (
                 <button role="menuitem" type="button" onClick={() => { setProjectMenuAnchor(null); setShowMemberManager(true); }}>成员管理</button>
               ) : null}
