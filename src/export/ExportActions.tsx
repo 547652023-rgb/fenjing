@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { withDeadline } from "../lib/requestDeadline";
+import { useEffect, useRef, useState } from "react";
 import { projectWithColumnPresentation, type ColumnPresentation } from "../domain/storyboardViews";
 import type { StoryboardProject } from "../domain/storyboard";
 import { exportStoryboardExcel } from "./excelExport";
@@ -21,6 +22,7 @@ type ExportActionsProps = {
   project: StoryboardProject;
   documentLabel?: string;
   columnPresentation?: ColumnPresentation[];
+  createPdfPreview?: typeof createStoryboardPdf;
   exportExcel?: (project: StoryboardProject, options?: ExportOptions) => Promise<void>;
   exportPdf?: (project: StoryboardProject, options?: ExportOptions) => Promise<void>;
 };
@@ -31,10 +33,13 @@ export function ExportActions({
   selectedShotIds,
   documentLabel,
   columnPresentation,
+  createPdfPreview = createStoryboardPdf,
   exportExcel = exportStoryboardExcel,
   exportPdf = exportStoryboardPdf,
 }: ExportActionsProps) {
-  const [active, setActive] = useState<"excel" | "pdf" | "preview" | null>(null);
+  const [active, setActive] = useState<"excel" | "pdf" | null>(null);
+  const previewRequest = useRef<AbortController>();
+  const [isPreviewing, setIsPreviewing] = useState(false);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
   const [logo, setLogo] = useState<ExportLogo | undefined>();
@@ -56,6 +61,8 @@ export function ExportActions({
     if (preview) URL.revokeObjectURL(preview.url);
   }, [preview]);
 
+  useEffect(() => () => previewRequest.current?.abort(), []);
+
   const deliveryProject = projectWithColumnPresentation(scope === "all" ? project : { ...project, shots }, columnPresentation);
   const availableFields = [...deliveryProject.fields].sort((left, right) => left.order - right.order);
   const selectedColumns = pdfColumns?.filter(id => availableFields.some(field => field.id === id))
@@ -70,16 +77,30 @@ export function ExportActions({
   const previewKey = open ? JSON.stringify([pdfProject, pdfOptions]) : "";
   const currentPreview = preview?.key === previewKey ? preview : undefined;
 
+  function cancelPreview() {
+    previewRequest.current?.abort();
+    previewRequest.current = undefined;
+    setIsPreviewing(false);
+  }
+
   async function generatePreview() {
+    if (previewRequest.current) return;
+    const controller = new AbortController();
+    previewRequest.current = controller;
     setError("");
-    setActive("preview");
+    setIsPreviewing(true);
     try {
-      const blob = await createStoryboardPdf(pdfProject, pdfOptions);
-      setPreview({ url: URL.createObjectURL(blob), blob, key: previewKey });
+      const blob = await withDeadline(
+        createPdfPreview(pdfProject, pdfOptions), 45_000, "PDF 预览生成超时，请重试", controller.signal,
+      );
+      if (previewRequest.current === controller) setPreview({ url: URL.createObjectURL(blob), blob, key: previewKey });
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "生成 PDF 预览失败");
+      if (previewRequest.current === controller) setError(failure instanceof Error ? failure.message : "生成 PDF 预览失败");
     } finally {
-      setActive(null);
+      if (previewRequest.current === controller) {
+        previewRequest.current = undefined;
+        setIsPreviewing(false);
+      }
     }
   }
 
@@ -94,6 +115,7 @@ export function ExportActions({
 
   function close() {
     if (active) return;
+    cancelPreview();
     setOpen(false);
     setError("");
     setLogo(undefined);
@@ -198,9 +220,10 @@ export function ExportActions({
                 })}
               </fieldset>
             </details>
-            <button type="button" disabled={active !== null || emptyScope || !selectedColumns.length} onClick={() => void generatePreview()}>
-              {active === "preview" ? "正在生成 PDF 预览…" : "生成 PDF 预览"}
+            <button type="button" disabled={active !== null || isPreviewing || emptyScope || !selectedColumns.length} onClick={() => void generatePreview()}>
+              {isPreviewing ? "正在生成 PDF 预览…" : "生成 PDF 预览"}
             </button>
+            {isPreviewing ? <button className="button-quiet" type="button" onClick={cancelPreview}>取消生成预览</button> : null}
             {currentPreview ? <><iframe title="分镜 PDF 分页预览" src={currentPreview.url} />
               <a href={currentPreview.url} target="_blank" rel="noreferrer">在新标签页打开预览</a></> : null}
             {preview && !currentPreview ? <p role="status">设置已变更，请重新生成预览。</p> : null}
@@ -210,7 +233,7 @@ export function ExportActions({
             <button aria-label="导出 Excel" className="export-format-option" disabled={active !== null || emptyScope} type="button" onClick={() => void run("excel")}>
               <span>Excel</span><strong>可编辑镜头清单</strong><small>{active === "excel" ? "正在生成文件…" : "供制片、排期与现场协作使用"}</small>
             </button>
-            <button aria-label="导出 PDF" className="export-format-option export-format-option--dark" disabled={active !== null || emptyScope || !selectedColumns.length} type="button" onClick={() => void run("pdf")}>
+            <button aria-label="导出 PDF" className="export-format-option export-format-option--dark" disabled={active !== null || isPreviewing || emptyScope || !selectedColumns.length} type="button" onClick={() => void run("pdf")}>
               <span>PDF</span><strong>审阅用制片稿</strong><small>{active === "pdf" ? "正在生成文件…" : "供导演、客户与团队确认使用"}</small>
             </button>
           </div>

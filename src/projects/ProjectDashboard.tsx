@@ -1,7 +1,9 @@
+import { withDeadline } from "../lib/requestDeadline";
 import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -234,31 +236,39 @@ export function ProjectDashboard({
   const [isSupervisor, setIsSupervisor] = useState(false);
   const [showSupervisor, setShowSupervisor] = useState(false);
 
-  const refresh = useCallback(async () => {
+  const refreshId = useRef(0);
+  const [loadError, setLoadError] = useState("");
+  const refresh = useCallback(async (showLoading = false) => {
+    const id = ++refreshId.current;
+    if (showLoading) setLoading(true);
+    setLoadError("");
     try {
       const [nextProjects, nextTemplates, nextFolders, nextAssignments, settings] =
-        await Promise.all([
+        await withDeadline(Promise.all([
           gateway.listProjects(),
           gateway.listTemplates(),
           gateway.listFolders(),
           gateway.listProjectFolderAssignments(),
           gateway.listHomeSettings(),
-        ]);
+        ]), 20_000, "项目加载超时，请重试");
+      if (id !== refreshId.current) return;
       setProjects(nextProjects);
       setTemplates(nextTemplates);
       setFolders(nextFolders);
       setAssignments(nextAssignments);
       setSortBy(settings.sortBy);
       setError("");
-    } catch {
-      setError("项目或模板加载失败，请检查网络后重试");
+    } catch (failure) {
+      if (id === refreshId.current) setLoadError(failure instanceof Error && failure.message.includes("加载超时")
+        ? failure.message : "项目或模板加载失败，请检查网络后重试");
     } finally {
-      setLoading(false);
+      if (id === refreshId.current) setLoading(false);
     }
   }, [gateway]);
 
   useEffect(() => {
-    void refresh();
+    void refresh(true);
+    return () => { refreshId.current++; };
   }, [refresh]);
 
   useEffect(() => {
@@ -545,7 +555,7 @@ export function ProjectDashboard({
           <div className="dashboard-toolbar">
             <div>
               <h2 id="project-home-title">{scopeTitle}</h2>
-              <p>{loading ? "正在加载项目…" : `共 ${visibleProjects.length} 个项目`}</p>
+              <p>{loading ? "正在加载项目…" : loadError ? "项目列表未更新" : `共 ${visibleProjects.length} 个项目`}</p>
             </div>
             <div className="dashboard-toolbar__actions">
               <button
@@ -580,6 +590,10 @@ export function ProjectDashboard({
             </label>
           </div>
 
+          {loadError ? <div className="project-load-recovery">
+            <p className="form-error" role="alert">{loadError}</p>
+            <button type="button" onClick={() => void refresh(true)}>重试加载项目</button>
+          </div> : null}
           {error ? <p className="form-error" role="alert">{error}</p> : null}
 
           {showCreate ? (

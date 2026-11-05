@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { FakeStoryboardGateway } from "../data/fakeGateway";
@@ -235,4 +235,25 @@ it("lets editors organize invited projects without exposing owner-only actions",
   expect(screen.queryByRole("button", { name: "恢复共同项目" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "彻底删除共同项目" })).not.toBeInTheDocument();
   expect(screen.queryByLabelText("设置共同项目图标")).not.toBeInTheDocument();
+});
+
+it("recovers from a stalled project list and ignores the expired response", async () => {
+  const gateway = new FakeStoryboardGateway();
+  const owner = await gateway.signUp("owner@example.com", "password123");
+  await gateway.createProject("重试项目");
+  const original = gateway.listProjects.bind(gateway);
+  let finishExpired!: (value: Awaited<ReturnType<typeof original>>) => void;
+  vi.spyOn(gateway, "listProjects").mockImplementationOnce(() => new Promise(resolve => { finishExpired = resolve; }));
+  vi.useFakeTimers();
+  try {
+    render(<ProjectDashboard gateway={gateway} user={owner} {...handlers} />);
+    await act(() => vi.advanceTimersByTimeAsync(20_000));
+    expect(screen.getByRole("alert")).toHaveTextContent("加载超时");
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重试加载项目" })); });
+    expect(screen.getByRole("heading", { name: "重试项目" })).toBeVisible();
+    await act(async () => finishExpired([]));
+    expect(screen.getByRole("heading", { name: "重试项目" })).toBeVisible();
+  } finally {
+    vi.useRealTimers();
+  }
 });
