@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { RowActionMenu } from "../components/RowActionMenu";
 import { FieldSettings } from "../components/FieldSettings";
 import { ProjectHeader } from "../components/ProjectHeader";
 import { StoryboardReview } from "../components/StoryboardReview";
@@ -73,6 +74,7 @@ export function ProjectWorkbench({
   onBack,
 }: ProjectWorkbenchProps) {
   const [project, setProject] = useState<StoryboardProject | null>(null);
+  const [projectMenuAnchor, setProjectMenuAnchor] = useState<HTMLButtonElement | null>(null);
   const [showFieldSettings, setShowFieldSettings] = useState(false);
   const [showProjectSettings, setShowProjectSettings] = useState(false);
   const [showMemberManager, setShowMemberManager] = useState(false);
@@ -942,10 +944,24 @@ export function ProjectWorkbench({
           <span className="workbench-actions__account">{user.email}</span>
         </div>
         <div className="workbench-actions__group">
-          {role === "owner" ? <button type="button" onClick={() => setShowMemberManager(true)}>成员管理</button> : null}
-          <button type="button" onClick={() => setShowFieldSettings(true)}>字段设置</button>
-          <button type="button" onClick={() => setShowProjectSettings(true)}>项目设置</button>
-          <button type="button" onClick={() => { setTemplateMessage(""); setShowSaveTemplate(true); }}>保存为模板</button>
+          <button
+            aria-expanded={projectMenuAnchor !== null}
+            aria-haspopup="menu"
+            type="button"
+            onClick={(event) => setProjectMenuAnchor(projectMenuAnchor ? null : event.currentTarget)}
+          >
+            项目操作
+          </button>
+          {projectMenuAnchor ? (
+            <RowActionMenu anchor={projectMenuAnchor} label="项目操作" onClose={() => setProjectMenuAnchor(null)}>
+              {role === "owner" ? (
+                <button role="menuitem" type="button" onClick={() => { setProjectMenuAnchor(null); setShowMemberManager(true); }}>成员管理</button>
+              ) : null}
+              <button role="menuitem" type="button" title="管理字段名称和类型" onClick={() => { setProjectMenuAnchor(null); setShowFieldSettings(true); }}>字段设置</button>
+              <button role="menuitem" type="button" onClick={() => { setProjectMenuAnchor(null); setShowProjectSettings(true); }}>项目设置</button>
+              <button role="menuitem" type="button" onClick={() => { setProjectMenuAnchor(null); setTemplateMessage(""); setShowSaveTemplate(true); }}>保存为模板</button>
+            </RowActionMenu>
+          ) : null}
           <button type="button" disabled={pendingDeleteCount > 0 || isDeleting} onClick={() => setIsReadOnlyReview(true)}>进入审阅模式</button>
         </div>
         <div className="workbench-actions__group workbench-actions__group--delivery"><ExportActions {...(workspaceView === "table" ? exportScope : undefined)} project={project} columnPresentation={columnPresentation ?? undefined} documentLabel={callSheetDeliveryLabel} /></div>
