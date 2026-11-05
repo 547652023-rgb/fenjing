@@ -2486,3 +2486,27 @@ button.storyboard-review__frame { position: relative; cursor: zoom-in; }
   margin: 0;
   color: #765015;
 }
+
+.centered-text-cell__expand {
+  position: absolute;
+  inset-block-start: 0.25rem;
+  inset-inline-end: 0.25rem;
+  padding: 0.15rem 0.35rem;
+  border-color: #b9a994;
+  background: #fffaf2;
+  color: #553e31;
+  font-size: 0.72rem;
+}
+.centered-text-cell__expand:hover:not(:disabled) { background: #eee2d3; }
+.expanded-text-editor {
+  width: min(38rem, calc(100vw - 2rem));
+  border: 1px solid #b9a994;
+  border-radius: 0.5rem;
+  background: #fffaf2;
+  color: #26201b;
+  padding: 1rem;
+}
+.expanded-text-editor::backdrop { background: rgb(26 20 17 / 58%); }
+.expanded-text-editor h2 { margin: 0 0 0.7rem; }
+.expanded-text-editor textarea { width: 100%; min-height: 9rem; resize: vertical; line-height: 1.55; }
+.expanded-text-editor__actions { display: flex; justify-content: end; gap: 0.5rem; margin-top: 0.7rem; }
