@@ -1041,3 +1041,17 @@ it("persists both images when a batch upload completes without a render between 
     expect(images.map((image: { name: string }) => image.name)).toEqual(["a.png", "b.png"]);
   });
 });
+
+it("restores navigation and export after an image upload fails", async () => {
+  const { gateway, owner, project } = await setupProject();
+  vi.spyOn(gateway, "uploadImage").mockRejectedValue(new Error("offline"));
+  render(<ProjectWorkbench gateway={gateway} user={owner} projectId={project.id} onBack={vi.fn()} />);
+  await userEvent.upload(await screen.findByLabelText("画面-1"), new File(["a"], "a.png", { type: "image/png" }));
+  expect(await screen.findByRole("button", { name: "重试上传 a.png" })).toBeVisible();
+  expect(screen.queryByText("还有 1 张图片正在上传")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "返回项目" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "导出文件" })).toBeEnabled();
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(false);
+});
