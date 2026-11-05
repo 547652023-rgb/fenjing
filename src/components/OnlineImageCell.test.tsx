@@ -198,3 +198,12 @@ describe("ImageCell online mode", () => {
     expect(screen.getByRole("img", { name: "画面-1-图片1" })).toBeVisible();
   });
 });
+
+it("uploads a clipboard image to the focused image cell", async () => {
+  const onUpload = vi.fn(async () => []);
+  render(<ImageCell images={[]} label="参考-1" onUpload={onUpload} onRemove={vi.fn()} />);
+  const file = new File(["image"], "screenshot.png", { type: "image/png" });
+  fireEvent.paste(screen.getByTestId("image-cell"), { clipboardData: { files: [file] } });
+  await screen.findByLabelText("参考-1");
+  expect(onUpload).toHaveBeenCalledWith([file]);
+});

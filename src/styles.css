@@ -2403,3 +2403,63 @@ button.storyboard-review__frame { position: relative; cursor: zoom-in; }
 .column-rename-dialog footer button { padding: 0.55rem 0.85rem; border: 1px solid #b4c7b9; border-radius: 6px; background: #edf3ee; color: inherit; }
 
 .storyboard-review-shell__header { color: var(--paper); }
+
+.workbench-shell {
+  align-content: start;
+  gap: 0.55rem;
+  padding: 0.75rem;
+}
+
+.workbench-shell .project-header {
+  grid-template-columns: auto minmax(8rem, 26rem) auto;
+  align-items: center;
+  justify-content: start;
+  gap: 1rem;
+  padding: 0.55rem 0.85rem;
+}
+
+.workbench-shell .project-header h1 { font-size: 1.2rem; }
+.workbench-shell .project-header__subtitle { display: none; }
+.workbench-shell .project-title { display: flex; align-items: center; gap: 0.5rem; }
+.workbench-shell .project-title span { white-space: nowrap; }
+.workbench-shell .project-title input { min-width: 0; }
+.workbench-shell .workbench-actions { padding: 0.35rem 0.65rem; }
+.workbench-shell .storyboard-panel { margin: 0; }
+.workbench-shell .storyboard-toolbar { padding: 0.4rem 0.65rem; }
+.production-summary { gap: 0.3rem; padding: 0.35rem 0.65rem; }
+.production-summary__metrics > button,
+.production-summary__metric {
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3rem;
+  padding: 0.3rem 0.45rem;
+}
+.storyboard-grid-message { display: flex; align-items: center; gap: 0.65rem; padding: 0.3rem 0.65rem; }
+.storyboard-panel td[data-grid-selected="true"] { box-shadow: inset 0 0 0 2px #3d7856; }
+.storyboard-panel td[data-field-type="text"] textarea:not(:focus) { border-color: transparent; background: transparent; }
+.image-cell:focus-visible { outline: 2px solid #286044; outline-offset: -2px; }
+.image-cell__upload small { font-size: 0.72rem; }
+.image-cell .image-cell__upload--add {
+  align-self: start;
+  flex: 0 0 1.65rem;
+  width: 2rem;
+  height: 1.65rem;
+  border-radius: 4px;
+}
+.image-cell__remove { opacity: 0; }
+.image-cell__item:hover .image-cell__remove,
+.image-cell__item:focus-within .image-cell__remove { opacity: 1; }
+.export-dialog { max-height: 90dvh; overflow-y: auto; }
+.export-pdf-settings { display: grid; margin: 0.75rem 1.5rem; }
+.export-pdf-settings summary { cursor: pointer; padding: 0.4rem 0; font-weight: 700; }
+.export-pdf-settings fieldset { display: flex; flex-wrap: wrap; gap: 0.65rem; border: 1px solid #b9a994; }
+.export-pdf-settings label { display: flex; align-items: center; gap: 0.4rem; }
+.export-pdf-column { display: flex; align-items: center; gap: 0.3rem; }
+.export-pdf-settings > button { margin-block: 0.5rem; }
+.export-pdf-settings iframe { display: block; width: 100%; height: 52vh; border: 1px solid #b9a994; }
+@media (max-width: 660px) {
+  .workbench-shell .project-header { grid-template-columns: 1fr; gap: 0.3rem; }
+  .image-cell__remove { opacity: 1; }
+}

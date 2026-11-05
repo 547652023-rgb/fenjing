@@ -150,3 +150,11 @@ it("embeds photos independently at native resolution, with a proportional black-
   expect(images.some(image => image.dict.get(PDFName.of("Width"))?.toString() === "600" && image.dict.get(PDFName.of("Height"))?.toString() === "110")).toBe(true);
   expect(images.every(image => Number(image.dict.get(PDFName.of("Width"))?.toString()) < 3369)).toBe(true);
 });
+
+it("writes a portrait PDF using the selected layout dimensions", async () => {
+  const fontBytes = new Uint8Array(readFileSync("src/assets/fonts/NotoSansSC-Regular.ttf"));
+  const settings = { orientation: "portrait", textSize: 16, imageHeight: 104 } as const;
+  const bytes = await pdfExport.buildVectorPdf(model, { pdf: settings }, { fontBytes });
+  const document = await PDFDocument.load(bytes);
+  expect(document.getPage(0).getSize()).toEqual({ width: 595, height: 842 });
+});

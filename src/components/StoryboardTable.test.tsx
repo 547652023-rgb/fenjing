@@ -142,7 +142,7 @@ it("appends images up to five and removes one selected image", async () => {
   await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
   const nextValue = onChange.mock.calls[0][0];
   expect(JSON.parse(nextValue)).toHaveLength(5);
-  expect(screen.getByText("每行最多 5 张图片")).toBeVisible();
+  expect(screen.getByText("每格最多 5 张图片")).toBeVisible();
 
   rerender(
     <ImageCell label="画面-1" maxImages={5} value={nextValue} onChange={onChange} />,
@@ -626,4 +626,41 @@ it("positions pinned columns after the actual widths of earlier pinned columns",
   render(<StoryboardTable project={project} columnPresentation={columns} onChange={vi.fn()} />);
   expect(screen.getByRole("columnheader", { name: "画面" }).style.left).toBe("33.5rem");
   expect(screen.getByRole("columnheader", { name: "景别" }).style.left).toBe("43.5rem");
+});
+
+it("pastes a rectangle of text and undoes the entire paste", async () => {
+  const user = userEvent.setup();
+  function Table() {
+    const [project, setProject] = useState(() => addShot(createProject()));
+    return <StoryboardTable project={project} onChange={setProject} />;
+  }
+  render(<Table />);
+  const first = screen.getByLabelText("内容-1");
+  await user.click(first);
+  fireEvent.paste(first, { clipboardData: { getData: () => "第一镜\t备注一\n第二镜\t备注二" } });
+  expect(first).toHaveValue("第一镜");
+  expect(screen.getByLabelText("内容-2")).toHaveValue("第二镜");
+  await user.click(screen.getByRole("button", { name: "撤销批量编辑" }));
+  expect(first).toHaveValue("");
+  expect(screen.getByLabelText("内容-2")).toHaveValue("");
+});
+
+it("rejects an invalid time without applying any part of the paste", () => {
+  const onChange = vi.fn();
+  render(<StoryboardTable project={createProject()} onChange={onChange} />);
+  const duration = screen.getByLabelText("时长（秒）-1");
+  fireEvent.paste(duration, { clipboardData: { getData: () => "-2\t一条新备注" } });
+  expect(onChange).not.toHaveBeenCalled();
+  expect(screen.getByText(/无法粘贴第 1 行、第 1 列/)).toBeVisible();
+});
+
+it("pastes a single spreadsheet column across shots while preserving multiline plain-text notes", () => {
+  const onChange = vi.fn();
+  render(<StoryboardTable project={addShot(createProject())} onChange={onChange} />);
+  const content = screen.getByLabelText("内容-1");
+  fireEvent.paste(content, { clipboardData: { getData: (format: string) => format === "text/plain" ? "第一镜\n第二镜" : "" } });
+  expect(onChange).not.toHaveBeenCalled();
+  fireEvent.paste(content, { clipboardData: { getData: (format: string) => format === "text/html" ? "<table><tr><td>第一镜</td></tr><tr><td>第二镜</td></tr></table>" : "第一镜\n第二镜" } });
+  const update = onChange.mock.calls[0][0];
+  expect(update(addShot(createProject())).shots.map((shot: { values: { content: string } }) => shot.values.content)).toEqual(["第一镜", "第二镜"]);
 });

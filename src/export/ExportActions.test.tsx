@@ -150,3 +150,12 @@ it("exports only the chosen scope in project order and prevents empty exports", 
   await user.click(screen.getByRole("button", { name: "导出 Excel" }));
   expect(excel).toHaveBeenCalledWith(project, expect.anything());
 });
+
+it("opens PDF settings with page orientation and a preview action", async () => {
+  const user = userEvent.setup();
+  render(<ExportActions project={createProject()} />);
+  await user.click(screen.getByRole("button", { name: "导出文件" }));
+  await user.click(screen.getByText("PDF 排版与预览"));
+  expect(screen.getByLabelText("纸张方向")).toHaveValue("landscape");
+  expect(screen.getByRole("button", { name: "生成 PDF 预览" })).toBeVisible();
+});
