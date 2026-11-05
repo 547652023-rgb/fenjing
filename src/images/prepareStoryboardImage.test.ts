@@ -28,3 +28,18 @@ describe("cropToSixteenByNine", () => {
     vi.unstubAllGlobals();
   });
 });
+
+it("releases a decoded bitmap that finishes after the decoding deadline", async () => {
+  let finish!: (bitmap: ImageBitmap) => void;
+  vi.stubGlobal("createImageBitmap", vi.fn(() => new Promise<ImageBitmap>(resolve => { finish = resolve; })));
+  const original = new File(["image"], "frame.png", { type: "image/png" });
+  try {
+    await expect(prepareStoryboardFrame(original, 1)).resolves.toBe(original);
+    const close = vi.fn();
+    finish({ close } as unknown as ImageBitmap);
+    await Promise.resolve();
+    expect(close).toHaveBeenCalledOnce();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});

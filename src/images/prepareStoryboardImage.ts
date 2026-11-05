@@ -37,17 +37,21 @@ async function loadBitmap(file: File, timeoutMs: number): Promise<ImageBitmap> {
   if (typeof createImageBitmap !== "function") {
     throw new Error("当前浏览器不支持图片裁切");
   }
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      createImageBitmap(file),
-      new Promise<ImageBitmap>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("图片解码超时")), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
+  return new Promise((resolve, reject) => {
+    let expired = false;
+    const timer = setTimeout(() => {
+      expired = true;
+      reject(new Error("图片解码超时"));
+    }, timeoutMs);
+    createImageBitmap(file).then(bitmap => {
+      clearTimeout(timer);
+      if (expired) bitmap.close();
+      else resolve(bitmap);
+    }, error => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
 }
 
 export async function prepareStoryboardFrame(
@@ -56,29 +60,32 @@ export async function prepareStoryboardFrame(
 ): Promise<File> {
   try {
     const bitmap = await loadBitmap(file, decodeTimeoutMs);
-    const crop = cropToSixteenByNine(bitmap.width, bitmap.height);
-    const scale = Math.min(1, MAX_FRAME_EDGE / crop.sw);
-    const outputWidth = Math.max(1, Math.round(crop.sw * scale));
-    const outputHeight = Math.max(1, Math.round(crop.sh * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = outputWidth;
-    canvas.height = outputHeight;
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("图片裁切失败");
-    context.drawImage(
-      bitmap,
-      crop.sx,
-      crop.sy,
-      crop.sw,
-      crop.sh,
-      0,
-      0,
-      outputWidth,
-      outputHeight,
-    );
-    bitmap.close();
-    const blob = await canvasBlob(canvas);
-    return new File([blob], jpegFileName(file.name), { type: "image/jpeg" });
+    try {
+      const crop = cropToSixteenByNine(bitmap.width, bitmap.height);
+      const scale = Math.min(1, MAX_FRAME_EDGE / crop.sw);
+      const outputWidth = Math.max(1, Math.round(crop.sw * scale));
+      const outputHeight = Math.max(1, Math.round(crop.sh * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = outputWidth;
+      canvas.height = outputHeight;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("图片裁切失败");
+      context.drawImage(
+        bitmap,
+        crop.sx,
+        crop.sy,
+        crop.sw,
+        crop.sh,
+        0,
+        0,
+        outputWidth,
+        outputHeight,
+      );
+      const blob = await canvasBlob(canvas);
+      return new File([blob], jpegFileName(file.name), { type: "image/jpeg" });
+    } finally {
+      bitmap.close();
+    }
   } catch {
     // Keep original files uploadable on browsers that cannot decode a given format.
     return file;

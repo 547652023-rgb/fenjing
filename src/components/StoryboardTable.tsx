@@ -1047,6 +1047,7 @@ export function StoryboardTable({
                     {field.type === "image" && imageActions ? (
                       <ImageCell
                         compact={compactImages}
+                        prepareFrame={field.id === "frame"}
                         images={parseRemoteImages(shot.values[field.id] ?? "")}
                         label={`${field.label}-${shot.id}`}
                         maxImages={maxImagesFor(field)}
