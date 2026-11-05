@@ -2510,3 +2510,12 @@ button.storyboard-review__frame { position: relative; cursor: zoom-in; }
 .expanded-text-editor h2 { margin: 0 0 0.7rem; }
 .expanded-text-editor textarea { width: 100%; min-height: 9rem; resize: vertical; line-height: 1.55; }
 .expanded-text-editor__actions { display: flex; justify-content: end; gap: 0.5rem; margin-top: 0.7rem; }
+
+.storyboard-shortcuts {
+  margin: 0;
+  padding: 0.25rem 0.65rem;
+  background: #fffaf2;
+  color: #695548;
+  font-size: 0.75rem;
+}
+.image-cell__upload small { padding: 0.15rem 0.25rem; text-align: center; }

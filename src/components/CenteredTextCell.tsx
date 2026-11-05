@@ -20,7 +20,10 @@ export function CenteredTextCell({ label, value, onChange }: Props) {
     if (typeof element.showModal === "function") element.showModal();
     else element.open = true;
     expandedInput.current?.focus();
-    return () => opener.current?.focus();
+    return () => {
+      if (typeof element.close === "function" && element.open) element.close();
+      opener.current?.focus();
+    };
   }, [isExpanded]);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -55,7 +58,7 @@ export function CenteredTextCell({ label, value, onChange }: Props) {
       <dialog aria-label={label} className="expanded-text-editor" ref={dialog}
         onCancel={() => setExpanded(undefined)} onClick={event => event.stopPropagation()}
         onKeyDown={event => event.stopPropagation()} onPaste={event => event.stopPropagation()}>
-        <h2>编辑{label.slice(0, label.indexOf("-"))}</h2>
+        <h2>编辑完整文字</h2>
         <textarea aria-label="完整文字" ref={expandedInput} rows={9} value={expanded.draft}
           onChange={event => setExpanded({ ...expanded, draft: event.target.value })} />
         {value !== expanded.original ? <p role="alert">原单元格已更新。请取消后重新打开，避免覆盖新内容。</p> : null}

@@ -625,7 +625,7 @@ export function StoryboardTable({
       onClick={handleGridClick}
     >
       <div className="storyboard-toolbar">
-        <p title="Shift 点击可选区域，支持从 Excel 粘贴。文字格 Enter 跳到下一镜，Shift+Enter 换行。">{filteredShots.length === project.shots.length ? `${project.shots.length} 个镜头` : `显示 ${filteredShots.length} / ${project.shots.length} 个镜头`}</p>
+        <p>{filteredShots.length === project.shots.length ? `${project.shots.length} 个镜头` : `显示 ${filteredShots.length} / ${project.shots.length} 个镜头`}</p>
         <div className="storyboard-toolbar__actions">
           <button aria-pressed={compactImages} className="button-quiet" type="button" onClick={toggleImageDensity}>
             紧凑模式
@@ -723,6 +723,7 @@ export function StoryboardTable({
         </div>
         </div>
       </div>
+      <p className="storyboard-shortcuts">Shift 点击选区 · 从 Excel 粘贴 · Enter 到下一镜 · Shift+Enter 换行</p>
       <section aria-label="制作概览" className="production-summary">
         <button aria-expanded={overviewOpen} className="production-summary__toggle" type="button" onClick={() => setOverviewOpen(!overviewOpen)}>
           <strong>制作概览</strong>

@@ -694,3 +694,9 @@ it("opens multiline notes in a separate editor and saves them back to the cell",
   expect(screen.getByLabelText("备注-1")).toHaveValue("修改后的长说明\n保留换行");
   expect(opener).toHaveFocus();
 });
+
+it("shows spreadsheet shortcuts and clipboard image instructions without hovering", () => {
+  render(<StoryboardTable project={createProject()} onChange={vi.fn()} />);
+  expect(screen.getByText(/Shift 点击选区.*从 Excel 粘贴/)).toBeVisible();
+  expect(screen.getAllByText(/按 ⌘V 或 Ctrl\+V 粘贴/)[0]).toBeVisible();
+});
