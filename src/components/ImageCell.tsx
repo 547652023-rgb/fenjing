@@ -166,23 +166,22 @@ function OnlineImageCell({
   async function uploadFiles(files: File[]) {
     setPendingNames((current) => [...current, ...files.map((file) => file.name)]);
     setError("");
-    try {
-      const uploaded = await onUpload(files);
-      setVisibleImages((current) => [...current, ...uploaded].slice(0, maxImages));
-      setFailedFiles((current) =>
-        current.filter((candidate) => !files.includes(candidate)),
-      );
-    } catch (error) {
-      setError(uploadErrorMessage(error));
-      setFailedFiles((current) =>
-        [...current, ...files].filter(
-          (candidate, index, all) => all.indexOf(candidate) === index,
-        ),
-      );
-    } finally {
-      setPendingNames((current) =>
-        current.filter((name) => !files.some((file) => file.name === name)),
-      );
+    for (const file of files) {
+      try {
+        const uploaded = await onUpload([file]);
+        setVisibleImages((current) =>
+          [...new Map([...current, ...uploaded].map(image => [image.path, image])).values()].slice(0, maxImages),
+        );
+        setFailedFiles((current) => current.filter((candidate) => candidate !== file));
+      } catch (error) {
+        setError(uploadErrorMessage(error));
+        setFailedFiles((current) => current.includes(file) ? current : [...current, file]);
+      } finally {
+        setPendingNames((current) => {
+          const index = current.indexOf(file.name);
+          return index < 0 ? current : current.filter((_, position) => position !== index);
+        });
+      }
     }
   }
 
@@ -197,7 +196,11 @@ function OnlineImageCell({
   }
 
   async function addFiles(selected: File[]) {
-    if (!selected.length || busy.current) return;
+    if (!selected.length) return;
+    if (busy.current) {
+      setError("正在上传上一批图片，请完成后再添加");
+      return;
+    }
     if (selected.some((file) => !file.type.startsWith("image/"))) {
       setError("请选择图片文件");
       return;

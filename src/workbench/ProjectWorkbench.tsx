@@ -7,6 +7,7 @@ import { ShootPlan } from "../components/ShootPlan";
 import { CallSheet } from "../components/CallSheet";
 import {
   StoryboardTable,
+  parseRemoteImages,
   type StoryboardExportScope,
   type ShotCreationOptions,
   type StoryboardImageActions,
@@ -825,6 +826,8 @@ export function ProjectWorkbench({
 
   const imageActions: StoryboardImageActions = {
     async upload(shotId, fieldId, currentImages, files) {
+      const latestShot = projectRef.current?.shots.find(shot => shot.id === shotId);
+      if (latestShot) currentImages = parseRemoteImages(latestShot.values[fieldId] ?? "");
       const remaining = Math.max(
         0,
         (fieldId === "frame" || fieldId === "reference" ? 5 : 1) - currentImages.length,
@@ -845,20 +848,15 @@ export function ProjectWorkbench({
             }),
           );
         }
-        const nextImages = [...currentImages, ...uploaded];
         updateProject((current) => ({
           ...current,
-          shots: current.shots.map((shot) =>
-            shot.id === shotId
-              ? {
-                  ...shot,
-                  values: {
-                    ...shot.values,
-                    [fieldId]: JSON.stringify(nextImages),
-                  },
-                }
-              : shot,
-          ),
+          shots: current.shots.map((shot) => {
+            if (shot.id !== shotId) return shot;
+            const images = parseRemoteImages(shot.values[fieldId] ?? "");
+            const nextImages = [...new Map([...images, ...uploaded].map(image => [image.path, image])).values()]
+              .map((image, position) => ({ ...image, position }));
+            return { ...shot, values: { ...shot.values, [fieldId]: JSON.stringify(nextImages) } };
+          }),
         }), true);
         return uploaded;
       } finally {
