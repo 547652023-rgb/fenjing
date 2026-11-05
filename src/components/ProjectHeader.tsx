@@ -4,9 +4,10 @@ type ProjectHeaderProps = {
   title: string;
   onTitleChange: (title: string) => void;
   saveStatus: SaveState;
+  pendingImages?: number;
 };
 
-export function ProjectHeader({ title, onTitleChange, saveStatus }: ProjectHeaderProps) {
+export function ProjectHeader({ title, onTitleChange, saveStatus, pendingImages = 0 }: ProjectHeaderProps) {
   return (
     <header className="project-header">
       <div>
@@ -23,7 +24,7 @@ export function ProjectHeader({ title, onTitleChange, saveStatus }: ProjectHeade
       </label>
       <p className="save-status" role="status">
         {saveStatus === "saved"
-          ? "已在线保存"
+          ? (pendingImages ? "其他改动已保存" : "已在线保存")
           : saveStatus === "saving"
             ? "正在保存…"
             : saveStatus === "offline"
@@ -34,6 +35,7 @@ export function ProjectHeader({ title, onTitleChange, saveStatus }: ProjectHeade
                   ? "内容已被其他成员更新"
                   : "保存失败，请检查网络后重试"}
       </p>
+      {pendingImages > 0 ? <p className="save-status image-upload-status" role="status">还有 {pendingImages} 张图片正在上传</p> : null}
     </header>
   );
 }

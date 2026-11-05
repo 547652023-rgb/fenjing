@@ -2480,3 +2480,9 @@ button.storyboard-review__frame { position: relative; cursor: zoom-in; }
   background: #eee2d3;
 }
 .production-summary__toggle span:last-child { margin-inline-start: auto; }
+
+.workbench-shell .project-header .image-upload-status {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #765015;
+}

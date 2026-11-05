@@ -461,7 +461,8 @@ it("uploads frame images through the online gateway and persists their metadata"
     name: "a.png",
     position: 0,
   };
-  vi.spyOn(gateway, "uploadImage").mockResolvedValue(uploaded);
+  let finishUpload!: (image: typeof uploaded) => void;
+  vi.spyOn(gateway, "uploadImage").mockImplementation(() => new Promise(resolve => { finishUpload = resolve; }));
 
   render(
     <ProjectWorkbench
@@ -477,6 +478,10 @@ it("uploads frame images through the online gateway and persists their metadata"
     new File(["a"], "a.png", { type: "image/png" }),
   );
 
+  expect(await screen.findByText("还有 1 张图片正在上传")).toBeVisible();
+  expect(screen.queryByText("已在线保存")).not.toBeInTheDocument();
+  await act(async () => finishUpload(uploaded));
+  await waitFor(() => expect(screen.queryByText("还有 1 张图片正在上传")).not.toBeInTheDocument());
   expect(await screen.findByRole("img", { name: "画面-1-图片1" })).toHaveAttribute(
     "src",
     uploaded.url,

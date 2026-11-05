@@ -81,6 +81,7 @@ export function ProjectWorkbench({
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [templateMessage, setTemplateMessage] = useState("");
   const [role, setRole] = useState<ProjectRole>("editor");
+  const [pendingImages, setPendingImages] = useState(0);
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
   const [pendingDeleteCount, setPendingDeleteCount] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -829,34 +830,40 @@ export function ProjectWorkbench({
         (fieldId === "frame" || fieldId === "reference" ? 5 : 1) - currentImages.length,
       );
       const accepted = files.slice(0, remaining);
-      const uploaded: RemoteImage[] = [];
-      for (const [index, file] of accepted.entries()) {
-        uploaded.push(
-          await gateway.uploadImage({
-            projectId,
-            shotId,
-            fieldId,
-            file,
-            position: currentImages.length + index,
-          }),
-        );
+      if (!accepted.length) return [];
+      setPendingImages(count => count + accepted.length);
+      try {
+        const uploaded: RemoteImage[] = [];
+        for (const [index, file] of accepted.entries()) {
+          uploaded.push(
+            await gateway.uploadImage({
+              projectId,
+              shotId,
+              fieldId,
+              file,
+              position: currentImages.length + index,
+            }),
+          );
+        }
+        const nextImages = [...currentImages, ...uploaded];
+        updateProject((current) => ({
+          ...current,
+          shots: current.shots.map((shot) =>
+            shot.id === shotId
+              ? {
+                  ...shot,
+                  values: {
+                    ...shot.values,
+                    [fieldId]: JSON.stringify(nextImages),
+                  },
+                }
+              : shot,
+          ),
+        }), true);
+        return uploaded;
+      } finally {
+        setPendingImages(count => count - accepted.length);
       }
-      const nextImages = [...currentImages, ...uploaded];
-      updateProject((current) => ({
-        ...current,
-        shots: current.shots.map((shot) =>
-          shot.id === shotId
-            ? {
-                ...shot,
-                values: {
-                  ...shot.values,
-                  [fieldId]: JSON.stringify(nextImages),
-                },
-              }
-            : shot,
-        ),
-      }), true);
-      return uploaded;
     },
     async remove(shotId, fieldId, currentImages, image) {
       await gateway.deleteImage(projectId, image.path);
@@ -928,6 +935,7 @@ export function ProjectWorkbench({
       <ProjectHeader
         title={project.title}
         saveStatus={saveStatus}
+        pendingImages={pendingImages}
         onTitleChange={(title) =>
           updateProject((current) => ({ ...current, title }))
         }
