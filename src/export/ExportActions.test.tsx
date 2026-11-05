@@ -176,3 +176,19 @@ it("cancels a stalled preview and keeps Excel available", async () => {
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "导出 Excel" })));
   expect(exportExcel).toHaveBeenCalledOnce();
 });
+
+it("offers retry after the preview deadline expires", async () => {
+  vi.useFakeTimers();
+  try {
+    const createPdfPreview = vi.fn(() => new Promise<Blob>(() => {}));
+    render(<ExportActions project={createProject()} createPdfPreview={createPdfPreview} />);
+    fireEvent.click(screen.getByRole("button", { name: "导出文件" }));
+    fireEvent.click(screen.getByText("PDF 排版与预览"));
+    fireEvent.click(screen.getByRole("button", { name: "生成 PDF 预览" }));
+    await act(() => vi.advanceTimersByTimeAsync(45_000));
+    expect(screen.getByRole("alert")).toHaveTextContent("PDF 预览生成超时");
+    expect(screen.getByRole("button", { name: "生成 PDF 预览" })).toBeEnabled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
