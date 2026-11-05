@@ -589,21 +589,30 @@ export type VectorPdfDependencies = {
   loadImage?: (url: string) => Promise<Uint8Array>;
 };
 
-let pdfFontRequest: Promise<Uint8Array> | undefined;
+let cachedPdfFont: Uint8Array | undefined;
 
-function loadPdfFont(): Promise<Uint8Array> {
-  if (!pdfFontRequest) {
-    pdfFontRequest = fetch(new URL("../assets/fonts/NotoSansSC-Regular.ttf", import.meta.url).href)
-      .then(async response => {
-        if (!response.ok) throw new Error("无法加载 PDF 中文字体，请重试");
-        return new Uint8Array(await response.arrayBuffer());
-      }).catch(error => { pdfFontRequest = undefined; throw error; });
-  }
-  return pdfFontRequest;
+function pdfResourceSignal(signal?: AbortSignal): AbortSignal {
+  const deadline = AbortSignal.timeout(30_000);
+  return signal ? AbortSignal.any([signal, deadline]) : deadline;
 }
 
-async function loadPdfImage(url: string): Promise<Uint8Array> {
-  const response = await fetch(url);
+async function loadPdfFont(signal?: AbortSignal): Promise<Uint8Array> {
+  if (cachedPdfFont) return cachedPdfFont;
+  try {
+    const response = await fetch(new URL("../assets/fonts/NotoSansSC-Regular.ttf", import.meta.url).href, {
+      signal: pdfResourceSignal(signal),
+    });
+    if (!response.ok) throw new Error("PDF 字体请求失败");
+    cachedPdfFont = new Uint8Array(await response.arrayBuffer());
+    return cachedPdfFont;
+  } catch (error) {
+    signal?.throwIfAborted();
+    throw new Error("无法加载 PDF 中文字体，请检查网络后重试");
+  }
+}
+
+async function loadPdfImage(url: string, signal?: AbortSignal): Promise<Uint8Array> {
+  const response = await fetch(url, { signal: pdfResourceSignal(signal) });
   if (!response.ok) throw new Error(`Image request failed with ${response.status}`);
   const blob = await response.blob();
   const data = await blobBytes(blob);
@@ -629,8 +638,9 @@ export async function buildVectorPdf(
   dependencies: VectorPdfDependencies = {},
 ): Promise<Uint8Array> {
   const [{ PDFDocument, rgb, pushGraphicsState, popGraphicsState, concatTransformationMatrix }, { default: fontkit }, fontBytes] = await Promise.all([
-    import("pdf-lib"), import("@pdf-lib/fontkit"), dependencies.fontBytes ?? loadPdfFont(),
+    import("pdf-lib"), import("@pdf-lib/fontkit"), dependencies.fontBytes ?? loadPdfFont(options.signal),
   ]);
+  options.signal?.throwIfAborted();
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
   // fontkit's CJK subsets lose glyphs in common PDF readers; preserve the complete
@@ -661,12 +671,13 @@ export async function buildVectorPdf(
   type OrientedImage = { image: import("pdf-lib").PDFImage; orientation: number };
   const imageCache = new Map<string, Promise<OrientedImage>>();
   const load = (url: string) => {
-    if (!imageCache.has(url)) imageCache.set(url, (dependencies.loadImage ?? loadPdfImage)(url).then(async data => ({
+    if (!imageCache.has(url)) imageCache.set(url, (dependencies.loadImage ? dependencies.loadImage(url) : loadPdfImage(url, options.signal)).then(async data => ({
       image: await (data[0] === 255 && data[1] === 216 ? pdf.embedJpg(data) : pdf.embedPng(data)), orientation: jpegOrientation(data),
     })));
     return imageCache.get(url)!;
   };
   for (const [pageIndex, section] of layout.pages.entries()) {
+    options.signal?.throwIfAborted();
     const page = pdf.addPage([pdfWidth, pdfHeight]);
     const text = (value: string, x: number, baseline: number, size = 14, fill = "#111827", centered = false) => {
       if (!value) return;
@@ -715,6 +726,7 @@ export async function buildVectorPdf(
     }
     y += headerHeight;
     for (const row of section.rows) {
+      options.signal?.throwIfAborted();
       x = PAGE_MARGIN;
       for (const [index, field] of layout.fields.entries()) {
         const width = widths[index];
@@ -722,6 +734,7 @@ export async function buildVectorPdf(
           const images = row.cells[index]?.images ?? [];
           const stackY = y + (row.height - imageHeight * images.length) / 2;
           for (const [slot, image] of images.entries()) {
+            options.signal?.throwIfAborted();
             const slotY = stackY + slot * imageHeight;
             try { picture(await load(image.url), x + TEXT_PADDING, slotY + TEXT_PADDING, width - TEXT_PADDING * 2, imageHeight - TEXT_PADDING * 2); }
             catch { text("图片加载失败", x + width / 2, slotY + imageHeight / 2, 13, "#b91c1c", true); }
@@ -739,5 +752,6 @@ export async function buildVectorPdf(
       y += row.height;
     }
   }
+  options.signal?.throwIfAborted();
   return pdf.save({ useObjectStreams: false });
 }

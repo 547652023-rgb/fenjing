@@ -257,7 +257,6 @@ export function ProjectDashboard({
       setFolders(nextFolders);
       setAssignments(nextAssignments);
       setSortBy(settings.sortBy);
-      setError("");
     } catch (failure) {
       if (id === refreshId.current) setLoadError(failure instanceof Error && failure.message.includes("加载超时")
         ? failure.message : "项目或模板加载失败，请检查网络后重试");

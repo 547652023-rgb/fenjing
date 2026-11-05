@@ -91,12 +91,13 @@ export function ExportActions({
     setIsPreviewing(true);
     try {
       const blob = await withDeadline(
-        createPdfPreview(pdfProject, pdfOptions), 45_000, "PDF 预览生成超时，请重试", controller.signal,
+        createPdfPreview(pdfProject, { ...pdfOptions, signal: controller.signal }), 45_000, "PDF 预览生成超时，请重试", controller.signal,
       );
       if (previewRequest.current === controller) setPreview({ url: URL.createObjectURL(blob), blob, key: previewKey });
     } catch (failure) {
       if (previewRequest.current === controller) setError(failure instanceof Error ? failure.message : "生成 PDF 预览失败");
     } finally {
+      controller.abort();
       if (previewRequest.current === controller) {
         previewRequest.current = undefined;
         setIsPreviewing(false);
@@ -138,6 +139,7 @@ export function ExportActions({
 
   async function run(format: "excel" | "pdf") {
     if (active || emptyScope) return;
+    cancelPreview();
     setActive(format);
     setError("");
     try {
@@ -177,7 +179,7 @@ export function ExportActions({
           {filteredShotIds || selectedShotIds ? (
             <label className="export-dialog__logo export-dialog__scope">
               <span>导出范围</span>
-              <select disabled={active !== null} value={scope} onChange={(event) => setScope(event.target.value as ExportScope)}>
+              <select disabled={active !== null || isPreviewing} value={scope} onChange={(event) => setScope(event.target.value as ExportScope)}>
                 <option value="all">全部镜头</option>
                 {filteredShotIds ? <option value="filtered">当前筛选结果</option> : null}
                 {selectedShotIds ? <option value="selected">已勾选镜头</option> : null}
@@ -187,12 +189,12 @@ export function ExportActions({
           ) : null}
           <label className="export-dialog__logo">
             <span>本次导出 Logo</span>
-            <input aria-label="本次导出 Logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => chooseLogo(event.currentTarget.files?.[0])} />
+            <input disabled={active !== null || isPreviewing} aria-label="本次导出 Logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => chooseLogo(event.currentTarget.files?.[0])} />
           </label>
-          <div className="export-dialog__logo-preview"><img src={logo?.url ?? defaultLogo.url} alt="Logo 预览" /><span>{logo?.name ?? defaultLogo.name}</span>{logo ? <button className="button-quiet" type="button" onClick={() => setLogo(undefined)}>恢复默认 Logo</button> : null}</div>
+          <div className="export-dialog__logo-preview"><img src={logo?.url ?? defaultLogo.url} alt="Logo 预览" /><span>{logo?.name ?? defaultLogo.name}</span>{logo ? <button className="button-quiet" disabled={active !== null || isPreviewing} type="button" onClick={() => setLogo(undefined)}>恢复默认 Logo</button> : null}</div>
           <details className="export-pdf-settings">
             <summary>PDF 排版与预览</summary>
-            <fieldset disabled={active !== null}>
+            <fieldset disabled={active !== null || isPreviewing}>
               <legend>页面设置</legend>
               <label>纸张方向<select value={pdf.orientation} onChange={event => setPdf({ ...pdf, orientation: event.target.value as PdfSettings["orientation"] })}>
                 <option value="landscape">横版</option><option value="portrait">竖版</option>
@@ -206,7 +208,7 @@ export function ExportActions({
             </fieldset>
             <details>
               <summary>导出列（{selectedColumns.length}）</summary>
-              <fieldset disabled={active !== null}>
+              <fieldset disabled={active !== null || isPreviewing}>
                 <legend>选择和排列 PDF 列</legend>
                 {[...selectedColumns, ...availableFields.map(field => field.id).filter(id => !selectedColumns.includes(id))].map(id => {
                   const field = availableFields.find(item => item.id === id);
