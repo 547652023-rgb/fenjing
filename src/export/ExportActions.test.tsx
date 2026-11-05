@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { createProject } from "../domain/storyboard";
+import * as download from "./download";
 import { ExportActions } from "./ExportActions";
 
 function deferred<T>() {
@@ -191,4 +192,68 @@ it("offers retry after the preview deadline expires", async () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("warns about missing preview images and clears the warning after a successful retry", async () => {
+  const createPdfPreview = vi.fn(async (_project, options) => {
+    if (createPdfPreview.mock.calls.length === 1) {
+      options.onImageError("broken");
+      options.onImageError("broken");
+    }
+    return new Blob(["pdf"]);
+  });
+  render(<ExportActions project={createProject()} createPdfPreview={createPdfPreview} />);
+  fireEvent.click(screen.getByRole("button", { name: "导出文件" }));
+  fireEvent.click(screen.getByText("PDF 排版与预览"));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "生成 PDF 预览" })));
+  expect(screen.getByRole("alert")).toHaveTextContent("有 1 张图片加载失败（含 Logo），PDF 可能缺图。请重试或检查预览后下载。");
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "重试加载图片" })));
+  expect(createPdfPreview).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it("holds a direct PDF download with missing images for review", async () => {
+  const createPdfPreview = vi.fn(async (_project, options) => {
+    options.onImageError("broken");
+    return new Blob(["pdf"]);
+  });
+  render(<ExportActions project={createProject()} createPdfPreview={createPdfPreview} />);
+  fireEvent.click(screen.getByRole("button", { name: "导出文件" }));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "导出 PDF" })));
+  expect(createPdfPreview).toHaveBeenCalledOnce();
+  expect(screen.getByRole("alert")).toHaveTextContent("有 1 张图片加载失败");
+  expect(screen.getByRole("button", { name: "下载含缺图标记的 PDF" })).toBeEnabled();
+  expect(screen.getByTitle("分镜 PDF 分页预览")).toBeVisible();
+});
+
+
+it("downloads the exact reviewed incomplete PDF only after an explicit click", async () => {
+  const blob = new Blob(["incomplete"]);
+  const save = vi.spyOn(download, "downloadBlob").mockImplementation(() => {});
+  const createPdfPreview = vi.fn(async (_project, options) => {
+    options.onImageError("broken");
+    return blob;
+  });
+  render(<ExportActions project={createProject()} createPdfPreview={createPdfPreview} />);
+  fireEvent.click(screen.getByRole("button", { name: "导出文件" }));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "导出 PDF" })));
+  expect(save).not.toHaveBeenCalled();
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "下载含缺图标记的 PDF" })));
+  expect(createPdfPreview).toHaveBeenCalledOnce();
+  expect(save).toHaveBeenCalledWith(blob, expect.stringContaining(".pdf"));
+  save.mockRestore();
+});
+
+it("downloads a complete direct PDF without leaving a redundant preview URL", async () => {
+  const blob = new Blob(["complete"]);
+  const save = vi.spyOn(download, "downloadBlob").mockImplementation(() => {});
+  const createUrl = vi.spyOn(URL, "createObjectURL");
+  render(<ExportActions project={createProject()} createPdfPreview={async () => blob} />);
+  fireEvent.click(screen.getByRole("button", { name: "导出文件" }));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "导出 PDF" })));
+  expect(save).toHaveBeenCalledWith(blob, expect.stringContaining(".pdf"));
+  expect(createUrl).not.toHaveBeenCalled();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  save.mockRestore();
+  createUrl.mockRestore();
 });

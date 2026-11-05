@@ -21,6 +21,7 @@ type LocalImageCellProps = SharedImageCellProps & {
 type OnlineImageCellProps = SharedImageCellProps & {
   images: RemoteImage[];
   onUpload: (files: File[]) => Promise<RemoteImage[]>;
+  onPendingChange?: (delta: number) => void;
   onRemove: (image: RemoteImage) => Promise<void>;
   value?: never;
   onChange?: never;
@@ -151,6 +152,7 @@ function OnlineImageCell({
   maxImages = 1,
   compact,
   prepareFrame = true,
+  onPendingChange,
   onUpload,
   onRemove,
 }: OnlineImageCellProps) {
@@ -158,6 +160,7 @@ function OnlineImageCell({
   const [limitWarning, setLimitWarning] = useState("");
   const [visibleImages, setVisibleImages] = useState(() => images.slice(0, maxImages));
   const [failedFiles, setFailedFiles] = useState<File[]>([]);
+  const [preparing, setPreparing] = useState(false);
   const [pendingNames, setPendingNames] = useState<string[]>([]);
   const [error, setError] = useState("");
 
@@ -190,9 +193,11 @@ function OnlineImageCell({
   async function uploadFile(file: File) {
     if (busy.current || visibleImages.length >= maxImages) return;
     busy.current = true;
+    onPendingChange?.(1);
     try {
       await uploadFiles([file]);
     } finally {
+      onPendingChange?.(-1);
       busy.current = false;
     }
   }
@@ -215,15 +220,20 @@ function OnlineImageCell({
       return;
     }
     busy.current = true;
+    onPendingChange?.(accepted.length);
+    setPreparing(true);
     try {
       const prepared = await Promise.all(
         accepted.map((file) => maxImages > 1 && prepareFrame ? prepareStoryboardFrame(file) : file),
       );
+      setPreparing(false);
       await uploadFiles(prepared);
       if (accepted.length < selected.length) setLimitWarning(`每格最多 ${maxImages} 张图片`);
     } catch {
       setError("读取图片失败");
     } finally {
+      setPreparing(false);
+      onPendingChange?.(-accepted.length);
       busy.current = false;
     }
   }
@@ -252,6 +262,7 @@ function OnlineImageCell({
       maxImages={maxImages}
       onFiles={addFiles}
       onRemove={removeImage}
+      preparing={preparing}
       pendingNames={pendingNames}
       retryFiles={failedFiles}
       onRetry={uploadFile}
@@ -268,6 +279,7 @@ type ImageCellLayoutProps = {
   onFiles: (files: File[]) => Promise<void>;
   onRemove: (index: number) => void;
   onRetry?: (file: File) => void;
+  preparing?: boolean;
   pendingNames?: string[];
   retryFiles?: File[];
 };
@@ -281,6 +293,7 @@ function ImageCellLayout({
   onFiles,
   onRemove,
   onRetry,
+  preparing = false,
   pendingNames = [],
   retryFiles = [],
 }: ImageCellLayoutProps) {
@@ -344,6 +357,7 @@ function ImageCellLayout({
         </button>
       ) : null}
 
+      {preparing ? <p className="image-cell__pending" role="status">正在准备图片…</p> : null}
       {pendingNames.map((name) => (
         <p className="image-cell__pending" key={name}>正在上传 {name}</p>
       ))}

@@ -700,3 +700,18 @@ it("shows spreadsheet shortcuts and clipboard image instructions without hoverin
   expect(screen.getByText(/Shift 点击选区.*从 Excel 粘贴/)).toBeVisible();
   expect(screen.getAllByText(/按 ⌘V 或 Ctrl\+V 粘贴/)[0]).toBeVisible();
 });
+
+it.each([false, true])("reports skipped cells when undoing after subsequent edits (all=%s)", async (all) => {
+  function Table() {
+    const [project, setProject] = useState(() => addShot(createProject()));
+    return <StoryboardTable project={project} onChange={setProject} />;
+  }
+  render(<Table />);
+  fireEvent.paste(screen.getByLabelText("内容-1"), { clipboardData: { getData: () => "第一镜\t备注一" } });
+  fireEvent.change(screen.getByLabelText("内容-1"), { target: { value: "后续修改" } });
+  if (all) fireEvent.change(screen.getByLabelText("备注-1"), { target: { value: "后续备注" } });
+  await userEvent.click(screen.getByRole("button", { name: "撤销批量编辑" }));
+  expect(screen.getByLabelText("内容-1")).toHaveValue("后续修改");
+  expect(screen.getByText(all ? "已撤销 0 个单元格，跳过 2 个已修改或删除的单元格" : "已撤销 1 个单元格，跳过 1 个已修改或删除的单元格")).toBeVisible();
+  expect(screen.getByLabelText("备注-1")).toHaveValue(all ? "后续备注" : "");
+});

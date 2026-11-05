@@ -47,8 +47,9 @@ export function ExportActions({
   const [logo, setLogo] = useState<ExportLogo | undefined>();
 
   const [pdf, setPdf] = useState<PdfSettings>({ orientation: "landscape", textSize: 14, imageHeight: 144 });
+  const [showPdfSettings, setShowPdfSettings] = useState(false);
   const [pdfColumns, setPdfColumns] = useState<string[]>();
-  const [preview, setPreview] = useState<{ url: string; blob: Blob; key: string }>();
+  const [preview, setPreview] = useState<{ url: string; blob: Blob; key: string; missingCount: number }>();
   const [scope, setScope] = useState<ExportScope>("all");
   const scopedIds = scope === "filtered" ? filteredShotIds : scope === "selected" ? selectedShotIds : undefined;
   const idSet = new Set(scopedIds);
@@ -85,17 +86,26 @@ export function ExportActions({
     setIsPreviewing(false);
   }
 
-  async function generatePreview() {
+  async function generatePreview(downloadWhenReady = false) {
     if (previewRequest.current || pendingImages > 0) return;
     const controller = new AbortController();
     previewRequest.current = controller;
     setError("");
     setIsPreviewing(true);
+    const missing = new Set<string>();
     try {
       const blob = await withDeadline(
-        createPdfPreview(pdfProject, { ...pdfOptions, signal: controller.signal }), 45_000, "PDF 预览生成超时，请重试", controller.signal,
+        createPdfPreview(pdfProject, { ...pdfOptions, signal: controller.signal, onImageError: url => { missing.add(url); } }), 45_000, "PDF 预览生成超时，请重试", controller.signal,
       );
-      if (previewRequest.current === controller) setPreview({ url: URL.createObjectURL(blob), blob, key: previewKey });
+      if (previewRequest.current === controller) {
+        if (downloadWhenReady && !missing.size) {
+          downloadBlob(blob, exportFilename(project, "pdf", new Date(), documentLabel));
+          close();
+        } else {
+          setPreview({ url: URL.createObjectURL(blob), blob, key: previewKey, missingCount: missing.size });
+          if (missing.size) setShowPdfSettings(true);
+        }
+      }
     } catch (failure) {
       if (previewRequest.current === controller) setError(failure instanceof Error ? failure.message : "生成 PDF 预览失败");
     } finally {
@@ -147,8 +157,13 @@ export function ExportActions({
     try {
       if (format === "excel") {
         await exportExcel(deliveryProject, { logo: logo ?? defaultLogo, documentLabel });
-      } else if (currentPreview && exportPdf === exportStoryboardPdf) {
-        downloadBlob(currentPreview.blob, exportFilename(project, "pdf", new Date(), documentLabel));
+      } else if (exportPdf === exportStoryboardPdf) {
+        if (currentPreview) {
+          downloadBlob(currentPreview.blob, exportFilename(project, "pdf", new Date(), documentLabel));
+        } else {
+          await generatePreview(true);
+          return;
+        }
       } else {
         await exportPdf(pdfProject, pdfOptions);
       }
@@ -194,7 +209,7 @@ export function ExportActions({
             <input disabled={active !== null || isPreviewing} aria-label="本次导出 Logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => chooseLogo(event.currentTarget.files?.[0])} />
           </label>
           <div className="export-dialog__logo-preview"><img src={logo?.url ?? defaultLogo.url} alt="Logo 预览" /><span>{logo?.name ?? defaultLogo.name}</span>{logo ? <button className="button-quiet" disabled={active !== null || isPreviewing} type="button" onClick={() => setLogo(undefined)}>恢复默认 Logo</button> : null}</div>
-          <details className="export-pdf-settings">
+          <details className="export-pdf-settings" open={showPdfSettings} onToggle={event => setShowPdfSettings(event.currentTarget.open)}>
             <summary>PDF 排版与预览</summary>
             <fieldset disabled={active !== null || isPreviewing}>
               <legend>页面设置</legend>
@@ -232,14 +247,18 @@ export function ExportActions({
               <a href={currentPreview.url} target="_blank" rel="noreferrer">在新标签页打开预览</a></> : null}
             {preview && !currentPreview ? <p role="status">设置已变更，请重新生成预览。</p> : null}
           </details>
+          {currentPreview && currentPreview.missingCount > 0 ? <div>
+            <p className="export-actions__error" role="alert">有 {currentPreview.missingCount} 张图片加载失败（含 Logo），PDF 可能缺图。请重试或检查预览后下载。</p>
+            <button type="button" disabled={active !== null || isPreviewing || pendingImages > 0 || emptyScope} onClick={() => void generatePreview()}>重试加载图片</button>
+          </div> : null}
           {pendingImages > 0 ? <p role="status">图片仍在上传，完成后可导出。</p> : null}
           {error ? <p className="export-actions__error" role="alert">{error}</p> : null}
           <div className="export-dialog__formats">
             <button aria-label="导出 Excel" className="export-format-option" disabled={active !== null || pendingImages > 0 || emptyScope} type="button" onClick={() => void run("excel")}>
               <span>Excel</span><strong>可编辑镜头清单</strong><small>{active === "excel" ? "正在生成文件…" : "供制片、排期与现场协作使用"}</small>
             </button>
-            <button aria-label="导出 PDF" className="export-format-option export-format-option--dark" disabled={active !== null || isPreviewing || pendingImages > 0 || emptyScope || !selectedColumns.length} type="button" onClick={() => void run("pdf")}>
-              <span>PDF</span><strong>审阅用制片稿</strong><small>{active === "pdf" ? "正在生成文件…" : "供导演、客户与团队确认使用"}</small>
+            <button aria-label={currentPreview?.missingCount ? "下载含缺图标记的 PDF" : "导出 PDF"} className="export-format-option export-format-option--dark" disabled={active !== null || isPreviewing || pendingImages > 0 || emptyScope || !selectedColumns.length} type="button" onClick={() => void run("pdf")}>
+              <span>PDF</span><strong>{currentPreview?.missingCount ? "下载含缺图标记的 PDF" : "审阅用制片稿"}</strong><small>{active === "pdf" ? "正在生成文件…" : "供导演、客户与团队确认使用"}</small>
             </button>
           </div>
           <div className="export-dialog__footer"><span>文件将在浏览器中下载</span><button className="button-quiet" disabled={active !== null} type="button" onClick={close}>取消</button></div>

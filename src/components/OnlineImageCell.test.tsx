@@ -211,19 +211,22 @@ it("uploads a clipboard image to the focused image cell", async () => {
 it("keeps successful pictures and retries only a failed picture in a batch", async () => {
   const a = { path: "a", url: "blob:a", name: "a.png", position: 0 };
   const b = { path: "b", url: "blob:b", name: "b.png", position: 1 };
+  const onPendingChange = vi.fn();
   const onUpload = vi.fn()
     .mockResolvedValueOnce([a])
     .mockRejectedValueOnce(new GatewayError("network"))
     .mockResolvedValueOnce([b]);
-  render(<ImageCell images={[]} label="画面-1" maxImages={5} onUpload={onUpload} onRemove={vi.fn()} />);
+  render(<ImageCell images={[]} label="画面-1" maxImages={5} onPendingChange={onPendingChange} onUpload={onUpload} onRemove={vi.fn()} />);
   const first = new File(["a"], "a.png", { type: "image/png" });
   const second = new File(["b"], "b.png", { type: "image/png" });
   await userEvent.upload(screen.getByLabelText("画面-1"), [first, second]);
   expect(await screen.findByRole("img", { name: "画面-1-图片1" })).toHaveAttribute("src", "blob:a");
   const retry = await screen.findByRole("button", { name: "重试上传 b.png" });
   expect(screen.queryByRole("button", { name: "重试上传 a.png" })).not.toBeInTheDocument();
+  expect(onPendingChange.mock.calls).toEqual([[2], [-2]]);
   await userEvent.click(retry);
   expect(await screen.findByRole("img", { name: "画面-1-图片2" })).toHaveAttribute("src", "blob:b");
+  expect(onPendingChange.mock.calls).toEqual([[2], [-2], [1], [-1]]);
   expect(onUpload.mock.calls.map(call => call[0].map((file: File) => file.name))).toEqual([["a.png"], ["b.png"], ["b.png"]]);
 });
 

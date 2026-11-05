@@ -190,3 +190,18 @@ it("generates a multi-page portrait PDF with long Chinese notes and several imag
   });
   expect(imageDraws).toHaveLength(15);
 });
+
+it("reports failed image resources while retaining a valid PDF with placeholders", async () => {
+  const source: ExportModel = { ...model,
+    fields: [{ id: "frame", label: "画面", type: "image", visible: true, order: 0 }],
+    rows: [{ shotId: "one", cells: [{ fieldId: "frame", fieldType: "image", text: "", images: [{ path: "broken", url: "broken", name: "a.png", position: 0 }] }] }],
+  };
+  const onImageError = vi.fn();
+  const bytes = await pdfExport.buildVectorPdf(source, { onImageError, logo: { url: "logo", name: "logo.png", type: "image/png" } }, {
+    fontBytes: new Uint8Array(readFileSync("src/assets/fonts/NotoSansSC-Regular.ttf")),
+    loadImage: async () => { throw new Error("offline"); },
+  });
+  expect((await PDFDocument.load(bytes)).getPageCount()).toBe(1);
+  expect(onImageError).toHaveBeenCalledWith("broken");
+  expect(onImageError).toHaveBeenCalledWith("logo");
+});

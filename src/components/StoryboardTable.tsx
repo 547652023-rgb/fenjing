@@ -16,7 +16,7 @@ import {
   type ProjectUpdate,
   type StoryboardProject,
 } from "../domain/storyboard";
-import { applyGridChanges, parseClipboardGrid, validateGridValue, type GridChange } from "./storyboardGrid";
+import { undoableGridChanges, applyGridChanges, parseClipboardGrid, validateGridValue, type GridChange } from "./storyboardGrid";
 import { ColumnHeader } from "./ColumnHeader";
 import { CenteredTextCell } from "./CenteredTextCell";
 import { RowActionMenu } from "./RowActionMenu";
@@ -32,6 +32,7 @@ import {
 } from "../domain/storyboardViews";
 
 export type StoryboardImageActions = {
+  onPendingChange?: (delta: number) => void;
   upload: (
     shotId: string,
     fieldId: string,
@@ -320,9 +321,11 @@ export function StoryboardTable({
   }
 
   function undoBatch() {
+    const restored = undoableGridChanges(project, batchUndo).length;
+    const skipped = batchUndo.length - restored;
     onChange(current => applyGridChanges(current, batchUndo, true));
     setBatchUndo([]);
-    setGridMessage("已撤销批量编辑");
+    setGridMessage(`已撤销 ${restored} 个单元格${skipped ? `，跳过 ${skipped} 个已修改或删除的单元格` : ""}`);
   }
 
   function gridPosition(cell: HTMLTableCellElement) {
@@ -1051,6 +1054,7 @@ export function StoryboardTable({
                         images={parseRemoteImages(shot.values[field.id] ?? "")}
                         label={`${field.label}-${shot.id}`}
                         maxImages={maxImagesFor(field)}
+                        onPendingChange={imageActions.onPendingChange}
                         onUpload={(files) =>
                           imageActions.upload(
                             shot.id,
