@@ -1055,3 +1055,28 @@ it("restores navigation and export after an image upload fails", async () => {
   window.dispatchEvent(event);
   expect(event.defaultPrevented).toBe(false);
 });
+
+it("protects navigation while selected images are still being prepared", async () => {
+  const { gateway, owner, project } = await setupProject();
+  let rejectDecode!: (error: Error) => void;
+  vi.stubGlobal("createImageBitmap", vi.fn(() => new Promise((_resolve, reject) => { rejectDecode = reject; })));
+  const upload = vi.spyOn(gateway, "uploadImage");
+  let finishUpload!: (image: { path: string; url: string; name: string; position: number }) => void;
+  upload.mockImplementation(() => new Promise(resolve => { finishUpload = resolve; }));
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+  await userEvent.upload(await screen.findByLabelText("画面-1"), new File(["a"], "a.png", { type: "image/png" }));
+  expect(upload).not.toHaveBeenCalled();
+  expect(screen.getByText("正在准备图片…")).toBeVisible();
+  expect(screen.getByRole("button", { name: "返回项目" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "导出文件" })).toBeDisabled();
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(true);
+  await act(async () => rejectDecode(new Error("unsupported image")));
+  await waitFor(() => expect(upload).toHaveBeenCalledOnce());
+  expect(screen.getByRole("button", { name: "返回项目" })).toBeDisabled();
+  await act(async () => finishUpload({ path: "a.png", url: "blob:a", name: "a.png", position: 0 }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "返回项目" })).toBeEnabled());
+  expect(screen.queryByText("正在准备图片…")).not.toBeInTheDocument();
+  vi.unstubAllGlobals();
+});

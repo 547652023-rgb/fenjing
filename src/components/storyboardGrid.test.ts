@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseClipboardGrid } from "./storyboardGrid";
+import { createProject } from "../domain/storyboard";
+import { undoableGridChanges, parseClipboardGrid } from "./storyboardGrid";
 
 describe("spreadsheet clipboard text", () => {
   it("keeps quotes used as punctuation", () => {
@@ -15,4 +16,16 @@ describe("spreadsheet clipboard text", () => {
   it("preserves an unmatched opening quotation mark", () => {
     expect(parseClipboardGrid('"未结束\t另一格')).toEqual([['"未结束', "另一格"]]);
   });
+});
+
+
+it("counts deleted shots and fields as skipped undo changes", () => {
+  const project = createProject();
+  project.shots[0].values.content = "pasted";
+  const changes = [
+    { shotId: project.shots[0].id, fieldId: "content", before: "", value: "pasted" },
+    { shotId: "deleted-shot", fieldId: "content", before: "", value: "pasted" },
+    { shotId: project.shots[0].id, fieldId: "deleted-field", before: "", value: "pasted" },
+  ];
+  expect(undoableGridChanges(project, changes)).toEqual([changes[0]]);
 });

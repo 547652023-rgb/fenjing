@@ -712,7 +712,11 @@ export async function buildVectorPdf(
         const y = PAGE_MARGIN + 7;
         if (options.logo.name === "大拍档logo.png") rectangle(x, y, 180, 34, "#000000");
         picture(logo, x, y, 180, 34);
-      } catch { /* A failed temporary logo must not prevent storyboard export. */ }
+      } catch {
+        options.signal?.throwIfAborted();
+        options.onImageError?.(options.logo.url);
+        text("Logo 加载失败", width - PAGE_MARGIN - 180, PAGE_MARGIN + 25, 13, "#b91c1c");
+      }
     }
     if (pageIndex === 0) text(`画幅比例：${layout.aspectRatio}    镜头总数：${layout.shotCount}`, PAGE_MARGIN, PAGE_MARGIN + TITLE_HEIGHT + 21);
     let y = PAGE_MARGIN + TITLE_HEIGHT + (pageIndex === 0 ? METADATA_HEIGHT : 0);
@@ -737,7 +741,11 @@ export async function buildVectorPdf(
             options.signal?.throwIfAborted();
             const slotY = stackY + slot * imageHeight;
             try { picture(await load(image.url), x + TEXT_PADDING, slotY + TEXT_PADDING, width - TEXT_PADDING * 2, imageHeight - TEXT_PADDING * 2); }
-            catch { text("图片加载失败", x + width / 2, slotY + imageHeight / 2, 13, "#b91c1c", true); }
+            catch {
+              options.signal?.throwIfAborted();
+              options.onImageError?.(image.url);
+              text("图片加载失败", x + width / 2, slotY + imageHeight / 2, 13, "#b91c1c", true);
+            }
           }
         } else if (field.type !== "image") {
           const lines = row.cellLines[index] ?? [];

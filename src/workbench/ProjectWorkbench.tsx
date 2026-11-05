@@ -826,6 +826,10 @@ export function ProjectWorkbench({
   }
 
   const imageActions: StoryboardImageActions = {
+    onPendingChange(delta) {
+      pendingUploadCount.current += delta;
+      setPendingImages(pendingUploadCount.current);
+    },
     async upload(shotId, fieldId, currentImages, files) {
       const latestShot = projectRef.current?.shots.find(shot => shot.id === shotId);
       if (latestShot) currentImages = parseRemoteImages(latestShot.values[fieldId] ?? "");
@@ -835,36 +839,29 @@ export function ProjectWorkbench({
       );
       const accepted = files.slice(0, remaining);
       if (!accepted.length) return [];
-      pendingUploadCount.current += accepted.length;
-      setPendingImages(pendingUploadCount.current);
-      try {
-        const uploaded: RemoteImage[] = [];
-        for (const [index, file] of accepted.entries()) {
-          uploaded.push(
-            await gateway.uploadImage({
-              projectId,
-              shotId,
-              fieldId,
-              file,
-              position: currentImages.length + index,
-            }),
-          );
-        }
-        updateProject((current) => ({
-          ...current,
-          shots: current.shots.map((shot) => {
-            if (shot.id !== shotId) return shot;
-            const images = parseRemoteImages(shot.values[fieldId] ?? "");
-            const nextImages = [...new Map([...images, ...uploaded].map(image => [image.path, image])).values()]
-              .map((image, position) => ({ ...image, position }));
-            return { ...shot, values: { ...shot.values, [fieldId]: JSON.stringify(nextImages) } };
+      const uploaded: RemoteImage[] = [];
+      for (const [index, file] of accepted.entries()) {
+        uploaded.push(
+          await gateway.uploadImage({
+            projectId,
+            shotId,
+            fieldId,
+            file,
+            position: currentImages.length + index,
           }),
-        }), true);
-        return uploaded;
-      } finally {
-        pendingUploadCount.current -= accepted.length;
-        setPendingImages(pendingUploadCount.current);
+        );
       }
+      updateProject((current) => ({
+        ...current,
+        shots: current.shots.map((shot) => {
+          if (shot.id !== shotId) return shot;
+          const images = parseRemoteImages(shot.values[fieldId] ?? "");
+          const nextImages = [...new Map([...images, ...uploaded].map(image => [image.path, image])).values()]
+            .map((image, position) => ({ ...image, position }));
+          return { ...shot, values: { ...shot.values, [fieldId]: JSON.stringify(nextImages) } };
+        }),
+      }), true);
+      return uploaded;
     },
     async remove(shotId, fieldId, currentImages, image) {
       await gateway.deleteImage(projectId, image.path);

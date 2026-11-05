@@ -7,10 +7,17 @@ export type GridChange = {
   value: string;
 };
 
+export function undoableGridChanges(project: StoryboardProject, changes: GridChange[]): GridChange[] {
+  const fields = new Set(project.fields.map(field => field.id));
+  const shots = new Map(project.shots.map(shot => [shot.id, shot]));
+  return changes.filter(change => fields.has(change.fieldId)
+    && shots.get(change.shotId)?.values[change.fieldId] === change.value);
+}
+
 export function applyGridChanges(project: StoryboardProject, changes: GridChange[], undo = false): StoryboardProject {
   const fields = new Set(project.fields.map(field => field.id));
   const byShot = new Map<string, GridChange[]>();
-  for (const change of changes) {
+  for (const change of undo ? undoableGridChanges(project, changes) : changes) {
     if (!fields.has(change.fieldId)) continue;
     const entries = byShot.get(change.shotId) ?? [];
     entries.push(change);
