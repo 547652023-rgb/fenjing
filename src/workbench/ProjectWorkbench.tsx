@@ -82,6 +82,7 @@ export function ProjectWorkbench({
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [templateMessage, setTemplateMessage] = useState("");
   const [role, setRole] = useState<ProjectRole>("editor");
+  const pendingUploadCount = useRef(0);
   const [pendingImages, setPendingImages] = useState(0);
   const [saveStatus, setSaveStatus] = useState<SaveState>("saved");
   const [pendingDeleteCount, setPendingDeleteCount] = useState(0);
@@ -194,7 +195,7 @@ export function ProjectWorkbench({
     const protectPendingInput = (event: BeforeUnloadEvent) => {
       const current = projectRef.current;
       const server = serverProject.current;
-      if (activeSaves.current || saveTimers.current.size || (current && server && hasProjectDraft(collectProjectDraft(server, current)))) {
+      if (pendingUploadCount.current || activeSaves.current || saveTimers.current.size || (current && server && hasProjectDraft(collectProjectDraft(server, current)))) {
         event.preventDefault();
         event.returnValue = "";
       }
@@ -396,7 +397,7 @@ export function ProjectWorkbench({
   }
 
   async function handleBack() {
-    if (isLeaving || deletingShots.current) return;
+    if (isLeaving || deletingShots.current || pendingUploadCount.current) return;
     cancelPendingDeletion();
     setIsLeaving(true);
     try { if (await flushPendingChanges()) onBack(); }
@@ -834,7 +835,8 @@ export function ProjectWorkbench({
       );
       const accepted = files.slice(0, remaining);
       if (!accepted.length) return [];
-      setPendingImages(count => count + accepted.length);
+      pendingUploadCount.current += accepted.length;
+      setPendingImages(pendingUploadCount.current);
       try {
         const uploaded: RemoteImage[] = [];
         for (const [index, file] of accepted.entries()) {
@@ -860,7 +862,8 @@ export function ProjectWorkbench({
         }), true);
         return uploaded;
       } finally {
-        setPendingImages(count => count - accepted.length);
+        pendingUploadCount.current -= accepted.length;
+        setPendingImages(pendingUploadCount.current);
       }
     },
     async remove(shotId, fieldId, currentImages, image) {
@@ -946,7 +949,7 @@ export function ProjectWorkbench({
       ) : null}
       <div className="workbench-actions">
         <div className="workbench-actions__group">
-          <button className="button-secondary" type="button" disabled={isLeaving || isDeleting} onClick={() => void handleBack()}>返回项目</button>
+          <button className="button-secondary" type="button" disabled={isLeaving || isDeleting || pendingImages > 0} onClick={() => void handleBack()}>返回项目</button>
           <span className="workbench-actions__account">{user.email}</span>
         </div>
         <div className="workbench-actions__group">
@@ -970,7 +973,7 @@ export function ProjectWorkbench({
           ) : null}
           <button type="button" disabled={pendingDeleteCount > 0 || isDeleting} onClick={() => setIsReadOnlyReview(true)}>进入审阅模式</button>
         </div>
-        <div className="workbench-actions__group workbench-actions__group--delivery"><ExportActions {...(workspaceView === "table" ? exportScope : undefined)} project={project} columnPresentation={columnPresentation ?? undefined} documentLabel={callSheetDeliveryLabel} /></div>
+        <div className="workbench-actions__group workbench-actions__group--delivery"><ExportActions pendingImages={pendingImages} {...(workspaceView === "table" ? exportScope : undefined)} project={project} columnPresentation={columnPresentation ?? undefined} documentLabel={callSheetDeliveryLabel} /></div>
       </div>
       {pendingDeleteCount > 0 ? (
         <section className="shot-deletion-notice pending-save-notice" aria-label="待删除镜头">

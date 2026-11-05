@@ -17,6 +17,7 @@ const defaultLogo: ExportLogo = {
 type ExportScope = "all" | "filtered" | "selected";
 
 type ExportActionsProps = {
+  pendingImages?: number;
   filteredShotIds?: string[];
   selectedShotIds?: string[];
   project: StoryboardProject;
@@ -29,6 +30,7 @@ type ExportActionsProps = {
 
 export function ExportActions({
   project,
+  pendingImages = 0,
   filteredShotIds,
   selectedShotIds,
   documentLabel,
@@ -84,7 +86,7 @@ export function ExportActions({
   }
 
   async function generatePreview() {
-    if (previewRequest.current) return;
+    if (previewRequest.current || pendingImages > 0) return;
     const controller = new AbortController();
     previewRequest.current = controller;
     setError("");
@@ -138,7 +140,7 @@ export function ExportActions({
   }
 
   async function run(format: "excel" | "pdf") {
-    if (active || emptyScope) return;
+    if (active || emptyScope || pendingImages > 0) return;
     cancelPreview();
     setActive(format);
     setError("");
@@ -160,7 +162,7 @@ export function ExportActions({
 
   return (
     <div className="export-actions">
-      <button aria-label="导出文件" type="button" onClick={() => { setScope("all"); setOpen(true); }}>导出交付</button>
+      <button aria-label="导出文件" disabled={pendingImages > 0} title={pendingImages > 0 ? "图片上传完成后可导出" : undefined} type="button" onClick={() => { setScope("all"); setOpen(true); }}>导出交付</button>
       {open ? <div className="export-overlay">
         <section className="export-dialog" role="dialog" aria-modal="true" aria-labelledby="export-dialog-title">
           <header className="export-dialog__header">
@@ -222,7 +224,7 @@ export function ExportActions({
                 })}
               </fieldset>
             </details>
-            <button type="button" disabled={active !== null || isPreviewing || emptyScope || !selectedColumns.length} onClick={() => void generatePreview()}>
+            <button type="button" disabled={active !== null || isPreviewing || pendingImages > 0 || emptyScope || !selectedColumns.length} onClick={() => void generatePreview()}>
               {isPreviewing ? "正在生成 PDF 预览…" : "生成 PDF 预览"}
             </button>
             {isPreviewing ? <button className="button-quiet" type="button" onClick={cancelPreview}>取消生成预览</button> : null}
@@ -230,12 +232,13 @@ export function ExportActions({
               <a href={currentPreview.url} target="_blank" rel="noreferrer">在新标签页打开预览</a></> : null}
             {preview && !currentPreview ? <p role="status">设置已变更，请重新生成预览。</p> : null}
           </details>
+          {pendingImages > 0 ? <p role="status">图片仍在上传，完成后可导出。</p> : null}
           {error ? <p className="export-actions__error" role="alert">{error}</p> : null}
           <div className="export-dialog__formats">
-            <button aria-label="导出 Excel" className="export-format-option" disabled={active !== null || emptyScope} type="button" onClick={() => void run("excel")}>
+            <button aria-label="导出 Excel" className="export-format-option" disabled={active !== null || pendingImages > 0 || emptyScope} type="button" onClick={() => void run("excel")}>
               <span>Excel</span><strong>可编辑镜头清单</strong><small>{active === "excel" ? "正在生成文件…" : "供制片、排期与现场协作使用"}</small>
             </button>
-            <button aria-label="导出 PDF" className="export-format-option export-format-option--dark" disabled={active !== null || isPreviewing || emptyScope || !selectedColumns.length} type="button" onClick={() => void run("pdf")}>
+            <button aria-label="导出 PDF" className="export-format-option export-format-option--dark" disabled={active !== null || isPreviewing || pendingImages > 0 || emptyScope || !selectedColumns.length} type="button" onClick={() => void run("pdf")}>
               <span>PDF</span><strong>审阅用制片稿</strong><small>{active === "pdf" ? "正在生成文件…" : "供导演、客户与团队确认使用"}</small>
             </button>
           </div>
