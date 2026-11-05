@@ -84,7 +84,8 @@ it("applies field visibility changes to the active storyboard columns after savi
   await screen.findByDisplayValue("广告片");
   expect(screen.getByRole("columnheader", { name: "内容" })).toBeVisible();
 
-  await user.click(screen.getByRole("button", { name: "字段设置" }));
+  await user.click(screen.getByRole("button", { name: "项目操作" }));
+  await user.click(screen.getByRole("menuitem", { name: "字段设置" }));
   await user.click(screen.getByLabelText("显示-内容"));
   await user.click(screen.getByRole("button", { name: "保存更改" }));
 
@@ -109,7 +110,8 @@ it("replaces an older personal column view with the saved field visibility", asy
   render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
 
   expect(await screen.findByRole("columnheader", { name: "摄影机装备" })).toBeVisible();
-  await user.click(screen.getByRole("button", { name: "字段设置" }));
+  await user.click(screen.getByRole("button", { name: "项目操作" }));
+  await user.click(screen.getByRole("menuitem", { name: "字段设置" }));
   await user.click(screen.getByLabelText("显示-摄影机装备"));
   await user.click(screen.getByRole("button", { name: "保存更改" }));
 
@@ -134,7 +136,8 @@ it("shows the active column visibility in field settings when an older view diff
   render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
 
   await screen.findByRole("columnheader", { name: "摄影机装备" });
-  await user.click(screen.getByRole("button", { name: "字段设置" }));
+  await user.click(screen.getByRole("button", { name: "项目操作" }));
+  await user.click(screen.getByRole("menuitem", { name: "字段设置" }));
 
   expect(screen.getByLabelText("显示-摄影机装备")).toBeChecked();
 });
@@ -329,7 +332,8 @@ it("saves the current project as a template without altering the project", async
   );
 
   await screen.findByDisplayValue("广告片");
-  await user.click(screen.getByRole("button", { name: "保存为模板" }));
+  await user.click(screen.getByRole("button", { name: "项目操作" }));
+  await user.click(screen.getByRole("menuitem", { name: "保存为模板" }));
   await user.type(screen.getByLabelText("模板名称"), "拍摄模板");
   await user.click(screen.getByRole("button", { name: "保存模板" }));
 
@@ -364,7 +368,8 @@ it("shows an error when saving the current project as a template fails", async (
   );
 
   await screen.findByDisplayValue("广告片");
-  await user.click(screen.getByRole("button", { name: "保存为模板" }));
+  await user.click(screen.getByRole("button", { name: "项目操作" }));
+  await user.click(screen.getByRole("menuitem", { name: "保存为模板" }));
   await user.type(screen.getByLabelText("模板名称"), "拍摄模板");
   await user.click(screen.getByRole("button", { name: "保存模板" }));
 
@@ -390,7 +395,8 @@ it("persists a title edit and project-specific notes options", async () => {
   const title = await screen.findByLabelText("项目名称");
   await user.clear(title);
   await user.type(title, "新版广告片");
-  await user.click(screen.getByRole("button", { name: "字段设置" }));
+  await user.click(screen.getByRole("button", { name: "项目操作" }));
+  await user.click(screen.getByRole("menuitem", { name: "字段设置" }));
   await user.click(screen.getByRole("button", { name: "设置备注下拉选项" }));
   await user.type(screen.getByLabelText("新增备注选项"), "补拍");
   await user.click(screen.getByRole("button", { name: "添加备注选项" }));
@@ -421,7 +427,15 @@ it("shows member management only to the project owner", async () => {
       user={{ id: "user-2", email: "owner@example.com" }}
     />,
   );
-  expect(await screen.findByRole("button", { name: "成员管理" })).toBeVisible();
+  const projectActions = await screen.findByRole("button", { name: "项目操作" });
+  expect(screen.queryByRole("menuitem", { name: "成员管理" })).not.toBeInTheDocument();
+  fireEvent.click(projectActions);
+  expect(screen.getByRole("menuitem", { name: "成员管理" })).toHaveFocus();
+  fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+  expect(screen.getByRole("menuitem", { name: "字段设置" })).toHaveFocus();
+  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  expect(screen.queryByRole("menu", { name: "项目操作" })).not.toBeInTheDocument();
+  expect(projectActions).toHaveFocus();
   ownerView.unmount();
 
   await gateway.signOut();
@@ -435,7 +449,8 @@ it("shows member management only to the project owner", async () => {
     />,
   );
   await screen.findByDisplayValue("共同项目");
-  expect(screen.queryByRole("button", { name: "成员管理" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "项目操作" }));
+  expect(screen.queryByRole("menuitem", { name: "成员管理" })).not.toBeInTheDocument();
 });
 
 it("uploads frame images through the online gateway and persists their metadata", async () => {
@@ -735,7 +750,7 @@ it("enters a read-only storyboard review without project editing controls", asyn
   await user.click(screen.getByRole("button", { name: "进入审阅模式" }));
 
   expect(await screen.findByRole("main", { name: "只读故事板审阅" })).toBeVisible();
-  expect(screen.queryByRole("button", { name: "字段设置" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "项目操作" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "确认镜头 1" })).not.toBeInTheDocument();
 });
 
@@ -934,6 +949,7 @@ it("uses the workbench selection and filter for delivery counts", async () => {
   render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
 
   await user.click(await screen.findByRole("checkbox", { name: /^选择镜头 / }));
+  await user.click(screen.getByRole("button", { name: /制作概览/ }));
   await user.click(screen.getByRole("button", { name: /已供画面/ }));
   await user.click(screen.getByRole("button", { name: "导出文件" }));
   const dialog = within(screen.getByRole("dialog", { name: "导出交付" }));

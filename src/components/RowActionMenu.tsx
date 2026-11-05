@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-export function RowActionMenu({ anchor, label, onClose, children }: {
-  anchor: HTMLButtonElement; label: string; onClose: () => void; children: ReactNode;
+export function RowActionMenu({ anchor, label, onClose, children, keyboardNavigation = false }: {
+  anchor: HTMLButtonElement; label: string; onClose: () => void; children: ReactNode; keyboardNavigation?: boolean;
 }) {
   const menu = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
@@ -44,6 +44,21 @@ export function RowActionMenu({ anchor, label, onClose, children }: {
     };
   }, [anchor]);
   return createPortal(<div ref={menu} role="menu" aria-label={label} className="shot-actions__menu" onKeyDown={event => {
+    if (keyboardNavigation && event.key === "Tab") {
+      anchor.focus({ preventScroll: true });
+      onClose();
+      return;
+    }
+    if (keyboardNavigation && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+      event.preventDefault();
+      const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'));
+      if (!items.length) return;
+      const index = items.indexOf(document.activeElement as HTMLButtonElement);
+      const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
+        : (index + (event.key === "ArrowDown" ? 1 : items.length - 1)) % items.length;
+      items[next].focus();
+      return;
+    }
     if (event.key !== "Tab") return;
     const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled),select"));
     const index = controls.indexOf(document.activeElement as HTMLElement);
