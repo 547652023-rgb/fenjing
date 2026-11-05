@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { GatewayError } from "../data/gateway";
@@ -206,4 +206,35 @@ it("uploads a clipboard image to the focused image cell", async () => {
   fireEvent.paste(screen.getByTestId("image-cell"), { clipboardData: { files: [file] } });
   await screen.findByLabelText("参考-1");
   expect(onUpload).toHaveBeenCalledWith([file]);
+});
+
+it("keeps successful pictures and retries only a failed picture in a batch", async () => {
+  const a = { path: "a", url: "blob:a", name: "a.png", position: 0 };
+  const b = { path: "b", url: "blob:b", name: "b.png", position: 1 };
+  const onUpload = vi.fn()
+    .mockResolvedValueOnce([a])
+    .mockRejectedValueOnce(new GatewayError("network"))
+    .mockResolvedValueOnce([b]);
+  render(<ImageCell images={[]} label="画面-1" maxImages={5} onUpload={onUpload} onRemove={vi.fn()} />);
+  const first = new File(["a"], "a.png", { type: "image/png" });
+  const second = new File(["b"], "b.png", { type: "image/png" });
+  await userEvent.upload(screen.getByLabelText("画面-1"), [first, second]);
+  expect(await screen.findByRole("img", { name: "画面-1-图片1" })).toHaveAttribute("src", "blob:a");
+  const retry = await screen.findByRole("button", { name: "重试上传 b.png" });
+  expect(screen.queryByRole("button", { name: "重试上传 a.png" })).not.toBeInTheDocument();
+  await userEvent.click(retry);
+  expect(await screen.findByRole("img", { name: "画面-1-图片2" })).toHaveAttribute("src", "blob:b");
+  expect(onUpload.mock.calls.map(call => call[0].map((file: File) => file.name))).toEqual([["a.png"], ["b.png"], ["b.png"]]);
+});
+
+it("does not duplicate an upload already returned through project updates", async () => {
+  const image = { path: "a", url: "blob:a", name: "a.png", position: 0 };
+  let finish!: (images: typeof image[]) => void;
+  const onUpload = vi.fn(() => new Promise<typeof image[]>(resolve => { finish = resolve; }));
+  const props = { label: "画面-1", maxImages: 5, onUpload, onRemove: vi.fn() };
+  const view = render(<ImageCell {...props} images={[]} />);
+  await userEvent.upload(screen.getByLabelText("画面-1"), new File(["a"], "a.png", { type: "image/png" }));
+  view.rerender(<ImageCell {...props} images={[image]} />);
+  await act(async () => finish([image]));
+  expect(screen.getAllByRole("img", { name: /画面-1-图片/ })).toHaveLength(1);
 });

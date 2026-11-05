@@ -7,6 +7,7 @@ import { ShootPlan } from "../components/ShootPlan";
 import { CallSheet } from "../components/CallSheet";
 import {
   StoryboardTable,
+  parseRemoteImages,
   type StoryboardExportScope,
   type ShotCreationOptions,
   type StoryboardImageActions,
@@ -825,6 +826,8 @@ export function ProjectWorkbench({
 
   const imageActions: StoryboardImageActions = {
     async upload(shotId, fieldId, currentImages, files) {
+      const latestShot = projectRef.current?.shots.find(shot => shot.id === shotId);
+      if (latestShot) currentImages = parseRemoteImages(latestShot.values[fieldId] ?? "");
       const remaining = Math.max(
         0,
         (fieldId === "frame" || fieldId === "reference" ? 5 : 1) - currentImages.length,
