@@ -237,9 +237,11 @@ export function ProjectDashboard({
   const [showSupervisor, setShowSupervisor] = useState(false);
 
   const refreshId = useRef(0);
+  const homeRevision = useRef(0);
   const [loadError, setLoadError] = useState("");
-  const refresh = useCallback(async (showLoading = false) => {
+  const refresh = useCallback(async function refreshDashboard(showLoading = false) {
     const id = ++refreshId.current;
+    const revision = homeRevision.current;
     if (showLoading) setLoading(true);
     setLoadError("");
     try {
@@ -252,6 +254,7 @@ export function ProjectDashboard({
           gateway.listHomeSettings(),
         ]), 20_000, "项目加载超时，请重试");
       if (id !== refreshId.current) return;
+      if (revision !== homeRevision.current) return refreshDashboard(showLoading);
       setProjects(nextProjects);
       setTemplates(nextTemplates);
       setFolders(nextFolders);
@@ -349,6 +352,7 @@ export function ProjectDashboard({
   async function createFolder(name: string) {
     try {
       const folder = await gateway.createFolder(name);
+      homeRevision.current++;
       setFolders((current) => [...current, folder]);
       setActive(folder.id);
       setError("");
@@ -361,6 +365,7 @@ export function ProjectDashboard({
   async function renameFolder(folderId: string, name: string) {
     try {
       await gateway.renameFolder(folderId, name);
+      homeRevision.current++;
       setFolders((current) =>
         current.map((folder) =>
           folder.id === folderId ? { ...folder, name } : folder,
@@ -376,6 +381,7 @@ export function ProjectDashboard({
   async function deleteFolder(folderId: string) {
     try {
       await gateway.deleteFolder(folderId);
+      homeRevision.current++;
       setFolders((current) => current.filter((folder) => folder.id !== folderId));
       setAssignments((current) =>
         Object.fromEntries(
@@ -392,6 +398,7 @@ export function ProjectDashboard({
   async function assignFolder(projectId: string, folderId: string | null) {
     try {
       await gateway.setProjectFolder(projectId, folderId);
+      homeRevision.current++;
       setAssignments((current) => {
         const next = { ...current };
         if (folderId) next[projectId] = folderId;
@@ -407,6 +414,7 @@ export function ProjectDashboard({
   async function setIcon(projectId: string, icon: string | null) {
     try {
       await gateway.setProjectIcon(projectId, icon);
+      homeRevision.current++;
       setProjects((current) =>
         current.map((project) =>
           project.id === projectId ? { ...project, icon } : project,
@@ -424,6 +432,7 @@ export function ProjectDashboard({
     setSortBy(nextSort);
     try {
       await gateway.saveHomeSettings({ sortBy: nextSort });
+      homeRevision.current++;
       setError("");
     } catch {
       setSortBy(previous);
