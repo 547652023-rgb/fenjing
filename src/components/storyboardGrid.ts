@@ -50,7 +50,9 @@ export function parseClipboardGrid(text: string): string[][] {
   let quoted = false;
   for (let index = 0; index < text.length; index++) {
     const char = text[index];
-    if (char === '"' && (quoted || !cell)) {
+    const startsQuotedCell = char === '"' && !cell
+      && /^"(?:[^"]|"")*"(?=[\t\r\n]|$)/.test(text.slice(index));
+    if (char === '"' && (quoted || startsQuotedCell)) {
       if (quoted && text[index + 1] === '"') {
         cell += '"';
         index++;
