@@ -7,6 +7,7 @@ type SharedImageCellProps = {
   label: string;
   maxImages?: number;
   compact?: boolean;
+  prepareFrame?: boolean;
 };
 
 type LocalImageCellProps = SharedImageCellProps & {
@@ -149,6 +150,7 @@ function OnlineImageCell({
   label,
   maxImages = 1,
   compact,
+  prepareFrame = true,
   onUpload,
   onRemove,
 }: OnlineImageCellProps) {
@@ -215,7 +217,7 @@ function OnlineImageCell({
     busy.current = true;
     try {
       const prepared = await Promise.all(
-        accepted.map((file) => maxImages > 1 ? prepareStoryboardFrame(file) : file),
+        accepted.map((file) => maxImages > 1 && prepareFrame ? prepareStoryboardFrame(file) : file),
       );
       await uploadFiles(prepared);
       if (accepted.length < selected.length) setLimitWarning(`每格最多 ${maxImages} 张图片`);

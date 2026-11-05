@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { vi } from "vitest";
 import { createProject } from "../domain/storyboard";
 import { StoryboardTable } from "./StoryboardTable";
@@ -32,5 +32,20 @@ it("keeps the full image stack by default and remembers the personal compact mod
     expect(props.onChange).not.toHaveBeenCalled();
   } finally {
     localStorage.removeItem(imageDensityKey);
+  }
+});
+
+it("keeps a reference original through the table upload entry point", async () => {
+  const decode = vi.fn();
+  vi.stubGlobal("createImageBitmap", decode);
+  try {
+    const upload = vi.fn(async () => []);
+    render(<StoryboardTable project={createProject()} onChange={vi.fn()} imageActions={{ upload, remove: vi.fn() }} />);
+    const file = new File(["portrait reference"], "reference.png", { type: "image/png" });
+    await act(async () => fireEvent.change(screen.getByLabelText("参考-1"), { target: { files: [file] } }));
+    expect(upload).toHaveBeenCalledWith("1", "reference", [], [file]);
+    expect(decode).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
   }
 });

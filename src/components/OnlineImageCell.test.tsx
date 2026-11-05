@@ -238,3 +238,18 @@ it("does not duplicate an upload already returned through project updates", asyn
   await act(async () => finish([image]));
   expect(screen.getAllByRole("img", { name: /画面-1-图片/ })).toHaveLength(1);
 });
+
+it("uploads a reference image intact without decoding or cropping it", async () => {
+  const decode = vi.fn();
+  vi.stubGlobal("createImageBitmap", decode);
+  try {
+    const onUpload = vi.fn(async () => []);
+    render(<ImageCell images={[]} label="参考-1" maxImages={5} prepareFrame={false} onUpload={onUpload} onRemove={vi.fn()} />);
+    const original = new File(["portrait"], "reference.png", { type: "image/png" });
+    await userEvent.upload(screen.getByLabelText("参考-1"), original);
+    expect(onUpload).toHaveBeenCalledWith([original]);
+    expect(decode).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
