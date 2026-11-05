@@ -2463,3 +2463,20 @@ button.storyboard-review__frame { position: relative; cursor: zoom-in; }
   .workbench-shell .project-header { grid-template-columns: 1fr; gap: 0.3rem; }
   .image-cell__remove { opacity: 1; }
 }
+
+.production-summary__toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.75rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #553e31;
+  text-align: left;
+}
+.production-summary__toggle:hover:not(:disabled) {
+  transform: none;
+  background: #eee2d3;
+}
+.production-summary__toggle span:last-child { margin-inline-start: auto; }

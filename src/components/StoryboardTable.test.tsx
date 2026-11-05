@@ -492,7 +492,14 @@ it("filters the workbench to a clicked production status without changing shot o
 
   render(<StoryboardTable project={project} onChange={vi.fn()} />);
 
+  const overview = screen.getByRole("button", { name: /制作概览/ });
+  expect(overview).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByRole("button", { name: "待拍 1" })).not.toBeInTheDocument();
+  await user.click(overview);
+  expect(overview).toHaveAttribute("aria-expanded", "true");
   await user.click(screen.getByRole("button", { name: "待拍 1" }));
+  await user.click(overview);
+  expect(overview).toHaveAttribute("aria-expanded", "false");
 
   expect(screen.getByLabelText("镜号-1")).toBeVisible();
   expect(screen.queryByLabelText("镜号-2")).not.toBeInTheDocument();

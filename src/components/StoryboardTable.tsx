@@ -155,6 +155,7 @@ export function StoryboardTable({
   canSetProjectDefaultView = false,
   onSetProjectDefaultView,
 }: StoryboardTableProps) {
+  const [overviewOpen, setOverviewOpen] = useState(false);
   const [compactImages, setCompactImages] = useState(() => {
     try {
       return !!imageDensityKey && localStorage.getItem(imageDensityKey) === "compact";
@@ -723,6 +724,12 @@ export function StoryboardTable({
         </div>
       </div>
       <section aria-label="制作概览" className="production-summary">
+        <button aria-expanded={overviewOpen} className="production-summary__toggle" type="button" onClick={() => setOverviewOpen(!overviewOpen)}>
+          <strong>制作概览</strong>
+          <span>{summary.sceneCount} 场 · {summary.shotCount} 镜 · {summary.estimatedRuntimeSeconds} 秒</span>
+          <span>{overviewOpen ? "收起" : "展开"}</span>
+        </button>
+        {overviewOpen ? <>
         <div className="production-summary__metrics">
           <button type="button" onClick={() => { setStatusFilter(null); setCoverageFilter(null); }}>
             <span>场次</span><strong>{summary.sceneCount}</strong>
@@ -754,6 +761,7 @@ export function StoryboardTable({
             </button>
           ))}
         </div>
+        </> : null}
       </section>
       {statusFilter || coverageFilter ? (
         <div aria-label="当前筛选" className="storyboard-filter-chips">
