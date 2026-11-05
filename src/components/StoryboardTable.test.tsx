@@ -671,3 +671,32 @@ it("pastes a single spreadsheet column across shots while preserving multiline p
   const update = onChange.mock.calls[0][0];
   expect(update(addShot(createProject())).shots.map((shot: { values: { content: string } }) => shot.values.content)).toEqual(["第一镜", "第二镜"]);
 });
+
+it("opens multiline notes in a separate editor and saves them back to the cell", async () => {
+  const user = userEvent.setup();
+  function Table() {
+    const [project, setProject] = useState(() => {
+      const initial = createProject();
+      initial.shots[0].values.notes = "第一行说明\n第二行说明";
+      return initial;
+    });
+    return <StoryboardTable project={project} onChange={setProject} />;
+  }
+  render(<Table />);
+  const opener = screen.getByRole("button", { name: "展开备注-1" });
+  await user.click(opener);
+  const dialog = screen.getByRole("dialog", { name: "备注-1" });
+  const editor = within(dialog).getByRole("textbox");
+  expect(editor).toHaveValue("第一行说明\n第二行说明");
+  fireEvent.change(editor, { target: { value: "修改后的长说明\n保留换行" } });
+  await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
+  expect(screen.queryByRole("dialog", { name: "备注-1" })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("备注-1")).toHaveValue("修改后的长说明\n保留换行");
+  expect(opener).toHaveFocus();
+});
+
+it("shows spreadsheet shortcuts and clipboard image instructions without hovering", () => {
+  render(<StoryboardTable project={createProject()} onChange={vi.fn()} />);
+  expect(screen.getByText(/Shift 点击选区.*从 Excel 粘贴/)).toBeVisible();
+  expect(screen.getAllByText(/按 ⌘V 或 Ctrl\+V 粘贴/)[0]).toBeVisible();
+});

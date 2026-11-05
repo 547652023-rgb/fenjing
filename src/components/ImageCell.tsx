@@ -360,7 +360,7 @@ function ImageCellLayout({
           className={`image-cell__upload${images.length ? " image-cell__upload--add" : ""}`}
         >
           <span>{images.length ? "＋" : "选择图片"}</span>
-          {!images.length ? <small>也可拖入或粘贴</small> : null}
+          {!images.length ? <small>也可拖入，或聚焦后按 ⌘V 或 Ctrl+V 粘贴</small> : null}
           <input
             aria-label={label}
             accept="image/*"

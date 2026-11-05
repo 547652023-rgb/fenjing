@@ -158,3 +158,35 @@ it("writes a portrait PDF using the selected layout dimensions", async () => {
   const document = await PDFDocument.load(bytes);
   expect(document.getPage(0).getSize()).toEqual({ width: 595, height: 842 });
 });
+
+it("generates a multi-page portrait PDF with long Chinese notes and several images per shot", async () => {
+  const image = new Uint8Array(readFileSync("src/assets/dapaidang-logo.png"));
+  const fontBytes = new Uint8Array(readFileSync("src/assets/fonts/NotoSansSC-Regular.ttf"));
+  const source: ExportModel = {
+    ...model,
+    shotCount: 5,
+    fields: [
+      { id: "frame", label: "画面", type: "image", visible: true, order: 0 },
+      { id: "notes", label: "备注", type: "text", visible: true, order: 1 },
+    ],
+    rows: Array.from({ length: 5 }, (_, index) => ({
+      shotId: String(index),
+      cells: [
+        { fieldId: "frame", fieldType: "image", text: "", images: Array.from({ length: 3 }, (_, position) => ({
+          path: `frame-${position}`, url: "fixture", name: `frame-${position}.png`, position,
+        })) },
+        { fieldId: "notes", fieldType: "text", text: "跟拍人物走过街道，保留环境声。\n".repeat(16), images: [] },
+      ],
+    })),
+  };
+  const settings = { orientation: "portrait", textSize: 16, imageHeight: 104 } as const;
+  const bytes = await pdfExport.buildVectorPdf(source, { pdf: settings }, { fontBytes, loadImage: async () => image });
+  const document = await PDFDocument.load(bytes);
+  expect(document.getPageCount()).toBeGreaterThan(1);
+  expect(document.getPages().every(page => page.getWidth() === 595 && page.getHeight() === 842)).toBe(true);
+  const imageDraws = document.context.enumerateIndirectObjects().flatMap(([, object]) => {
+    if (!(object instanceof PDFRawStream) || object.dict.get(PDFName.of("Subtype"))) return [];
+    return new TextDecoder().decode(decodePDFRawStream(object).decode()).match(/\/[^\s]+ Do\b/g) ?? [];
+  });
+  expect(imageDraws).toHaveLength(15);
+});
