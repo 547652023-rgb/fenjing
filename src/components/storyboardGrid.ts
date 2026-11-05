@@ -37,7 +37,7 @@ export function applyGridChanges(project: StoryboardProject, changes: GridChange
 export function validateGridValue(field: FieldDefinition, value: string): boolean {
   if (field.type === "image" || field.id === "shotNumber") return false;
   if (!value) return true;
-  if (field.type === "number") return value.trim() !== "" && Number.isFinite(Number(value))
+  if (field.type === "number") return /^-?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value) && Number.isFinite(Number(value))
     && (field.id !== "durationSeconds" || Number(value) >= 0);
   if (field.type === "date") return /^\d{4}-\d{2}-\d{2}$/.test(value)
     && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;

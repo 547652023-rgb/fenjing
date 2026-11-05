@@ -685,7 +685,15 @@ export async function buildVectorPdf(
       page.drawImage(image, { x: 0, y: 0, width: 1, height: 1 });
       page.pushOperators(popGraphicsState());
     };
-    text(layout.title, PAGE_MARGIN, PAGE_MARGIN + TITLE_HEIGHT / 2 + 8, 24);
+    const titleWidth = width - PAGE_MARGIN * 2 - (options.logo ? 192 : 0);
+    const titleLines = wrapText(layout.title, titleWidth, value => font.widthOfTextAtSize(value, 20));
+    const title = titleLines.slice(0, 2);
+    if (titleLines.length > title.length) {
+      const last = [...title[1]];
+      while (last.length && font.widthOfTextAtSize(last.join("") + "…", 20) > titleWidth) last.pop();
+      title[1] = last.join("") + "…";
+    }
+    title.forEach((line, index) => text(line, PAGE_MARGIN, PAGE_MARGIN + (title.length === 1 ? 33 : 20 + index * 22), 20));
     if (options.logo) {
       try {
         const logo = await load(options.logo.url);

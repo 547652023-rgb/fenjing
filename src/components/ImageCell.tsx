@@ -91,11 +91,16 @@ function LocalImageCell({
   compact,
   onChange,
 }: LocalImageCellProps) {
+  const busy = useRef(false);
   const [error, setError] = useState("");
   const images = parseImageValues(value).slice(0, maxImages);
 
   async function addFiles(selected: File[]) {
     if (!selected.length) return;
+    if (busy.current) {
+      setError("正在读取上一批图片，请稍后再添加");
+      return;
+    }
     if (selected.some((file) => !file.type.startsWith("image/"))) {
       setError("请选择图片文件");
       return;
@@ -103,15 +108,22 @@ function LocalImageCell({
     const accepted = selected.slice(0, Math.max(0, maxImages - images.length));
     setError(accepted.length < selected.length ? `每格最多 ${maxImages} 张图片` : "");
     if (!accepted.length) return;
+    busy.current = true;
     try {
       const loaded = await Promise.all(accepted.map(readImage));
       onChange(serializeImageValues([...images, ...loaded], maxImages));
     } catch {
       setError("读取图片失败");
+    } finally {
+      busy.current = false;
     }
   }
 
   function removeImage(index: number) {
+    if (busy.current) {
+      setError("正在读取图片，请稍后再移除");
+      return;
+    }
     const nextImages = images.filter((_, imageIndex) => imageIndex !== index);
     onChange(serializeImageValues(nextImages, maxImages));
   }

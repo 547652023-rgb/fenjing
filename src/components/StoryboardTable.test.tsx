@@ -653,3 +653,14 @@ it("rejects an invalid time without applying any part of the paste", () => {
   expect(onChange).not.toHaveBeenCalled();
   expect(screen.getByText(/无法粘贴第 1 行、第 1 列/)).toBeVisible();
 });
+
+it("pastes a single spreadsheet column across shots while preserving multiline plain-text notes", () => {
+  const onChange = vi.fn();
+  render(<StoryboardTable project={addShot(createProject())} onChange={onChange} />);
+  const content = screen.getByLabelText("内容-1");
+  fireEvent.paste(content, { clipboardData: { getData: (format: string) => format === "text/plain" ? "第一镜\n第二镜" : "" } });
+  expect(onChange).not.toHaveBeenCalled();
+  fireEvent.paste(content, { clipboardData: { getData: (format: string) => format === "text/html" ? "<table><tr><td>第一镜</td></tr><tr><td>第二镜</td></tr></table>" : "第一镜\n第二镜" } });
+  const update = onChange.mock.calls[0][0];
+  expect(update(addShot(createProject())).shots.map((shot: { values: { content: string } }) => shot.values.content)).toEqual(["第一镜", "第二镜"]);
+});

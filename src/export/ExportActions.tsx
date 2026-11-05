@@ -58,7 +58,8 @@ export function ExportActions({
 
   const deliveryProject = projectWithColumnPresentation(scope === "all" ? project : { ...project, shots }, columnPresentation);
   const availableFields = [...deliveryProject.fields].sort((left, right) => left.order - right.order);
-  const selectedColumns = pdfColumns ?? availableFields.filter(field => field.visible).map(field => field.id);
+  const selectedColumns = pdfColumns?.filter(id => availableFields.some(field => field.id === id))
+    ?? availableFields.filter(field => field.visible).map(field => field.id);
   const pdfProject = pdfColumns ? {
     ...deliveryProject,
     fields: availableFields.map(field => ({

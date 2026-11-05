@@ -338,7 +338,8 @@ export function StoryboardTable({
     const multiCell = range && range.anchor !== range.end;
     if (!cell || (!clipboard.includes("\t") && !clipboard.includes("\n") && !multiCell)) return;
     // A multiline plain-text note still pastes into its own cell.
-    if (!multiCell && !clipboard.includes("\t") && (event.target as HTMLElement).tagName === "TEXTAREA") return;
+    if (!multiCell && !clipboard.includes("\t") && (event.target as HTMLElement).tagName === "TEXTAREA"
+      && !/<table(?:\s|>)/i.test(event.clipboardData.getData("text/html"))) return;
     event.preventDefault();
     const { rows, rowIndex, columnIndex } = gridPosition(multiCell && range.anchor.isConnected ? range.anchor : cell);
     const values = parseClipboardGrid(clipboard);
