@@ -1018,3 +1018,19 @@ it("cancels a pending batch deletion when returning to the project list", async 
     vi.useRealTimers();
   }
 });
+
+it("persists both images when a batch upload completes without a render between responses", async () => {
+  const { gateway, owner, project } = await setupProject();
+  vi.spyOn(gateway, "uploadImage").mockImplementation(async ({ file, position }) => ({
+    path: file.name, url: `blob:${file.name}`, name: file.name, position,
+  }));
+  render(<ProjectWorkbench gateway={gateway} user={owner} projectId={project.id} onBack={vi.fn()} />);
+  await userEvent.upload(await screen.findByLabelText("画面-1"), [
+    new File(["a"], "a.png", { type: "image/png" }),
+    new File(["b"], "b.png", { type: "image/png" }),
+  ]);
+  await waitFor(async () => {
+    const images = JSON.parse((await gateway.loadProject(project.id)).shots[0].values.frame);
+    expect(images.map((image: { name: string }) => image.name)).toEqual(["a.png", "b.png"]);
+  });
+});

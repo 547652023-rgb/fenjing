@@ -848,20 +848,15 @@ export function ProjectWorkbench({
             }),
           );
         }
-        const nextImages = [...currentImages, ...uploaded];
         updateProject((current) => ({
           ...current,
-          shots: current.shots.map((shot) =>
-            shot.id === shotId
-              ? {
-                  ...shot,
-                  values: {
-                    ...shot.values,
-                    [fieldId]: JSON.stringify(nextImages),
-                  },
-                }
-              : shot,
-          ),
+          shots: current.shots.map((shot) => {
+            if (shot.id !== shotId) return shot;
+            const images = parseRemoteImages(shot.values[fieldId] ?? "");
+            const nextImages = [...new Map([...images, ...uploaded].map(image => [image.path, image])).values()]
+              .map((image, position) => ({ ...image, position }));
+            return { ...shot, values: { ...shot.values, [fieldId]: JSON.stringify(nextImages) } };
+          }),
         }), true);
         return uploaded;
       } finally {
