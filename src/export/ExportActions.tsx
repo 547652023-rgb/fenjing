@@ -2,7 +2,7 @@ import { withDeadline } from "../lib/requestDeadline";
 import { useEffect, useRef, useState } from "react";
 import { projectWithColumnPresentation, type ColumnPresentation } from "../domain/storyboardViews";
 import type { StoryboardProject } from "../domain/storyboard";
-import { exportStoryboardExcel } from "./excelExport";
+import { createStoryboardExcel } from "./excelExport";
 import { createStoryboardPdf, exportStoryboardPdf } from "./pdfExport";
 import { exportFilename, type ExportLogo, type ExportOptions, type PdfSettings } from "./storyboardExport";
 import { downloadBlob } from "./download";
@@ -24,6 +24,7 @@ type ExportActionsProps = {
   documentLabel?: string;
   columnPresentation?: ColumnPresentation[];
   createPdfPreview?: typeof createStoryboardPdf;
+  createExcel?: typeof createStoryboardExcel;
   exportExcel?: (project: StoryboardProject, options?: ExportOptions) => Promise<void>;
   exportPdf?: (project: StoryboardProject, options?: ExportOptions) => Promise<void>;
 };
@@ -36,10 +37,14 @@ export function ExportActions({
   documentLabel,
   columnPresentation,
   createPdfPreview = createStoryboardPdf,
-  exportExcel = exportStoryboardExcel,
+  createExcel = createStoryboardExcel,
+  exportExcel,
   exportPdf = exportStoryboardPdf,
 }: ExportActionsProps) {
   const [active, setActive] = useState<"excel" | "pdf" | null>(null);
+  const excelRequest = useRef<AbortController>();
+  const [excelError, setExcelError] = useState("");
+  const [workbook, setWorkbook] = useState<{ blob: Blob; key: string; missingCount: number; filename: string }>();
   const previewRequest = useRef<AbortController>();
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [error, setError] = useState("");
@@ -64,7 +69,10 @@ export function ExportActions({
     if (preview) URL.revokeObjectURL(preview.url);
   }, [preview]);
 
-  useEffect(() => () => previewRequest.current?.abort(), []);
+  useEffect(() => () => {
+    previewRequest.current?.abort();
+    excelRequest.current?.abort();
+  }, []);
 
   const deliveryProject = projectWithColumnPresentation(scope === "all" ? project : { ...project, shots }, columnPresentation);
   const availableFields = [...deliveryProject.fields].sort((left, right) => left.order - right.order);
@@ -79,11 +87,68 @@ export function ExportActions({
   const pdfOptions = { logo: logo ?? defaultLogo, documentLabel, pdf };
   const previewKey = open ? JSON.stringify([pdfProject, pdfOptions]) : "";
   const currentPreview = preview?.key === previewKey ? preview : undefined;
+  const workbookKey = open ? JSON.stringify([deliveryProject, logo ?? defaultLogo, documentLabel]) : "";
+  const currentWorkbook = workbook?.key === workbookKey ? workbook : undefined;
+
+  useEffect(() => {
+    const request = excelRequest.current;
+    if (request) {
+      excelRequest.current = undefined;
+      request.abort();
+      setActive(null);
+    }
+    setWorkbook(undefined);
+    setExcelError("");
+  }, [workbookKey]);
 
   function cancelPreview() {
     previewRequest.current?.abort();
     previewRequest.current = undefined;
     setIsPreviewing(false);
+  }
+
+  function cancelExcel() {
+    excelRequest.current?.abort();
+    excelRequest.current = undefined;
+    setActive(null);
+  }
+
+  async function generateExcel() {
+    if (active || excelRequest.current || emptyScope || pendingImages > 0) return;
+    cancelPreview();
+    const controller = new AbortController();
+    excelRequest.current = controller;
+    setActive("excel");
+    setExcelError("");
+    setWorkbook(undefined);
+    const missing = new Set<string>();
+    const options = { logo: logo ?? defaultLogo, documentLabel, signal: controller.signal, onImageError: (url: string) => { missing.add(url); } };
+    try {
+      const filename = exportFilename(project, "xlsx", new Date(), documentLabel);
+      if (exportExcel) {
+        await withDeadline(exportExcel(deliveryProject, options), 45_000, "Excel 导出生成超时，请重试", controller.signal);
+        if (excelRequest.current === controller && !controller.signal.aborted) close();
+      } else {
+        const blob = await withDeadline(createExcel(deliveryProject, options), 45_000, "Excel 导出生成超时，请重试", controller.signal);
+        if (excelRequest.current !== controller || controller.signal.aborted) return;
+        if (missing.size) {
+          setWorkbook({ blob, key: workbookKey, missingCount: missing.size, filename });
+        } else {
+          downloadBlob(blob, filename);
+          close();
+        }
+      }
+    } catch (failure) {
+      if (excelRequest.current === controller && !controller.signal.aborted) {
+        setExcelError(failure instanceof Error && failure.message.includes("超时") ? failure.message : "导出失败，请稍后重试");
+      }
+    } finally {
+      controller.abort();
+      if (excelRequest.current === controller) {
+        excelRequest.current = undefined;
+        setActive(null);
+      }
+    }
   }
 
   async function generatePreview(downloadWhenReady = false) {
@@ -127,12 +192,14 @@ export function ExportActions({
   }
 
   function close() {
-    if (active) return;
+    cancelExcel();
     cancelPreview();
     setOpen(false);
     setError("");
     setLogo(undefined);
     setPreview(undefined);
+    setWorkbook(undefined);
+    setExcelError("");
   }
 
   function chooseLogo(file: File | undefined) {
@@ -151,13 +218,20 @@ export function ExportActions({
 
   async function run(format: "excel" | "pdf") {
     if (active || emptyScope || pendingImages > 0) return;
+    if (format === "excel") {
+      if (currentWorkbook) {
+        downloadBlob(currentWorkbook.blob, currentWorkbook.filename);
+        close();
+      } else {
+        await generateExcel();
+      }
+      return;
+    }
     cancelPreview();
     setActive(format);
     setError("");
     try {
-      if (format === "excel") {
-        await exportExcel(deliveryProject, { logo: logo ?? defaultLogo, documentLabel });
-      } else if (exportPdf === exportStoryboardPdf) {
+      if (exportPdf === exportStoryboardPdf) {
         if (currentPreview) {
           downloadBlob(currentPreview.blob, exportFilename(project, "pdf", new Date(), documentLabel));
         } else {
@@ -253,15 +327,25 @@ export function ExportActions({
           </div> : null}
           {pendingImages > 0 ? <p role="status">图片仍在上传，完成后可导出。</p> : null}
           {error ? <p className="export-actions__error" role="alert">{error}</p> : null}
+          {excelError ? <div className="export-actions__error">
+            <p role="alert">{excelError}</p>
+            <button type="button" disabled={active !== null || pendingImages > 0 || emptyScope} onClick={() => void generateExcel()}>重试导出 Excel</button>
+          </div> : null}
+          {currentWorkbook ? <div className="export-actions__error">
+            <p role="alert">有 {currentWorkbook.missingCount} 张图片加载失败（含 Logo），Excel 可能缺图。请重试或确认后下载。</p>
+            <button type="button" disabled={active !== null || pendingImages > 0 || emptyScope} onClick={() => void generateExcel()}>重试加载 Excel 图片</button>
+          </div> : null}
           <div className="export-dialog__formats">
-            <button aria-label="导出 Excel" className="export-format-option" disabled={active !== null || pendingImages > 0 || emptyScope} type="button" onClick={() => void run("excel")}>
-              <span>Excel</span><strong>可编辑镜头清单</strong><small>{active === "excel" ? "正在生成文件…" : "供制片、排期与现场协作使用"}</small>
+            <button aria-label={currentWorkbook ? "下载含缺图标记的 Excel" : "导出 Excel"} className="export-format-option" disabled={active !== null || pendingImages > 0 || emptyScope} type="button" onClick={() => void run("excel")}>
+              <span>Excel</span><strong>{currentWorkbook ? "下载含缺图标记的 Excel" : "可编辑镜头清单"}</strong><small>{active === "excel" ? "正在生成文件…" : "供制片、排期与现场协作使用"}</small>
             </button>
             <button aria-label={currentPreview?.missingCount ? "下载含缺图标记的 PDF" : "导出 PDF"} className="export-format-option export-format-option--dark" disabled={active !== null || isPreviewing || pendingImages > 0 || emptyScope || !selectedColumns.length} type="button" onClick={() => void run("pdf")}>
               <span>PDF</span><strong>{currentPreview?.missingCount ? "下载含缺图标记的 PDF" : "审阅用制片稿"}</strong><small>{active === "pdf" ? "正在生成文件…" : "供导演、客户与团队确认使用"}</small>
             </button>
           </div>
-          <div className="export-dialog__footer"><span>文件将在浏览器中下载</span><button className="button-quiet" disabled={active !== null} type="button" onClick={close}>取消</button></div>
+          <div className="export-dialog__footer"><span>文件将在浏览器中下载</span>{active === "excel"
+            ? <button className="button-quiet" type="button" onClick={cancelExcel}>取消生成 Excel</button>
+            : <button className="button-quiet" disabled={active !== null} type="button" onClick={close}>取消</button>}</div>
         </section>
       </div> : null}
     </div>

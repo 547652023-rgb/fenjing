@@ -21,9 +21,9 @@
 - [x] Run `pnpm exec vitest run src/workbench/ProjectWorkbench.test.tsx src/components/StoryboardTable.test.tsx src/components/ShootPlan.test.tsx` and commit.
 
 ## Task 2: Recover Excel export failures
-- [ ] Reproduce missing-image feedback, hung resource timeout, cancellation and late-result cases in `excelExport.test.ts` and `ExportActions.test.tsx`.
-- [ ] Extend existing export options/signal to Excel resource loading. Provide bounded resource/overall generation, cancel, retry and explicit acceptance for a missing-image workbook in `ExportActions.tsx`. Preserve exact generated workbook for acceptance. Include Logo failure reporting.
-- [ ] Run export tests and commit. Excel and PDF cancellation/feedback must remain independent.
+- [x] Reproduce missing-image feedback, hung resource timeout, cancellation and late-result cases in `excelExport.test.ts` and `ExportActions.test.tsx`.
+- [x] Extend existing export options/signal to Excel resource loading. Provide bounded resource/overall generation, cancel, retry and explicit acceptance for a missing-image workbook in `ExportActions.tsx`. Preserve exact generated workbook for acceptance. Include Logo failure reporting.
+- [x] Run export tests and commit. Excel and PDF cancellation/feedback must remain independent.
 
 ## Task 3: Recover stalled project loading
 - [x] Add fake-clock workbench regressions for initial load timeout, retry success, late response, unmount and retained local input on reload failure.
@@ -50,3 +50,6 @@
 - Task 4: RED reproduced loss of hidden selection on an unrelated visible-row edit. GREEN: 2 files / 90 tests passed; hidden selections remain in batch/export scope and remote-deleted shots are pruned.
 
 - Task 1 follow-up: RED reproduced confirmed write still held open by a stalled reload; GREEN: 3 files / 102 tests passed. Apply the confirmed scene directly to both local and server snapshots instead of waiting for a separate read.
+
+- Task 2: RED: 10 initial export regressions plus 3 boundary cases. GREEN: 4 export files / 60 tests passed, TypeScript passed. Resource deadline 10 seconds, workbook/UI deadline 45 seconds, signal cancellation, stale-request invalidation and exact-Blob acceptance.
+- Whole branch verification: 47 files / 372 tests passed; production build passed; UI detector returned no findings; diff check passed. Existing Vite config and chunk-size warnings remain unchanged.

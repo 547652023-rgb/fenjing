@@ -9,6 +9,7 @@ import {
 import { createZip } from "./zip";
 import { buildShootDayExportModel, type ShootDayExportModel } from "./shootDayExport";
 import { fitImage, imageSize } from "./imageGeometry";
+import { withDeadline } from "../lib/requestDeadline";
 
 export type LoadedImage = {
   bytes: Uint8Array;
@@ -41,6 +42,56 @@ const POINT_TO_EMU = 12_700;
 const HEADER_ROWS = 4;
 const IMAGE_SLOT_HEIGHT = 104;
 const IMAGE_PADDING_EMU = 6 * POINT_TO_EMU;
+const IMAGE_TIMEOUT_MS = 10_000;
+const EXCEL_TIMEOUT_MS = 45_000;
+
+function checkCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new DOMException("操作已取消", "AbortError");
+}
+
+async function withAbortDeadline<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  milliseconds: number,
+  message: string,
+  parentSignal?: AbortSignal,
+): Promise<T> {
+  checkCancelled(parentSignal);
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  parentSignal?.addEventListener("abort", abort, { once: true });
+  try {
+    return await withDeadline(operation(controller.signal), milliseconds, message, controller.signal);
+  } finally {
+    controller.abort();
+    parentSignal?.removeEventListener("abort", abort);
+  }
+}
+
+async function decodeBitmap(
+  blob: Blob,
+  decode: (image: ImageBitmapSource) => Promise<ImageBitmap>,
+  signal: AbortSignal,
+): Promise<ImageBitmap> {
+  const bitmap = await decode(blob);
+  if (signal.aborted) {
+    bitmap.close();
+    checkCancelled(signal);
+  }
+  return bitmap;
+}
+
+function releaseBitmapOnAbort(bitmap: ImageBitmap, signal: AbortSignal): () => void {
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    signal.removeEventListener("abort", close);
+    bitmap.close();
+  };
+  signal.addEventListener("abort", close, { once: true });
+  if (signal.aborted) close();
+  return close;
+}
 
 function spreadsheetColumnWidth(field: ExportModel["fields"][number]): number {
   if (field.type === "image") return 32;
@@ -154,23 +205,27 @@ function createBrowserImageCanvas(width: number, height: number): HTMLCanvasElem
 
 async function loadRemoteImage(
   url: string,
-  dependencies: XlsxImageLoadDependencies = {},
+  dependencies: XlsxImageLoadDependencies,
+  signal: AbortSignal,
 ): Promise<LoadedImage> {
   const fetchImage = dependencies.fetch ?? fetch;
-  const response = await fetchImage(url);
+  const response = await fetchImage(url, { signal });
   if (!response.ok) {
     throw new Error(`Image request failed with status ${response.status}`);
   }
   const blob = await response.blob();
+  checkCancelled(signal);
   const extension = imageExtension(response.headers.get("content-type") || blob.type, url);
   if (extension) {
     const bytes = await blobBytes(blob);
+    checkCancelled(signal);
     return { bytes, extension, ...imageSize(bytes) };
   }
 
   const decodeImage = dependencies.createImageBitmap ?? createImageBitmap;
   const createCanvas = dependencies.createCanvas ?? createBrowserImageCanvas;
-  const bitmap = await decodeImage(blob);
+  const bitmap = await decodeBitmap(blob, decodeImage, signal);
+  const releaseBitmap = releaseBitmapOnAbort(bitmap, signal);
   try {
     const width = Math.max(1, bitmap.width);
     const height = Math.max(1, bitmap.height);
@@ -182,7 +237,7 @@ async function loadRemoteImage(
     context.drawImage(bitmap, 0, 0, width, height);
     return { ...await canvasPng(canvas), width, height };
   } finally {
-    bitmap.close();
+    releaseBitmap();
   }
 }
 
@@ -336,22 +391,40 @@ function drawingRelationshipsXml(images: EmbeddedImage[]): string {
 
 export async function buildXlsxPackage(
   model: ExportModel,
-  loadImage: ((url: string) => Promise<LoadedImage>) | undefined = undefined,
+  loadImage: ((url: string, signal?: AbortSignal) => Promise<LoadedImage>) | undefined = undefined,
   createFailurePlaceholder: () => Promise<LoadedImage> = createFailurePlaceholderImage,
   imageDependencies: XlsxImageLoadDependencies = {},
   options: ExportOptions = {},
+): Promise<Map<string, Uint8Array>> {
+  return withAbortDeadline(signal => buildXlsxPackageContents(model, loadImage, createFailurePlaceholder, imageDependencies, { ...options, signal }),
+    EXCEL_TIMEOUT_MS, "Excel 导出生成超时，请重试", options.signal);
+}
+
+async function buildXlsxPackageContents(
+  model: ExportModel,
+  loadImage: ((url: string, signal?: AbortSignal) => Promise<LoadedImage>) | undefined,
+  createFailurePlaceholder: () => Promise<LoadedImage>,
+  imageDependencies: XlsxImageLoadDependencies,
+  options: ExportOptions,
 ): Promise<Map<string, Uint8Array>> {
   model = { ...model, rows: splitExcelRows(model) };
   const images: EmbeddedImage[] = [];
   const anchors: CellAnchor[] = [];
   const failedCells = new Set<string>();
-  const imageLoader = loadImage ?? ((url: string) => loadRemoteImage(url, imageDependencies));
-  let logo: EmbeddedImage | undefined;
-  if (options.logo) {
-    let loaded = await imageLoader(options.logo.url);
-    if (options.logo.name === "大拍档logo.png") {
+  const failedUrls = new Set<string>();
+  const reportFailure = (url: string) => {
+    checkCancelled(options.signal);
+    if (failedUrls.has(url)) return;
+    failedUrls.add(url);
+    options.onImageError?.(url);
+  };
+  const imageLoader = (url: string, flattenLogo = false) => withAbortDeadline(async signal => {
+    let loaded = await (loadImage ? loadImage(url, signal) : loadRemoteImage(url, imageDependencies, signal));
+    checkCancelled(signal);
+    if (flattenLogo) {
       const decode = imageDependencies.createImageBitmap ?? createImageBitmap;
-      const bitmap = await decode(new Blob([new Uint8Array(loaded.bytes)], { type: options.logo.type }));
+      const bitmap = await decodeBitmap(new Blob([new Uint8Array(loaded.bytes)], { type: options.logo?.type }), decode, signal);
+      const releaseBitmap = releaseBitmapOnAbort(bitmap, signal);
       try {
         const canvas = (imageDependencies.createCanvas ?? createBrowserImageCanvas)(bitmap.width, bitmap.height);
         const context = canvas.getContext("2d");
@@ -360,10 +433,19 @@ export async function buildXlsxPackage(
         context.fillRect(0, 0, bitmap.width, bitmap.height);
         context.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height);
         loaded = { ...await canvasPng(canvas), width: bitmap.width, height: bitmap.height };
-      } finally { bitmap.close(); }
+      } finally { releaseBitmap(); }
     }
-    loaded = { ...imageSize(loaded.bytes), ...loaded };
-    logo = { ...loaded, relationshipId: "rId1", mediaName: `logo.${loaded.extension}` };
+    checkCancelled(signal);
+    return loaded;
+  }, IMAGE_TIMEOUT_MS, "Excel 图片加载超时", options.signal);
+  let logo: EmbeddedImage | undefined;
+  if (options.logo) {
+    try {
+      const loaded = await imageLoader(options.logo.url, options.logo.name === "大拍档logo.png");
+      logo = { ...imageSize(loaded.bytes), ...loaded, relationshipId: "rId1", mediaName: `logo.${loaded.extension}` };
+    } catch {
+      reportFailure(options.logo.url);
+    }
   }
 
   for (const [rowIndex, row] of model.rows.entries()) {
@@ -376,8 +458,9 @@ export async function buildXlsxPackage(
         try {
           loaded = await imageLoader(remoteImage.url);
         } catch {
+          reportFailure(remoteImage.url);
           failedCells.add(`${rowIndex}:${columnIndex}`);
-          loaded = await createFailurePlaceholder();
+          loaded = await withAbortDeadline(() => createFailurePlaceholder(), IMAGE_TIMEOUT_MS, "Excel 缺图标记生成超时，请重试", options.signal);
         }
         const number = images.length + 1;
         const embedded: EmbeddedImage = {
@@ -395,6 +478,7 @@ export async function buildXlsxPackage(
   }
 
   const files = new Map<string, Uint8Array>();
+  checkCancelled(options.signal);
   if (logo) logo.relationshipId = `rId${images.length + 1}`;
   files.set("[Content_Types].xml", encoder.encode(contentTypesXml()));
   files.set("_rels/.rels", encoder.encode(rootRelationshipsXml()));
@@ -416,16 +500,20 @@ export async function buildXlsxPackage(
   return files;
 }
 
-export async function exportStoryboardExcel(project: StoryboardProject, options: ExportOptions = {}): Promise<void> {
+export async function createStoryboardExcel(project: StoryboardProject, options: ExportOptions = {}): Promise<Blob> {
   const exportProject = options.documentLabel ? { ...project, title: `${project.title} · ${options.documentLabel}` } : project;
   const files = await buildXlsxPackage(buildExportModel(exportProject), undefined, createFailurePlaceholderImage, {}, options);
   const bytes = createZip([...files].map(([name, data]) => ({ name, data })));
-  downloadBlob(
-    new Blob([new Uint8Array(bytes)], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }),
-    exportFilename(project, "xlsx", new Date(), options.documentLabel),
-  );
+  checkCancelled(options.signal);
+  return new Blob([new Uint8Array(bytes)], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+}
+
+export async function exportStoryboardExcel(project: StoryboardProject, options: ExportOptions = {}): Promise<void> {
+  const blob = await createStoryboardExcel(project, options);
+  checkCancelled(options.signal);
+  downloadBlob(blob, exportFilename(project, "xlsx", new Date(), options.documentLabel));
 }
 
 function shootDayWorkbookXml(): string {
