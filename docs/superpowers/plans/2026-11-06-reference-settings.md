@@ -29,8 +29,8 @@
 - Preview settings changes must invalidate old downloads without breaking Excel/PDF cancellation, retry, Logo and same-Blob acceptance.
 
 ## Delivery
-- [ ] Per-task test results recorded below; full suite and production build.
-- [ ] Fresh independent whole-branch review and any meaningful findings fixed with regression tests.
+- [x] Per-task test results recorded below; full suite and production build.
+- [x] Fresh independent whole-branch review and any meaningful findings fixed with regression tests.
 - [ ] Merge/push, successful Pages deployment, online settings and exported-artifact checks.
 
 ## Results
@@ -42,3 +42,5 @@
 
 - Tasks5–6 RED→GREEN: grouping, real PDF streams and Excel XML keep all10 overflow images, zero/multiline/long text, continuation heights, header allowlist, preview regeneration and same-Blob download. Targeted export tests: 103 passed.
 - Whole branch: 48 files / 409 tests passed; production build and detector/diff checks passed. Existing Vite config/chunk-size warnings remain.
+
+- Independent review approved with no Critical/Important findings. One disclosure-close detail was reproduced RED and fixed GREEN in existing shared-ratio integration test. Final48files/409tests, build, detector and diff checks passed. Online native layout/file validation follows deployment.

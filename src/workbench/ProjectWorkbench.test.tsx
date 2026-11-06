@@ -1253,6 +1253,7 @@ it("opens shared ratio settings from display controls and applies the saved rati
   const image = await screen.findByRole("img", { name: /画面-.*图片1/ });
   await userEvent.click(screen.getByText("分镜设置"));
   await userEvent.click(screen.getByRole("button", { name: "修改画幅比例" }));
+  expect(screen.getByText("分镜设置").closest("details")).not.toHaveAttribute("open");
   await userEvent.selectOptions(screen.getByLabelText("画幅比例"), "9:16");
   await userEvent.click(screen.getByRole("button", { name: "保存" }));
   expect(image.parentElement).toHaveStyle({ aspectRatio: "9 / 16" });

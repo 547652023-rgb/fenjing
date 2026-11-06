@@ -77,7 +77,7 @@ export function StoryboardDisplaySettings({ display, onChange, aspectRatio, onOp
         <option value="contain">适应（完整显示）</option><option value="cover">缩放（填满画框）</option>
       </select></label>
       <div className="storyboard-display-settings__ratio"><span>图片比例 {aspectRatio}</span>
-        {onOpenProjectSettings ? <button className="button-quiet" type="button" onClick={onOpenProjectSettings}>修改画幅比例</button> : null}
+        {onOpenProjectSettings ? <button className="button-quiet" type="button" onClick={() => { if (disclosure.current) disclosure.current.open = false; onOpenProjectSettings(); }}>修改画幅比例</button> : null}
       </div>
       <small>字号、对齐和适配仅影响你的工作台显示。</small>
     </div>
