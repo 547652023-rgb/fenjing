@@ -36,8 +36,8 @@
 - [x] Run table/workbench tests and commit.
 
 ## Delivery
-- [ ] Fresh independent whole-branch review; address meaningful findings with regression tests.
-- [ ] Full test suite, production build, diff check and UI detector. Record scope of manual checks honestly.
+- [x] Fresh independent whole-branch review; address meaningful findings with regression tests.
+- [x] Full test suite, production build, diff check and UI detector. Online manual acceptance follows deployment.
 - [ ] Merge to `integration/storyboard-platform`, push, wait for Pages deployment success.
 
 ## Results
@@ -53,3 +53,5 @@
 
 - Task 2: RED: 10 initial export regressions plus 3 boundary cases. GREEN: 4 export files / 60 tests passed, TypeScript passed. Resource deadline 10 seconds, workbook/UI deadline 45 seconds, signal cancellation, stale-request invalidation and exact-Blob acceptance.
 - Whole branch verification: 47 files / 372 tests passed; production build passed; UI detector returned no findings; diff check passed. Existing Vite config and chunk-size warnings remain unchanged.
+
+- Independent review identified two Important scene races: late pre-write reads and concurrent collapse while form-save pending. Both reproduced RED, fixed, and verified GREEN. Final full suite: 47 files / 373 tests passed; final production build passed, detector/diff checks clean. No additional Critical/Important/Minor findings. Injected legacy export callbacks retain their compatibility contract; production uses controlled Blob creation.

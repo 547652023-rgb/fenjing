@@ -587,6 +587,7 @@ export function StoryboardTable({
               <button
                 aria-label={collapseLabel}
                 className="scene-group-row__toggle"
+                disabled={isSavingScene}
                 type="button"
                 onClick={() => {
                   const nextScene = { ...scene, collapsed: !scene.collapsed };

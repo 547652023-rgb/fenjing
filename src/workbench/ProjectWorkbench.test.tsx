@@ -1126,6 +1126,10 @@ it("keeps the scene form open and prevents duplicate submissions while saving", 
   expect(form).toBeVisible();
   expect(within(form).getByRole("button", { name: /正在保存/ })).toBeDisabled();
   expect(within(form).getByRole("button", { name: "关闭" })).toBeDisabled();
+  const collapse = screen.getByRole("button", { name: `收起场次 ${scene.number}` });
+  expect(collapse).toBeDisabled();
+  fireEvent.click(collapse);
+  expect(save).toHaveBeenCalledTimes(1);
   await act(async () => { finish(); });
   await waitFor(() => expect(form).not.toBeInTheDocument());
   expect((await gateway.loadProject(project.id)).scenes[0].name).toBe("保存中");
@@ -1211,4 +1215,29 @@ it("completes a confirmed scene write without waiting for a separate project rea
   expect(form).not.toBeInTheDocument();
   expect(screen.getByRole("status")).toHaveTextContent("已在线保存");
   expect(screen.getByText(/服务器已确认/)).toBeVisible();
+});
+
+it("ignores a pre-save scene read that completes after a confirmed scene write", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const scene = await gateway.createScene(project.id, { name: "原场次名称" });
+  const oldSnapshot = await gateway.loadProject(project.id);
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+  await screen.findByDisplayValue("广告片");
+  let finishOld!: (project: typeof oldSnapshot) => void;
+  vi.spyOn(gateway, "loadProject").mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }));
+  vi.useFakeTimers();
+  try {
+    await act(async () => {
+      gateway.emit(project.id, { type: "structure.changed" });
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    fireEvent.click(screen.getByRole("button", { name: `编辑场次 ${scene.number}` }));
+    const form = screen.getByRole("form", { name: `编辑场次 ${scene.number}` });
+    fireEvent.change(within(form).getByLabelText("名称"), { target: { value: "刚确认保存的新场次" } });
+    await act(async () => { fireEvent.submit(form); });
+    expect(screen.getByText(/刚确认保存的新场次/)).toBeVisible();
+    await act(async () => { finishOld(oldSnapshot); });
+    expect(screen.getByText(/刚确认保存的新场次/)).toBeVisible();
+    expect(screen.queryByText(/原场次名称/)).not.toBeInTheDocument();
+  } finally { vi.useRealTimers(); }
 });

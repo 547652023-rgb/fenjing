@@ -723,6 +723,10 @@ export function ProjectWorkbench({
     setSaveStatus("saving");
     try {
       await gateway.updateScene(projectId, scene);
+      // A pre-write snapshot cannot replace a newly confirmed scene.
+      reloadRequest.current?.abort();
+      reloadRequest.current = undefined;
+      setIsLoadingProject(false);
       // The write is confirmed; a separate read must not hold the form open.
       const current = projectRef.current;
       if (current) {
