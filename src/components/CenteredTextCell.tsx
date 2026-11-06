@@ -4,11 +4,13 @@ import { createPortal } from "react-dom";
 
 type Props = {
   label: string;
+  textSize?: number;
+  alignment?: "center" | "left" | "top-left";
   value: string;
   onChange: (value: string) => void;
 };
 
-export function CenteredTextCell({ label, value, onChange }: Props) {
+export function CenteredTextCell({ label, value, onChange, textSize = 14, alignment = "center" }: Props) {
   const [expanded, setExpanded] = useState<{ original: string; draft: string }>();
   const opener = useRef<HTMLButtonElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -44,11 +46,13 @@ export function CenteredTextCell({ label, value, onChange }: Props) {
     const observer = new ResizeObserver(fitContent);
     observer.observe(cell);
     return () => observer.disconnect();
-  }, [value]);
+  }, [value, textSize, alignment]);
 
   return <>
     <div className="centered-text-cell__minimum" aria-hidden="true" />
     <textarea ref={inputRef} aria-label={label} rows={2} value={value}
+      style={{ fontSize: textSize, textAlign: alignment === "center" ? "center" : "left",
+        top: alignment === "top-left" ? 0 : "50%", transform: alignment === "top-left" ? "none" : "translateY(-50%)" }}
       onChange={event => onChange(event.target.value)} />
     {value.includes("\n") || value.length >= 50 ? (
       <button aria-label={`展开${label}`} className="centered-text-cell__expand" ref={opener}
@@ -59,7 +63,7 @@ export function CenteredTextCell({ label, value, onChange }: Props) {
         onCancel={() => setExpanded(undefined)} onClick={event => event.stopPropagation()}
         onKeyDown={event => event.stopPropagation()} onPaste={event => event.stopPropagation()}>
         <h2>编辑完整文字</h2>
-        <textarea aria-label="完整文字" ref={expandedInput} rows={9} value={expanded.draft}
+        <textarea style={{ fontSize: textSize, textAlign: alignment === "center" ? "center" : "left" }} aria-label="完整文字" ref={expandedInput} rows={9} value={expanded.draft}
           onChange={event => setExpanded({ ...expanded, draft: event.target.value })} />
         {value !== expanded.original ? <p role="alert">原单元格已更新。请取消后重新打开，避免覆盖新内容。</p> : null}
         <div className="expanded-text-editor__actions">

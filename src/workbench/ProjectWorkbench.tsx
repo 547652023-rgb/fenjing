@@ -1052,6 +1052,8 @@ export function ProjectWorkbench({
         <StoryboardTable
           onExportScopeChange={setExportScope}
           imageDensityKey={`fenjing.storyboard-image-density.v1:${user.id}:${projectId}`}
+          displaySettingsKey={`fenjing.storyboard-display.v1:${user.id}:${projectId}`}
+          onOpenProjectSettings={() => setShowProjectSettings(true)}
           imageActions={imageActions}
           onBatchCopy={copySelectedShots}
           onBatchDelete={stageShotDeletion}

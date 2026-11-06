@@ -15,9 +15,9 @@
 
 ## Tasks and verification
 1. [x] Image ratio: failing geometry/upload regressions, generalized positive ratio crop, valid presets/custom handling, ImageCell props and table linkage; test portrait/square/cinematic, invalid/legacy ratios, original reference files and bounded decoding.
-2. [ ] Table text size: failing UI preference/remount test; guarded per-project storage and control; verify real cell styles, independent PDF text size and full-text modal behavior.
-3. [ ] Alignment: failing centered/left/upper-left test; apply horizontal and vertical positioning to plain/multiline fields, keep expanded editor readable; verify long text is not clipped.
-4. [ ] Image fit: failing contain/cover switch test; link CSS to preferences for all image cells, persisted and isolated by project.
+2. [x] Table text size: failing UI preference/remount test; guarded per-project storage and control; verify real cell styles, independent PDF text size and full-text modal behavior.
+3. [x] Alignment: failing centered/left/upper-left test; apply horizontal and vertical positioning to plain/multiline fields, keep expanded editor readable; verify long text is not clipped.
+4. [x] Image fit: failing contain/cover switch test; link CSS to preferences for all image cells, persisted and isolated by project.
 5. [ ] Export maximum columns: fail tests first; group overflow labeled fields and images into other while preserving order/data and pagination; PDF preview/actual file and Excel export tests.
 6. [ ] Export header color: fail tests first; color validation/normalization, PDF/Excel header rendering and UI; preview invalidation and cancellation regression tests.
 
@@ -37,3 +37,5 @@
 - Branch `feature/storyboard-reference-settings` from `93058c3`; baseline 47 files / 373 tests passed.
 
 - Task1 RED: portrait upload still cropped16:9, ratio slots unchanged, invalid ratios accepted. GREEN: 5 files / 93 tests passed. New frame processing and table previews follow ratio; malformed legacy ratios display16:9 safely; reference bytes preserved.
+
+- Tasks2–4 RED: five display user stories initially failed without controls; keyboard dismissal regression also failed before fix. GREEN: display/table/reference/workbench/image/style tests passed (6 files / 119 tests including shared-ratio integration). Preferences persist per user/project, invalid/unavailable storage falls back, upper-left/left/center and font sizes apply to expanded editor too. Fixed-position anchored disclosure avoids table clipping.

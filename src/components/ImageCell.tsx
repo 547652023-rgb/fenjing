@@ -10,6 +10,7 @@ type SharedImageCellProps = {
   compact?: boolean;
   prepareFrame?: boolean;
   aspectRatio?: string;
+  imageFit?: "contain" | "cover";
 };
 
 type LocalImageCellProps = SharedImageCellProps & {
@@ -94,6 +95,7 @@ function LocalImageCell({
   maxImages = 1,
   compact,
   aspectRatio,
+  imageFit,
   onChange,
 }: LocalImageCellProps) {
   const busy = useRef(false);
@@ -137,6 +139,7 @@ function LocalImageCell({
     <ImageCellLayout
       compact={compact}
       aspectRatio={aspectRatio}
+      imageFit={imageFit}
       error={error}
       images={images.map((url, position) => ({
         key: `${url.slice(0, 48)}-${position}`,
@@ -157,6 +160,7 @@ function OnlineImageCell({
   compact,
   prepareFrame = true,
   aspectRatio,
+  imageFit,
   onPendingChange,
   onUpload,
   onRemove,
@@ -262,6 +266,7 @@ function OnlineImageCell({
     <ImageCellLayout
       compact={compact}
       aspectRatio={aspectRatio}
+      imageFit={imageFit}
       error={error || limitWarning}
       images={visibleImages.map((image) => ({ key: image.path, url: image.url }))}
       label={label}
@@ -278,6 +283,7 @@ function OnlineImageCell({
 
 type ImageCellLayoutProps = {
   aspectRatio?: string;
+  imageFit?: "contain" | "cover";
   compact?: boolean;
   error: string;
   images: Array<{ key: string; url: string }>;
@@ -294,6 +300,7 @@ type ImageCellLayoutProps = {
 function ImageCellLayout({
   compact,
   aspectRatio,
+  imageFit,
   error,
   images,
   label,
@@ -342,7 +349,7 @@ function ImageCellLayout({
                 key={image.key}
                 style={{ aspectRatio: ratio }}
               >
-                <img alt={imageLabel} className="image-cell__preview" src={image.url} />
+                <img alt={imageLabel} className="image-cell__preview" style={{ objectFit: imageFit ?? "contain" }} src={image.url} />
                 <button
                   aria-label={`移除${imageLabel}`}
                   className="image-cell__remove"
