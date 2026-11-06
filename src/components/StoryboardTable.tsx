@@ -252,9 +252,11 @@ export function StoryboardTable({
   });
 
   useEffect(() => {
-    setSelectedShotIds((current) =>
-      current.filter((shotId) => filteredShots.some((shot) => shot.id === shotId)),
-    );
+    const existingIds = new Set(project.shots.map(shot => shot.id));
+    setSelectedShotIds(current => {
+      const next = current.filter(shotId => existingIds.has(shotId));
+      return next.length === current.length ? current : next;
+    });
   }, [project.shots]);
 
   useEffect(() => {

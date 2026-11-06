@@ -715,3 +715,33 @@ it.each([false, true])("reports skipped cells when undoing after subsequent edit
   expect(screen.getByText(all ? "已撤销 0 个单元格，跳过 2 个已修改或删除的单元格" : "已撤销 1 个单元格，跳过 1 个已修改或删除的单元格")).toBeVisible();
   expect(screen.getByLabelText("备注-1")).toHaveValue(all ? "后续备注" : "");
 });
+
+it("preserves hidden selected shots through unrelated edits and prunes only deleted shots", async () => {
+  const project = addShot(createProject());
+  project.shots[0].values.productionStatus = "已完成";
+  project.shots[1].values.productionStatus = "待制作";
+  const onBatchCopy = vi.fn();
+  const onExportScopeChange = vi.fn();
+  function StatefulTable() {
+    const [current, setCurrent] = useState(project);
+    return <>
+      <button onClick={() => setCurrent(previous => ({ ...previous, shots: previous.shots.filter(shot => shot.id !== "1") }))}>模拟远端删除</button>
+      <StoryboardTable project={current} onChange={update => setCurrent(previous => typeof update === "function" ? update(previous) : update)}
+        onBatchCopy={onBatchCopy} onExportScopeChange={onExportScopeChange} />
+    </>;
+  }
+  const user = userEvent.setup();
+  render(<StatefulTable />);
+  await user.click(screen.getByRole("checkbox", { name: "选择镜头 1" }));
+  await user.click(screen.getByRole("button", { name: /制作概览/ }));
+  await user.click(screen.getByRole("button", { name: /待制作/ }));
+  expect(screen.queryByLabelText("内容-1")).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("内容-2"), { target: { value: "只编辑可见的第二镜头" } });
+  expect(screen.getByRole("toolbar", { name: "批量操作" })).toHaveTextContent("已选择 1 个镜头");
+  expect(onExportScopeChange).toHaveBeenLastCalledWith({ filteredShotIds: ["2"], selectedShotIds: ["1"] });
+  await user.click(screen.getByRole("button", { name: "复制镜头" }));
+  expect(onBatchCopy).toHaveBeenLastCalledWith(["1"]);
+  await user.click(screen.getByRole("button", { name: "模拟远端删除" }));
+  expect(screen.queryByRole("toolbar", { name: "批量操作" })).not.toBeInTheDocument();
+  expect(onExportScopeChange).toHaveBeenLastCalledWith({ filteredShotIds: ["2"], selectedShotIds: [] });
+});
