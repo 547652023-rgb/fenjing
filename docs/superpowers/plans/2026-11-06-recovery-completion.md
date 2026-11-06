@@ -44,3 +44,5 @@
 - Branch starts at `2fcdb6b`; baseline: 47 files / 350 tests passed.
 - Task 1: RED reproduced closed/lost form on failed and pending writes; GREEN: 3 files / 96 tests passed. Scene form now awaits save, retains failure input and prevents duplicate submissions.
 - Execution: independent Excel implementation delegated in parallel; source ownership is disjoint from workbench/table repairs.
+
+- Task 3: RED reproduced no timeout/retry/back and stalled reload retaining the old notice. GREEN: 2 files / 50 tests passed. Reads now have a 20-second deadline and invalidation; retry succeeds and late/unmounted results do not replace state or initiate normalization.
