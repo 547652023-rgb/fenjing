@@ -4,6 +4,12 @@ import { jpegOrientation, orientedImageMatrix } from "./imageGeometry";
 import {
   buildExportModel,
   exportFilename,
+  groupExportColumns,
+  exportCellFlow,
+  flowUnitHeight,
+  takeFlowSegment,
+  normalizeExportHeaderColor,
+  type ExportFlowUnit,
   type ExportOptions,
   type ExportModel,
   type ExportRow,
@@ -31,6 +37,7 @@ export type PdfLayoutRow = ExportRow & {
   height: number;
   cellLines: string[][];
   showImages: boolean;
+  cellFlows?: ExportFlowUnit[][];
 };
 
 export type PdfLayoutPage = { rows: PdfLayoutRow[] };
@@ -150,6 +157,33 @@ export function buildPdfLayout(
   };
 
   for (const row of model.rows) {
+    if (row.cells.some(cell => cell.parts)) {
+      const flows = row.cells.map((cell, index) => exportCellFlow(cell, text => wrapText(text, Math.max(1, widths[index] - TEXT_PADDING * 2), measureText)));
+      const flowHeight = (flow: ExportFlowUnit[]) => flow.reduce((height, unit) => height + flowUnitHeight(unit, lineHeight, imageHeight), TEXT_PADDING * 2);
+      const fullHeight = Math.max(baseHeight, ...flows.map(flowHeight));
+      if (fullHeight <= capacity()) {
+        if (page.rows.length && usedHeight + fullHeight > capacity()) finishPage();
+        page.rows.push({ ...row, height: fullHeight, cellFlows: flows, cellLines: [], showImages: true });
+        usedHeight += fullHeight;
+      } else {
+        const offsets = flows.map(() => 0);
+        do {
+          if (page.rows.length) finishPage();
+          const segments = flows.map((flow, index) => takeFlowSegment(flow, offsets[index], capacity() - TEXT_PADDING * 2, lineHeight, imageHeight));
+          segments.forEach((segment, index) => { offsets[index] += segment.length; });
+          // Keep the shot number visible on continuation pages.
+          if (offsets.some((offset, index) => offset > segments[index].length)) model.fields.forEach((field, index) => {
+            if (field.id === "shotNumber" && !segments[index].length) segments[index] = takeFlowSegment(flows[index], 0, capacity() - TEXT_PADDING * 2, lineHeight, imageHeight);
+          });
+          const height = Math.max(TEXT_ROW_HEIGHT, ...segments.map(flowHeight));
+          page.rows.push({ ...row, height, cellFlows: segments, cellLines: [], showImages: true });
+          usedHeight += height;
+          if (offsets.every((offset, index) => offset >= flows[index].length)) break;
+          finishPage();
+        } while (true);
+      }
+      continue;
+    }
     const allCellLines = model.fields.map((field, index) => {
       if (field.type === "image") return [];
       return wrapText(
@@ -352,6 +386,7 @@ export async function renderPdfPages(
   dependencies: PdfRenderDependencies = {},
   options: ExportOptions = {},
 ): Promise<PdfPageImage[]> {
+  model = groupExportColumns(model, options.maxColumns);
   const createCanvas = dependencies.createCanvas ?? createBrowserCanvas;
   const loadImage = dependencies.loadImage ?? loadRemoteImage;
   const firstCanvas = createCanvas(PAGE_WIDTH * RENDER_SCALE, PAGE_HEIGHT * RENDER_SCALE);
@@ -410,7 +445,7 @@ export async function renderPdfPages(
     let x = PAGE_MARGIN;
     layout.fields.forEach((field, index) => {
       const width = widths[index];
-      context.fillStyle = "#15803d";
+      context.fillStyle = normalizeExportHeaderColor(options.headerColor);
       context.fillRect(x, y, width, HEADER_HEIGHT);
       context.strokeStyle = "#374151";
       context.lineWidth = 1;
@@ -430,7 +465,16 @@ export async function renderPdfPages(
         const field = layout.fields[index];
         const width = widths[index];
         const cell = row.cells[index];
-        if (field.type === "image") {
+        if (row.cellFlows) {
+          const flow = row.cellFlows[index];
+          const totalHeight = flow.reduce((sum, unit) => sum + flowUnitHeight(unit, TEXT_LINE_HEIGHT, IMAGE_ROW_HEIGHT), 0);
+          let top = y + (row.height - totalHeight) / 2;
+          for (const unit of flow) {
+            if (unit.kind === "image") await drawImageCell(context, [unit.image], x, top, width, IMAGE_ROW_HEIGHT, loadImage);
+            else drawTextLines(context, [unit.text], x, top - TEXT_PADDING, textRuns);
+            top += flowUnitHeight(unit, TEXT_LINE_HEIGHT, IMAGE_ROW_HEIGHT);
+          }
+        } else if (field.type === "image") {
           if (row.showImages) {
             await drawImageCell(context, cell?.images ?? [], x, y, width, row.height, loadImage);
           }
@@ -579,7 +623,7 @@ export async function createStoryboardPdf(
   render?: PdfRenderer,
 ): Promise<Blob> {
   const exportProject = options.documentLabel ? { ...project, title: `${project.title} · ${options.documentLabel}` } : project;
-  const model = buildExportModel(exportProject);
+  const model = buildExportModel(exportProject, options);
   const output = render ? encodePdfPages(await render(model, options)) : await buildVectorPdf(model, options);
   return new Blob([new Uint8Array(output)], { type: "application/pdf" });
 }
@@ -637,6 +681,7 @@ export async function buildVectorPdf(
   options: ExportOptions = {},
   dependencies: VectorPdfDependencies = {},
 ): Promise<Uint8Array> {
+  model = groupExportColumns(model, options.maxColumns);
   const [{ PDFDocument, rgb, pushGraphicsState, popGraphicsState, concatTransformationMatrix }, { default: fontkit }, fontBytes] = await Promise.all([
     import("pdf-lib"), import("@pdf-lib/fontkit"), dependencies.fontBytes ?? loadPdfFont(options.signal),
   ]);
@@ -723,7 +768,7 @@ export async function buildVectorPdf(
     let x = PAGE_MARGIN;
     for (const [index, field] of layout.fields.entries()) {
       const width = widths[index];
-      rectangle(x, y, width, headerHeight, "#15803d", "#374151");
+      rectangle(x, y, width, headerHeight, normalizeExportHeaderColor(options.headerColor), "#374151");
       const lines = headerLines[index];
       lines.forEach((line, lineIndex) => text(line, x + width / 2, y + (headerHeight - lines.length * (fontSize + 2)) / 2 + fontSize - 1 + lineIndex * (fontSize + 2), fontSize, "#ffffff", true));
       x += width;
@@ -734,7 +779,22 @@ export async function buildVectorPdf(
       x = PAGE_MARGIN;
       for (const [index, field] of layout.fields.entries()) {
         const width = widths[index];
-        if (field.type === "image" && row.showImages) {
+        if (row.cellFlows) {
+          const flow = row.cellFlows[index];
+          const flowHeight = flow.reduce((sum, unit) => sum + flowUnitHeight(unit, lineHeight, imageHeight), 0);
+          let top = y + (row.height - flowHeight) / 2;
+          for (const unit of flow) {
+            if (unit.kind === "image") {
+              try { picture(await load(unit.image.url), x + TEXT_PADDING, top + TEXT_PADDING, width - TEXT_PADDING * 2, imageHeight - TEXT_PADDING * 2); }
+              catch {
+                options.signal?.throwIfAborted();
+                options.onImageError?.(unit.image.url);
+                text("图片加载失败", x + width / 2, top + imageHeight / 2, 13, "#b91c1c", true);
+              }
+            } else text(unit.text, x + width / 2, top + lineHeight / 2 + bodyBaselineOffset, fontSize, "#111827", true);
+            top += flowUnitHeight(unit, lineHeight, imageHeight);
+          }
+        } else if (field.type === "image" && row.showImages) {
           const images = row.cells[index]?.images ?? [];
           const stackY = y + (row.height - imageHeight * images.length) / 2;
           for (const [slot, image] of images.entries()) {

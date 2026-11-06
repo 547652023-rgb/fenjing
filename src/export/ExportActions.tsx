@@ -4,7 +4,7 @@ import { projectWithColumnPresentation, type ColumnPresentation } from "../domai
 import type { StoryboardProject } from "../domain/storyboard";
 import { createStoryboardExcel } from "./excelExport";
 import { createStoryboardPdf, exportStoryboardPdf } from "./pdfExport";
-import { exportFilename, type ExportLogo, type ExportOptions, type PdfSettings } from "./storyboardExport";
+import { EXPORT_HEADER_COLORS, exportFilename, normalizeExportHeaderColor, type ExportHeaderColor, type ExportLogo, type ExportOptions, type PdfSettings } from "./storyboardExport";
 import { downloadBlob } from "./download";
 import defaultLogoUrl from "../assets/dapaidang-logo.png";
 
@@ -50,6 +50,8 @@ export function ExportActions({
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
   const [logo, setLogo] = useState<ExportLogo | undefined>();
+  const [maxColumns, setMaxColumns] = useState<number>();
+  const [headerColor, setHeaderColor] = useState<ExportHeaderColor>("#15803d");
 
   const [pdf, setPdf] = useState<PdfSettings>({ orientation: "landscape", textSize: 14, imageHeight: 144 });
   const [showPdfSettings, setShowPdfSettings] = useState(false);
@@ -84,10 +86,11 @@ export function ExportActions({
       ...field, visible: selectedColumns.includes(field.id), order: selectedColumns.indexOf(field.id),
     })),
   } : deliveryProject;
-  const pdfOptions = { logo: logo ?? defaultLogo, documentLabel, pdf };
+  const sharedOptions = { logo: logo ?? defaultLogo, documentLabel, maxColumns, headerColor };
+  const pdfOptions = { ...sharedOptions, pdf };
   const previewKey = open ? JSON.stringify([pdfProject, pdfOptions]) : "";
   const currentPreview = preview?.key === previewKey ? preview : undefined;
-  const workbookKey = open ? JSON.stringify([deliveryProject, logo ?? defaultLogo, documentLabel]) : "";
+  const workbookKey = open ? JSON.stringify([deliveryProject, sharedOptions]) : "";
   const currentWorkbook = workbook?.key === workbookKey ? workbook : undefined;
 
   useEffect(() => {
@@ -122,7 +125,7 @@ export function ExportActions({
     setExcelError("");
     setWorkbook(undefined);
     const missing = new Set<string>();
-    const options = { logo: logo ?? defaultLogo, documentLabel, signal: controller.signal, onImageError: (url: string) => { missing.add(url); } };
+    const options = { ...sharedOptions, signal: controller.signal, onImageError: (url: string) => { missing.add(url); } };
     try {
       const filename = exportFilename(project, "xlsx", new Date(), documentLabel);
       if (exportExcel) {
@@ -283,6 +286,19 @@ export function ExportActions({
             <input disabled={active !== null || isPreviewing} aria-label="本次导出 Logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => chooseLogo(event.currentTarget.files?.[0])} />
           </label>
           <div className="export-dialog__logo-preview"><img src={logo?.url ?? defaultLogo.url} alt="Logo 预览" /><span>{logo?.name ?? defaultLogo.name}</span>{logo ? <button className="button-quiet" disabled={active !== null || isPreviewing} type="button" onClick={() => setLogo(undefined)}>恢复默认 Logo</button> : null}</div>
+          <div className="export-pdf-settings">
+            <fieldset disabled={active !== null || isPreviewing}>
+              <legend>表格设置（PDF / Excel）</legend>
+              <label>最多显示列数<select value={maxColumns ?? ""} onChange={event => setMaxColumns(event.target.value ? Number(event.target.value) : undefined)}>
+                <option value="">不限制</option>
+                {Array.from({ length: 11 }, (_, index) => index + 4).map(value => <option key={value} value={value}>{value} 列</option>)}
+              </select></label>
+              <label>表头颜色<select value={headerColor} onChange={event => setHeaderColor(normalizeExportHeaderColor(event.target.value))}>
+                {EXPORT_HEADER_COLORS.map(color => <option key={color.value} value={color.value}>{color.label}</option>)}
+              </select></label>
+              {maxColumns ? <p>超出的列会合并到“其他”，保留字段名称、文字和图片。</p> : null}
+            </fieldset>
+          </div>
           <details className="export-pdf-settings" open={showPdfSettings} onToggle={event => setShowPdfSettings(event.currentTarget.open)}>
             <summary>PDF 排版与预览</summary>
             <fieldset disabled={active !== null || isPreviewing}>

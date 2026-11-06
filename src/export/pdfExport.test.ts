@@ -44,6 +44,24 @@ function createPdfProject(): StoryboardProject {
   };
 }
 
+it("bounds grouped continuation rows even when the shot number itself is unusually long", () => {
+  const project = createPdfProject();
+  project.fields.push({ id: "notes", label: "备注", type: "text", visible: true, order: 4 }, { id: "extra", label: "补充", type: "text", visible: true, order: 5 });
+  project.shots = [project.shots[0]];
+  project.shots[0].values = { shotNumber: "一".repeat(1000), notes: "长说明".repeat(2000) };
+  const layout = buildPdfLayout(buildExportModel(project, { maxColumns: 4 }));
+  layout.pages.forEach((page, index) => expect(page.rows.reduce((height, row) => height + row.height, 0)).toBeLessThanOrEqual(index === 0 ? 610 : 638));
+});
+
+it("keeps the selected image row height for empty photo columns after grouping", () => {
+  const project = createPdfProject();
+  project.fields.find(field => field.id === "reference")!.visible = true;
+  project.fields.push({ id: "notes", label: "备注", type: "text", visible: true, order: 5 });
+  project.shots = [{ id: "empty", values: {} }];
+  const layout = buildPdfLayout(buildExportModel(project, { maxColumns: 4 }), undefined, undefined, { orientation: "landscape", textSize: 14, imageHeight: 184 });
+  expect(layout.pages[0].rows[0].height).toBe(184);
+});
+
 it("exports high-resolution pages and vertically centers the first photo in a tall row", async () => {
   const drawImage = vi.fn();
   const context = { fillStyle: "", strokeStyle: "", lineWidth: 1, font: "", textAlign: "start", textBaseline: "alphabetic", fillRect: vi.fn(), strokeRect: vi.fn(), fillText: vi.fn(), drawImage, scale: vi.fn(), measureText: (text: string) => ({ width: text.length * 8 }) };

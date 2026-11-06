@@ -4,6 +4,7 @@ import { afterEach, vi } from "vitest";
 import { createProject } from "../domain/storyboard";
 import * as download from "./download";
 import { ExportActions } from "./ExportActions";
+import type { ExportOptions } from "./storyboardExport";
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
@@ -16,6 +17,64 @@ function deferred<T>() {
   });
   return { promise, resolve, reject };
 }
+
+it("applies the shared column limit and header color to Excel and regenerates a changed PDF preview", async () => {
+  const project = createProject();
+  const first = new Blob(["first"], { type: "application/pdf" });
+  const second = new Blob(["second"], { type: "application/pdf" });
+  const createPdfPreview = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+  const exportExcel = vi.fn(async (_project: ReturnType<typeof createProject>, _options?: ExportOptions) => {});
+  const save = vi.spyOn(download, "downloadBlob").mockImplementation(() => {});
+  const user = userEvent.setup();
+  render(<ExportActions project={project} createPdfPreview={createPdfPreview} exportExcel={exportExcel} />);
+  await user.click(screen.getByRole("button", { name: "导出文件" }));
+  const limit = screen.getByLabelText("最多显示列数");
+  expect(within(limit).getAllByRole("option").map(option => (option as HTMLOptionElement).value)).toEqual(["", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"]);
+  await user.selectOptions(limit, "4");
+  await user.click(screen.getByText("PDF 排版与预览"));
+  await user.click(screen.getByRole("button", { name: "生成 PDF 预览" }));
+  expect(await screen.findByTitle("分镜 PDF 分页预览")).toBeVisible();
+  expect(createPdfPreview.mock.calls[0][1]).toMatchObject({ maxColumns: 4, headerColor: "#15803d" });
+  await user.selectOptions(screen.getByLabelText("表头颜色"), "#1e3a5f");
+  expect(screen.queryByTitle("分镜 PDF 分页预览")).not.toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent("设置已变更");
+  await user.click(screen.getByRole("button", { name: "生成 PDF 预览" }));
+  expect(await screen.findByTitle("分镜 PDF 分页预览")).toBeVisible();
+  expect(createPdfPreview.mock.calls[1][1]).toMatchObject({ maxColumns: 4, headerColor: "#1e3a5f" });
+  await user.click(screen.getByRole("button", { name: "导出 PDF" }));
+  expect(save.mock.calls[0][0]).toBe(second);
+  expect(createPdfPreview).toHaveBeenCalledTimes(2);
+  await user.click(screen.getByRole("button", { name: "导出文件" }));
+  await user.click(screen.getByRole("button", { name: "导出 Excel" }));
+  expect(exportExcel.mock.calls[0][1]).toMatchObject({ maxColumns: 4, headerColor: "#1e3a5f" });
+});
+
+it("invalidates a reviewed Excel workbook after either shared setting changes", async () => {
+  const blobs = [new Blob(["one"]), new Blob(["two"]), new Blob(["three"])];
+  const options: ExportOptions[] = [];
+  const createExcel = async (_project: ReturnType<typeof createProject>, value: ExportOptions = {}) => {
+    options.push(value);
+    value.onImageError?.("missing");
+    return blobs[options.length - 1];
+  };
+  const save = vi.spyOn(download, "downloadBlob").mockImplementation(() => {});
+  const user = userEvent.setup();
+  render(<ExportActions project={createProject()} createExcel={createExcel} />);
+  await user.click(screen.getByRole("button", { name: "导出文件" }));
+  await user.selectOptions(screen.getByLabelText("最多显示列数"), "4");
+  await user.click(screen.getByRole("button", { name: "导出 Excel" }));
+  expect(await screen.findByRole("button", { name: "下载含缺图标记的 Excel" })).toBeEnabled();
+  await user.selectOptions(screen.getByLabelText("最多显示列数"), "5");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "导出 Excel" }));
+  expect(await screen.findByRole("button", { name: "下载含缺图标记的 Excel" })).toBeEnabled();
+  await user.selectOptions(screen.getByLabelText("表头颜色"), "#7f1d1d");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "导出 Excel" }));
+  await user.click(await screen.findByRole("button", { name: "下载含缺图标记的 Excel" }));
+  expect(options.map(option => [option.maxColumns, option.headerColor])).toEqual([[4, "#15803d"], [5, "#15803d"], [5, "#7f1d1d"]]);
+  expect(save.mock.calls[0][0]).toBe(blobs[2]);
+});
 
 it("opens export settings and passes a temporary logo to the selected exporter", async () => {
   const project = createProject();

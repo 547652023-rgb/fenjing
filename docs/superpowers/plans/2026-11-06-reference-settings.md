@@ -18,8 +18,8 @@
 2. [x] Table text size: failing UI preference/remount test; guarded per-project storage and control; verify real cell styles, independent PDF text size and full-text modal behavior.
 3. [x] Alignment: failing centered/left/upper-left test; apply horizontal and vertical positioning to plain/multiline fields, keep expanded editor readable; verify long text is not clipped.
 4. [x] Image fit: failing contain/cover switch test; link CSS to preferences for all image cells, persisted and isolated by project.
-5. [ ] Export maximum columns: fail tests first; group overflow labeled fields and images into other while preserving order/data and pagination; PDF preview/actual file and Excel export tests.
-6. [ ] Export header color: fail tests first; color validation/normalization, PDF/Excel header rendering and UI; preview invalidation and cancellation regression tests.
+5. [x] Export maximum columns: fail tests first; group overflow labeled fields and images into other while preserving order/data and pagination; PDF preview/actual file and Excel export tests.
+6. [x] Export header color: fail tests first; color validation/normalization, PDF/Excel header rendering and UI; preview invalidation and cancellation regression tests.
 
 ## Review focus
 - Non-16:9 project switching must change the actual image slot and new uploads; malformed historical ratios must not produce broken CSS or huge canvases.
@@ -39,3 +39,6 @@
 - Task1 RED: portrait upload still cropped16:9, ratio slots unchanged, invalid ratios accepted. GREEN: 5 files / 93 tests passed. New frame processing and table previews follow ratio; malformed legacy ratios display16:9 safely; reference bytes preserved.
 
 - Tasks2–4 RED: five display user stories initially failed without controls; keyboard dismissal regression also failed before fix. GREEN: display/table/reference/workbench/image/style tests passed (6 files / 119 tests including shared-ratio integration). Preferences persist per user/project, invalid/unavailable storage falls back, upper-left/left/center and font sizes apply to expanded editor too. Fixed-position anchored disclosure avoids table clipping.
+
+- Tasks5–6 RED→GREEN: grouping, real PDF streams and Excel XML keep all10 overflow images, zero/multiline/long text, continuation heights, header allowlist, preview regeneration and same-Blob download. Targeted export tests: 103 passed.
+- Whole branch: 48 files / 409 tests passed; production build and detector/diff checks passed. Existing Vite config/chunk-size warnings remain.
