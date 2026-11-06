@@ -1,3 +1,5 @@
+import { imageAspectRatio } from "../domain/aspectRatio";
+
 export type ImageCrop = {
   sx: number;
   sy: number;
@@ -5,18 +7,23 @@ export type ImageCrop = {
   sh: number;
 };
 
-const FRAME_RATIO = 16 / 9;
 const MAX_FRAME_EDGE = 1920;
 const DEFAULT_DECODE_TIMEOUT_MS = 1500;
 
-export function cropToSixteenByNine(width: number, height: number): ImageCrop {
-  if (width / height > FRAME_RATIO) {
-    const sw = height * FRAME_RATIO;
+export function cropToAspectRatio(width: number, height: number, aspectRatio = "16:9"): ImageCrop {
+  const ratio = imageAspectRatio(aspectRatio);
+  const frameRatio = ratio.width / ratio.height;
+  if (width / height > frameRatio) {
+    const sw = height * frameRatio;
     return { sx: (width - sw) / 2, sy: 0, sw, sh: height };
   }
 
-  const sh = width / FRAME_RATIO;
+  const sh = width / frameRatio;
   return { sx: 0, sy: (height - sh) / 2, sw: width, sh };
+}
+
+export function cropToSixteenByNine(width: number, height: number): ImageCrop {
+  return cropToAspectRatio(width, height);
 }
 
 function jpegFileName(name: string): string {
@@ -57,12 +64,13 @@ async function loadBitmap(file: File, timeoutMs: number): Promise<ImageBitmap> {
 export async function prepareStoryboardFrame(
   file: File,
   decodeTimeoutMs = DEFAULT_DECODE_TIMEOUT_MS,
+  aspectRatio = "16:9",
 ): Promise<File> {
   try {
     const bitmap = await loadBitmap(file, decodeTimeoutMs);
     try {
-      const crop = cropToSixteenByNine(bitmap.width, bitmap.height);
-      const scale = Math.min(1, MAX_FRAME_EDGE / crop.sw);
+      const crop = cropToAspectRatio(bitmap.width, bitmap.height, aspectRatio);
+      const scale = Math.min(1, MAX_FRAME_EDGE / Math.max(crop.sw, crop.sh));
       const outputWidth = Math.max(1, Math.round(crop.sw * scale));
       const outputHeight = Math.max(1, Math.round(crop.sh * scale));
       const canvas = document.createElement("canvas");

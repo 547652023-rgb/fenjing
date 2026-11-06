@@ -1059,6 +1059,7 @@ export function StoryboardTable({
                     {field.type === "image" && imageActions ? (
                       <ImageCell
                         compact={compactImages}
+                        aspectRatio={project.aspectRatio}
                         prepareFrame={field.id === "frame"}
                         images={parseRemoteImages(shot.values[field.id] ?? "")}
                         label={`${field.label}-${shot.id}`}
@@ -1084,6 +1085,7 @@ export function StoryboardTable({
                     ) : field.type === "image" ? (
                       <ImageCell
                         compact={compactImages}
+                        aspectRatio={project.aspectRatio}
                         label={`${field.label}-${shot.id}`}
                         maxImages={maxImagesFor(field)}
                         value={shot.values[field.id] ?? ""}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { GatewayError } from "../data/gateway";
 import type { RemoteImage } from "../domain/models";
+import { imageAspectRatio } from "../domain/aspectRatio";
 import { prepareStoryboardFrame } from "../images/prepareStoryboardImage";
 
 type SharedImageCellProps = {
@@ -8,6 +9,7 @@ type SharedImageCellProps = {
   maxImages?: number;
   compact?: boolean;
   prepareFrame?: boolean;
+  aspectRatio?: string;
 };
 
 type LocalImageCellProps = SharedImageCellProps & {
@@ -91,6 +93,7 @@ function LocalImageCell({
   label,
   maxImages = 1,
   compact,
+  aspectRatio,
   onChange,
 }: LocalImageCellProps) {
   const busy = useRef(false);
@@ -133,6 +136,7 @@ function LocalImageCell({
   return (
     <ImageCellLayout
       compact={compact}
+      aspectRatio={aspectRatio}
       error={error}
       images={images.map((url, position) => ({
         key: `${url.slice(0, 48)}-${position}`,
@@ -152,6 +156,7 @@ function OnlineImageCell({
   maxImages = 1,
   compact,
   prepareFrame = true,
+  aspectRatio,
   onPendingChange,
   onUpload,
   onRemove,
@@ -224,7 +229,7 @@ function OnlineImageCell({
     setPreparing(true);
     try {
       const prepared = await Promise.all(
-        accepted.map((file) => maxImages > 1 && prepareFrame ? prepareStoryboardFrame(file) : file),
+        accepted.map((file) => maxImages > 1 && prepareFrame ? prepareStoryboardFrame(file, undefined, aspectRatio) : file),
       );
       setPreparing(false);
       await uploadFiles(prepared);
@@ -256,6 +261,7 @@ function OnlineImageCell({
   return (
     <ImageCellLayout
       compact={compact}
+      aspectRatio={aspectRatio}
       error={error || limitWarning}
       images={visibleImages.map((image) => ({ key: image.path, url: image.url }))}
       label={label}
@@ -271,6 +277,7 @@ function OnlineImageCell({
 }
 
 type ImageCellLayoutProps = {
+  aspectRatio?: string;
   compact?: boolean;
   error: string;
   images: Array<{ key: string; url: string }>;
@@ -286,6 +293,7 @@ type ImageCellLayoutProps = {
 
 function ImageCellLayout({
   compact,
+  aspectRatio,
   error,
   images,
   label,
@@ -301,6 +309,7 @@ function ImageCellLayout({
   const canExpand = compact && images.length > 1;
   const previews = canExpand && !expanded ? images.slice(0, 1) : images;
   const occupiedCount = images.length + pendingNames.length;
+  const ratio = imageAspectRatio(aspectRatio).css;
   return (
     <div
       className={`image-cell ${
@@ -322,6 +331,7 @@ function ImageCellLayout({
       {images.length > 0 ? (
         <div
           className="image-cell__previews image-cell__previews--vertical"
+          style={maxImages === 1 ? { aspectRatio: ratio } : undefined}
           data-testid="image-cell-previews"
         >
           {previews.map((image, index) => {
@@ -330,6 +340,7 @@ function ImageCellLayout({
               <div
                 className={`image-cell__item ${maxImages > 1 ? "image-cell__item--frame image-cell__item--thumbnail" : ""}`}
                 key={image.key}
+                style={{ aspectRatio: ratio }}
               >
                 <img alt={imageLabel} className="image-cell__preview" src={image.url} />
                 <button

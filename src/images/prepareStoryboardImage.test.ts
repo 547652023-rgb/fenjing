@@ -43,3 +43,22 @@ it("releases a decoded bitmap that finishes after the decoding deadline", async 
     vi.unstubAllGlobals();
   }
 });
+
+it("crops new frames to the selected portrait ratio and keeps the full portrait composition", async () => {
+  const drawImage = vi.fn();
+  const close = vi.fn();
+  const nativeCreate = document.createElement.bind(document);
+  vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ width: 900, height: 1600, close })));
+  vi.spyOn(document, "createElement").mockImplementation(((tag: string) => {
+    if (tag !== "canvas") return nativeCreate(tag);
+    return { width: 0, height: 0, getContext: () => ({ drawImage }),
+      toBlob: (callback: BlobCallback) => callback(new Blob(["jpeg"], { type: "image/jpeg" })) } as unknown as HTMLCanvasElement;
+  }) as typeof document.createElement);
+  try {
+    const original = new File(["portrait"], "portrait.png", { type: "image/png" });
+    const prepared = await prepareStoryboardFrame(original, 1500, "9:16");
+    expect(prepared.type).toBe("image/jpeg");
+    expect(drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 900, 1600, 0, 0, 900, 1600);
+    expect(close).toHaveBeenCalledOnce();
+  } finally { vi.restoreAllMocks(); vi.unstubAllGlobals(); }
+});
