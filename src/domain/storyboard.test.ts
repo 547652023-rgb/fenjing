@@ -13,6 +13,7 @@ import {
   getProductionSummary,
   moveField,
   moveShot,
+  normalizeAspectRatio,
   setFieldOptions,
   toggleSceneCollapsed,
   toggleFieldVisibility,
@@ -293,4 +294,14 @@ it("stores project-specific dropdown options while allowing custom values", () =
     options: ["补拍", "待定"],
     allowCustomValue: true,
   });
+});
+
+
+it.each(["0:1", "1:0", "-1:2", "Infinity:1", "1:99999", "不是比例"])("rejects unusable project ratio %s", value => {
+  expect(() => normalizeAspectRatio(value)).toThrow();
+});
+
+it("normalizes full-width and spaced custom frame ratios", () => {
+  expect(normalizeAspectRatio(" ９ ： １６ ")).toBe("9:16");
+  expect(normalizeAspectRatio("2.39 : 1")).toBe("2.39:1");
 });

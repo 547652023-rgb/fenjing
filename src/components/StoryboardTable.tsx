@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   addShot,
   assignShotsToScene,
@@ -18,6 +18,7 @@ import {
 } from "../domain/storyboard";
 import { undoableGridChanges, applyGridChanges, parseClipboardGrid, validateGridValue, type GridChange } from "./storyboardGrid";
 import { ColumnHeader } from "./ColumnHeader";
+import { StoryboardDisplaySettings, useStoryboardDisplay } from "./StoryboardDisplaySettings";
 import { CenteredTextCell } from "./CenteredTextCell";
 import { RowActionMenu } from "./RowActionMenu";
 import { ImageCell } from "./ImageCell";
@@ -62,6 +63,8 @@ export type StoryboardExportScope = {
 type StoryboardTableProps = {
   onExportScopeChange?: (scope: StoryboardExportScope) => void;
   imageDensityKey?: string;
+  displaySettingsKey?: string;
+  onOpenProjectSettings?: () => void;
   project: StoryboardProject;
   onChange: (update: ProjectUpdate) => void;
   imageActions?: StoryboardImageActions;
@@ -142,6 +145,8 @@ export function StoryboardTable({
   onChange,
   imageActions,
   imageDensityKey,
+  displaySettingsKey,
+  onOpenProjectSettings,
   onExportScopeChange,
   onBatchCopy,
   onBatchDelete,
@@ -156,6 +161,7 @@ export function StoryboardTable({
   canSetProjectDefaultView = false,
   onSetProjectDefaultView,
 }: StoryboardTableProps) {
+  const { display, change: changeDisplay } = useStoryboardDisplay(displaySettingsKey ?? `fenjing.storyboard-display.v1:${project.id}`);
   const [overviewOpen, setOverviewOpen] = useState(false);
   const [compactImages, setCompactImages] = useState(() => {
     try {
@@ -631,6 +637,8 @@ export function StoryboardTable({
   return (
     <section
       className="storyboard-panel"
+      data-text-alignment={display.alignment}
+      style={{ "--storyboard-cell-font-size": `${display.textSize}px` } as CSSProperties}
       aria-label="分镜表格区域"
       onKeyDown={handleTableKeyDown}
       onPaste={handleGridPaste}
@@ -639,6 +647,7 @@ export function StoryboardTable({
       <div className="storyboard-toolbar">
         <p>{filteredShots.length === project.shots.length ? `${project.shots.length} 个镜头` : `显示 ${filteredShots.length} / ${project.shots.length} 个镜头`}</p>
         <div className="storyboard-toolbar__actions">
+          <StoryboardDisplaySettings display={display} onChange={changeDisplay} aspectRatio={project.aspectRatio || "16:9"} onOpenProjectSettings={onOpenProjectSettings} />
           <button aria-pressed={compactImages} className="button-quiet" type="button" onClick={toggleImageDensity}>
             紧凑模式
           </button>
@@ -1059,6 +1068,8 @@ export function StoryboardTable({
                     {field.type === "image" && imageActions ? (
                       <ImageCell
                         compact={compactImages}
+                        aspectRatio={project.aspectRatio}
+                        imageFit={display.imageFit}
                         prepareFrame={field.id === "frame"}
                         images={parseRemoteImages(shot.values[field.id] ?? "")}
                         label={`${field.label}-${shot.id}`}
@@ -1084,6 +1095,8 @@ export function StoryboardTable({
                     ) : field.type === "image" ? (
                       <ImageCell
                         compact={compactImages}
+                        aspectRatio={project.aspectRatio}
+                        imageFit={display.imageFit}
                         label={`${field.label}-${shot.id}`}
                         maxImages={maxImagesFor(field)}
                         value={shot.values[field.id] ?? ""}
@@ -1112,6 +1125,8 @@ export function StoryboardTable({
                       />
                     ) : field.type === "text" ? (
                       <CenteredTextCell
+                        textSize={display.textSize}
+                        alignment={display.alignment}
                         label={`${field.label}-${shot.id}`}
                         value={shot.values[field.id] ?? ""}
                         onChange={(value) =>

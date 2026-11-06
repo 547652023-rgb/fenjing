@@ -1,9 +1,60 @@
 import { afterEach, vi } from "vitest";
-import type { ExportModel } from "./storyboardExport";
+import { buildExportModel, type ExportModel } from "./storyboardExport";
 import { buildShootDayXlsxPackage, buildXlsxPackage, exportStoryboardExcel } from "./excelExport";
 import * as download from "./download";
 import { createProject } from "../domain/storyboard";
 import { buildShootDayExportModel } from "./shootDayExport";
+
+it("keeps grouped overflow labels, zero, long text and all photos in four Excel columns", async () => {
+  const project = createProject();
+  project.fields = ["shotNumber", "content", "lens", "frame", "reference", "durationSeconds"].map((id, order) => ({ ...project.fields.find(field => field.id === id)!, visible: true, order }));
+  const photos = Array.from({ length: 5 }, (_, position) => ({ path: `p${position}`, url: `photo${position}`, name: "photo.png", position }));
+  project.fields.push({ id: "notes", label: "备注", type: "text", visible: true, order: 6 });
+  project.shots[0].values = { shotNumber: "7", durationSeconds: "0", frame: JSON.stringify(photos), reference: JSON.stringify(photos), notes: "开始\n" + "长说明".repeat(300) + "\n结束" };
+  const files = await buildXlsxPackage(buildExportModel(project), async () => ({ bytes: validPngBytes(), extension: "png" }), undefined, {}, { maxColumns: 4 });
+  const sheet = new TextDecoder().decode(files.get("xl/worksheets/sheet1.xml"));
+  const xml = new DOMParser().parseFromString(sheet, "application/xml");
+  expect([...xml.querySelectorAll('row[r="4"] t')].map(node => node.textContent)).toEqual(["镜号", "内容", "镜头焦段", "其他"]);
+  expect(sheet).toContain("时长（秒）：0");
+  expect(sheet).toContain("开始");
+  expect(sheet).toContain("结束");
+  const detailsText = [...xml.querySelectorAll("row")].slice(4).flatMap(row => [...row.querySelectorAll("c")].slice(3).map(cell => cell.textContent ?? "")).join("").replace(/\n/g, "");
+  expect((detailsText.match(/长说明/g) ?? [])).toHaveLength(300);
+  expect([...files.keys()].filter(name => name.startsWith("xl/media/image"))).toHaveLength(10);
+  const drawing = new DOMParser().parseFromString(new TextDecoder().decode(files.get("xl/drawings/drawing1.xml")), "application/xml");
+  expect([...drawing.querySelectorAll("col")].map(node => node.textContent)).toEqual(Array(10).fill("3"));
+  expect([...xml.querySelectorAll("row[customHeight]")].every(row => Number(row.getAttribute("ht")) <= 409)).toBe(true);
+});
+
+it.each([["#1E3A5F", "FF1E3A5F"], ["#7f1d1d", "FF7F1D1D"], ["#ffffff", "FF15803D"], [undefined, "FF15803D"]])("uses a validated Excel header fill for %s with white labels", async (headerColor, expected) => {
+  const files = await buildXlsxPackage({ ...model, rows: [] }, undefined, undefined, {}, { headerColor } as any);
+  const styles = new DOMParser().parseFromString(new TextDecoder().decode(files.get("xl/styles.xml")), "application/xml");
+  expect(styles.querySelector('patternFill[patternType="solid"] fgColor')?.getAttribute("rgb")).toBe(expected);
+  expect(styles.querySelector('fonts font color')?.getAttribute("rgb")).toBe("FFFFFFFF");
+});
+
+it("bounds grouped Excel continuation heights when a shot number itself wraps beyond a row", async () => {
+  const project = createProject();
+  project.shots[0].values = { shotNumber: "一".repeat(1000), content: "说明".repeat(2000) };
+  const files = await buildXlsxPackage(buildExportModel(project), undefined, undefined, {}, { maxColumns: 4 });
+  const xml = new DOMParser().parseFromString(new TextDecoder().decode(files.get("xl/worksheets/sheet1.xml")), "application/xml");
+  expect([...xml.querySelectorAll("row[customHeight]")].every(row => Number(row.getAttribute("ht")) <= 409)).toBe(true);
+});
+
+it("aligns grouped Excel labels with their photos when a retained column makes the row taller", async () => {
+  const project = createProject();
+  project.fields = ["shotNumber", "content", "lens"].map((id, order) => ({ ...project.fields.find(field => field.id === id)!, visible: true, order }));
+  project.fields.push({ id: "custom-photo", label: "现场图", type: "image", visible: true, order: 3 }, { id: "notes", label: "备注", type: "text", visible: true, order: 4 });
+  project.shots[0].values = { shotNumber: "1", content: "长段说明\n".repeat(60), "custom-photo": JSON.stringify([{ path: "custom", url: "custom", name: "custom.png", position: 0 }]) };
+  const files = await buildXlsxPackage(buildExportModel(project), async () => ({ bytes: validPngBytes(), extension: "png" }), undefined, {}, { maxColumns: 4 });
+  const sheet = new DOMParser().parseFromString(new TextDecoder().decode(files.get("xl/worksheets/sheet1.xml")), "application/xml");
+  const styles = new DOMParser().parseFromString(new TextDecoder().decode(files.get("xl/styles.xml")), "application/xml");
+  const details = sheet.querySelector('c[r="D5"]')!;
+  const style = [...styles.querySelectorAll("cellXfs > xf")][Number(details.getAttribute("s"))];
+  expect(style.querySelector("alignment")?.getAttribute("vertical")).toBe("top");
+  expect(details.textContent).toContain("现场图：");
+  expect([...files.keys()].filter(name => name.startsWith("xl/media/image"))).toHaveLength(1);
+});
 
 function validPngBytes(): Uint8Array {
   const binary = atob(
@@ -294,7 +345,7 @@ it("builds a workbook with inline text and embedded images", async () => {
     .toContain("_xlnm.Print_Titles");
   expect(sheet).toContain('fitToWidth="1"');
   expect(new TextDecoder().decode(files.get("xl/styles.xml")))
-    .toContain('fgColor rgb="FF000000"');
+    .toContain('fgColor rgb="FF15803D"');
 });
 
 it("keeps the workbook usable when an image fails to load", async () => {

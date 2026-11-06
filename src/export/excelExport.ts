@@ -3,6 +3,13 @@ import { downloadBlob } from "./download";
 import {
   buildExportModel,
   exportFilename,
+  groupExportColumns,
+  exportCellFlow,
+  flowUnitHeight,
+  takeFlowSegment,
+  normalizeExportHeaderColor,
+  type ExportCell,
+  type ExportRow,
   type ExportOptions,
   type ExportModel,
 } from "./storyboardExport";
@@ -34,7 +41,11 @@ type CellAnchor = {
   row: number;
   heightEmu: number;
   images: EmbeddedImage[];
+  widthEmu?: number;
+  imageOffsets?: number[];
 };
+type ExcelCell = ExportCell & { imageOffsets?: number[]; contentHeight?: number };
+type ExcelRow = Omit<ExportRow, "cells"> & { cells: ExcelCell[] };
 
 const encoder = new TextEncoder();
 const CELL_WIDTH_EMU = 2_181_225;
@@ -124,18 +135,46 @@ function wrapSpreadsheetText(text: string, availableWidth: number): string[] {
   return lines;
 }
 
-function rowHeight(row: ExportModel["rows"][number], fields: ExportModel["fields"]): number {
+function rowHeight(row: ExcelRow, fields: ExportModel["fields"]): number {
   const imageCount = Math.max(0, ...row.cells.filter(cell => cell.fieldType === "image").map(cell => cell.images.length));
   const lines = Math.max(1, ...row.cells.filter(cell => cell.fieldType !== "image").map(cell => wrapSpreadsheetText(cell.text, spreadsheetTextWidth(fields.find(field => field.id === cell.fieldId))).length));
-  return Math.max(32, imageCount * IMAGE_SLOT_HEIGHT, 12 + lines * 15);
+  return Math.max(32, imageCount * IMAGE_SLOT_HEIGHT, 12 + lines * 15, ...row.cells.map(cell => cell.contentHeight ?? 0));
 }
 
-function splitExcelRows(model: ExportModel): ExportModel["rows"] {
+function splitExcelRows(model: ExportModel): ExcelRow[] {
   // Excel limits a row to 409 points. Continue oversized cells instead of clipping them.
   const lineCapacity = 26;
   const imageCapacity = 3;
   const shotNumberId = model.fields.find(field => field.id === "shotNumber")?.id;
   return model.rows.flatMap(row => {
+    if (row.cells.some(cell => cell.parts)) {
+      const flows = row.cells.map(cell => exportCellFlow(cell, text => wrapSpreadsheetText(text, spreadsheetTextWidth(model.fields.find(field => field.id === cell.fieldId)))));
+      const offsets = flows.map(() => 0);
+      const continuations: ExcelRow[] = [];
+      do {
+        const cells: ExcelCell[] = row.cells.map((cell, index) => {
+          let segment = takeFlowSegment(flows[index], offsets[index], 390, 15, 105);
+          offsets[index] += segment.length;
+          if (continuations.length && cell.fieldId === shotNumberId && !segment.length) segment = takeFlowSegment(flows[index], 0, 390, 15, 105);
+          const lines: string[] = [];
+          const images: ExportCell["images"] = [];
+          const imageOffsets: number[] = [];
+          let top = 6;
+          for (const unit of segment) {
+            if (unit.kind === "text") lines.push(unit.text);
+            else {
+              images.push(unit.image);
+              imageOffsets.push(top);
+              lines.push(...Array<string>(7).fill(""));
+            }
+            top += flowUnitHeight(unit, 15, 105);
+          }
+          return { ...cell, parts: undefined, text: lines.join("\n"), images, imageOffsets, contentHeight: top + 6 };
+        });
+        continuations.push({ ...row, cells });
+      } while (offsets.some((offset, index) => offset < flows[index].length));
+      return continuations;
+    }
     const wrapped = row.cells.map(cell => wrapSpreadsheetText(cell.text, spreadsheetTextWidth(model.fields.find(field => field.id === cell.fieldId))));
     const parts = Math.max(1, ...row.cells.map((cell, index) => Math.max(Math.ceil(wrapped[index].length / lineCapacity), Math.ceil(cell.images.length / imageCapacity))));
     if (parts === 1) return [row];
@@ -307,9 +346,10 @@ function workbookRelationshipsXml(): string {
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
 }
 
-function stylesXml(): string {
+function stylesXml(headerColor?: ExportOptions["headerColor"]): string {
+  const fill = `FF${normalizeExportHeaderColor(headerColor).slice(1).toUpperCase()}`;
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="4"><font><sz val="10"/><name val="Arial"/><family val="2"/></font><font><b/><sz val="18"/><name val="Microsoft YaHei"/><family val="2"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="10"/><name val="Microsoft YaHei"/><family val="2"/></font><font><sz val="10"/><name val="Microsoft YaHei"/><family val="2"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF000000"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FF8C8C8C"/></left><right style="thin"><color rgb="FF8C8C8C"/></right><top style="thin"><color rgb="FF8C8C8C"/></top><bottom style="thin"><color rgb="FF8C8C8C"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="4"><font><sz val="10"/><name val="Arial"/><family val="2"/></font><font><b/><sz val="18"/><name val="Microsoft YaHei"/><family val="2"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="10"/><name val="Microsoft YaHei"/><family val="2"/></font><font><sz val="10"/><name val="Microsoft YaHei"/><family val="2"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="${fill}"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FF8C8C8C"/></left><right style="thin"><color rgb="FF8C8C8C"/></right><top style="thin"><color rgb="FF8C8C8C"/></top><bottom style="thin"><color rgb="FF8C8C8C"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="top" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
 }
 
 function worksheetXml(model: ExportModel, failedCells: Set<string>, hasLogo: boolean): string {
@@ -328,12 +368,12 @@ function worksheetXml(model: ExportModel, failedCells: Set<string>, hasLogo: boo
   const rows = model.rows.map((row, rowIndex) => {
     const excelRow = rowIndex + metadataRows + 2;
     const cells = model.fields.map((field, columnIndex) => {
-      const cell = row.cells.find((candidate) => candidate.fieldId === field.id);
+      const cell = row.cells.find((candidate) => candidate.fieldId === field.id) as ExcelCell | undefined;
       if (field.type === "image") {
         const failed = failedCells.has(`${rowIndex}:${columnIndex}`);
         return inlineCell(columnIndex, excelRow, failed ? "图片加载失败" : "", 3);
       }
-      return inlineCell(columnIndex, excelRow, cell?.text ?? "", 3);
+      return inlineCell(columnIndex, excelRow, cell?.text ?? "", cell?.imageOffsets ? 4 : 3);
     }).join("");
     const height = ` ht="${rowHeight(row, model.fields)}" customHeight="1"`;
     return `<row r="${excelRow}"${height}>${cells}</row>`;
@@ -362,9 +402,11 @@ function drawingXml(anchors: CellAnchor[], logo?: EmbeddedImage, fieldCount = 0)
   const drawings = anchors.flatMap((anchor) => anchor.images.map((image, slot) => {
     imageNumber += 1;
     const slotHeight = IMAGE_SLOT_HEIGHT * POINT_TO_EMU;
-    const fitted = fitImage({ width: image.width || 16, height: image.height || 9 }, CELL_WIDTH_EMU - 2 * IMAGE_PADDING_EMU, slotHeight - 2 * IMAGE_PADDING_EMU);
-    const x = Math.round((CELL_WIDTH_EMU - fitted.width) / 2);
-    const y = Math.round((anchor.heightEmu - slotHeight * anchor.images.length) / 2 + slot * slotHeight + (slotHeight - fitted.height) / 2);
+    const cellWidth = anchor.widthEmu ?? CELL_WIDTH_EMU;
+    const fitted = fitImage({ width: image.width || 16, height: image.height || 9 }, cellWidth - 2 * IMAGE_PADDING_EMU, slotHeight - 2 * IMAGE_PADDING_EMU);
+    const x = Math.round((cellWidth - fitted.width) / 2);
+    const slotTop = anchor.imageOffsets?.[slot] !== undefined ? anchor.imageOffsets[slot] * POINT_TO_EMU : (anchor.heightEmu - slotHeight * anchor.images.length) / 2 + slot * slotHeight;
+    const y = Math.round(slotTop + (slotHeight - fitted.height) / 2);
     const width = Math.round(fitted.width);
     const height = Math.round(fitted.height);
     return `<xdr:oneCellAnchor><xdr:from><xdr:col>${anchor.column}</xdr:col><xdr:colOff>${x}</xdr:colOff><xdr:row>${anchor.row}</xdr:row><xdr:rowOff>${y}</xdr:rowOff></xdr:from><xdr:ext cx="${width}" cy="${height}"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${imageNumber}" name="Image ${imageNumber}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="${image.relationshipId}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${width}" cy="${height}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`;
@@ -407,6 +449,7 @@ async function buildXlsxPackageContents(
   imageDependencies: XlsxImageLoadDependencies,
   options: ExportOptions,
 ): Promise<Map<string, Uint8Array>> {
+  model = groupExportColumns(model, options.maxColumns);
   model = { ...model, rows: splitExcelRows(model) };
   const images: EmbeddedImage[] = [];
   const anchors: CellAnchor[] = [];
@@ -450,8 +493,8 @@ async function buildXlsxPackageContents(
 
   for (const [rowIndex, row] of model.rows.entries()) {
     for (const [columnIndex, field] of model.fields.entries()) {
-      if (field.type !== "image") continue;
-      const cell = row.cells.find((candidate) => candidate.fieldId === field.id);
+      const cell = row.cells.find((candidate) => candidate.fieldId === field.id) as ExcelCell | undefined;
+      if (!cell?.images.length) continue;
       const cellImages: EmbeddedImage[] = [];
       for (const remoteImage of cell?.images ?? []) {
         let loaded: LoadedImage;
@@ -472,7 +515,8 @@ async function buildXlsxPackageContents(
         cellImages.push(embedded);
       }
       if (cellImages.length > 0) {
-        anchors.push({ column: columnIndex, row: rowIndex + 4, heightEmu: rowHeight(row, model.fields) * POINT_TO_EMU, images: cellImages });
+        anchors.push({ column: columnIndex, row: rowIndex + 4, heightEmu: rowHeight(row, model.fields) * POINT_TO_EMU, images: cellImages,
+          imageOffsets: cell?.imageOffsets, widthEmu: (spreadsheetColumnWidth(field) * 7 * 0.75 + 3.75) * POINT_TO_EMU });
       }
     }
   }
@@ -484,7 +528,7 @@ async function buildXlsxPackageContents(
   files.set("_rels/.rels", encoder.encode(rootRelationshipsXml()));
   files.set("xl/workbook.xml", encoder.encode(workbookXml()));
   files.set("xl/_rels/workbook.xml.rels", encoder.encode(workbookRelationshipsXml()));
-  files.set("xl/styles.xml", encoder.encode(stylesXml()));
+  files.set("xl/styles.xml", encoder.encode(stylesXml(options.headerColor)));
   files.set("xl/worksheets/sheet1.xml", encoder.encode(worksheetXml(model, failedCells, Boolean(logo))));
   files.set("xl/worksheets/_rels/sheet1.xml.rels", encoder.encode(worksheetRelationshipsXml(Boolean(logo))));
   files.set("xl/drawings/drawing1.xml", encoder.encode(drawingXml(anchors, logo, model.fields.length)));
@@ -527,6 +571,6 @@ export async function buildShootDayXlsxPackage(model: ShootDayExportModel): Prom
   const safetyInfo = [["天气", model.shootDay.weather], ["雨天备选方案", model.shootDay.rainPlan], ["安全提示", model.shootDay.safetyNotes], ["紧急联系人", emergencyContact]].filter(([, value]) => Boolean(value));
   const info = [["拍摄日信息", ""], ["项目", model.projectTitle], ["拍摄日", model.shootDay.title], ["日期", model.shootDay.shootDate || "日期待定"], ["地点", model.shootDay.location || "地点待定"], ["集合", model.shootDay.callTime || "待定"], ["收工", model.shootDay.wrapTime || "待定"], ["负责人", model.shootDay.coordinator || "待确认"], ["备注", model.shootDay.notes || "—"], ...safetyInfo, ["镜头数", String(model.summary.shotCount)], ["总时长（秒）", String(model.summary.totalDurationSeconds)]];
   const shots = [model.fields.map((field) => field.label), ...model.rows.map((row) => model.fields.map((field) => row.cells.find((cell) => cell.fieldId === field.id)?.text ?? ""))];
-  return new Map([["[Content_Types].xml", encoder.encode(shootDayContentTypesXml())], ["_rels/.rels", encoder.encode(rootRelationshipsXml())], ["xl/workbook.xml", encoder.encode(shootDayWorkbookXml())], ["xl/_rels/workbook.xml.rels", encoder.encode(shootDayWorkbookRelsXml())], ["xl/styles.xml", encoder.encode(stylesXml())], ["xl/worksheets/sheet1.xml", encoder.encode(simpleWorksheet(info))], ["xl/worksheets/sheet2.xml", encoder.encode(simpleWorksheet(shots.length > 1 ? shots : [["暂无已排镜头"]]))]]);
+  return new Map([["[Content_Types].xml", encoder.encode(shootDayContentTypesXml())], ["_rels/.rels", encoder.encode(rootRelationshipsXml())], ["xl/workbook.xml", encoder.encode(shootDayWorkbookXml())], ["xl/_rels/workbook.xml.rels", encoder.encode(shootDayWorkbookRelsXml())], ["xl/styles.xml", encoder.encode(stylesXml("#000000"))], ["xl/worksheets/sheet1.xml", encoder.encode(simpleWorksheet(info))], ["xl/worksheets/sheet2.xml", encoder.encode(simpleWorksheet(shots.length > 1 ? shots : [["暂无已排镜头"]]))]]);
 }
 export async function exportShootDayExcel(project: StoryboardProject, shootDayId: string): Promise<void> { const model = buildShootDayExportModel(project, shootDayId); const files = await buildShootDayXlsxPackage(model); const bytes = createZip([...files].map(([name, data]) => ({ name, data }))); downloadBlob(new Blob([new Uint8Array(bytes)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `${model.projectTitle}-${model.shootDay.title}-${model.shootDay.shootDate || "日期待定"}-镜头执行表.xlsx`); }

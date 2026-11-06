@@ -1241,3 +1241,21 @@ it("ignores a pre-save scene read that completes after a confirmed scene write",
     expect(screen.queryByText(/原场次名称/)).not.toBeInTheDocument();
   } finally { vi.useRealTimers(); }
 });
+
+it("opens shared ratio settings from display controls and applies the saved ratio to actual frames", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const loaded = await gateway.loadProject(project.id);
+  await gateway.saveShot(project.id, { ...loaded.shots[0], values: {
+    ...loaded.shots[0].values,
+    frame: JSON.stringify([{ path: "frame.jpg", name: "frame.jpg", url: "blob:frame", position: 0 }]),
+  } }, loaded.shots[0].version ?? 1);
+  render(<ProjectWorkbench gateway={gateway} projectId={project.id} user={owner} onBack={vi.fn()} />);
+  const image = await screen.findByRole("img", { name: /画面-.*图片1/ });
+  await userEvent.click(screen.getByText("分镜设置"));
+  await userEvent.click(screen.getByRole("button", { name: "修改画幅比例" }));
+  expect(screen.getByText("分镜设置").closest("details")).not.toHaveAttribute("open");
+  await userEvent.selectOptions(screen.getByLabelText("画幅比例"), "9:16");
+  await userEvent.click(screen.getByRole("button", { name: "保存" }));
+  expect(image.parentElement).toHaveStyle({ aspectRatio: "9 / 16" });
+  await waitFor(async () => expect((await gateway.loadProject(project.id)).aspectRatio).toBe("9:16"));
+});

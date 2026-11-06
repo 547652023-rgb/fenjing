@@ -1,3 +1,5 @@
+import { parseAspectRatio } from "./aspectRatio";
+
 export type FieldType =
   | "text"
   | "number"
@@ -120,12 +122,12 @@ export type ProductionSummary = {
 };
 
 export const DEFAULT_ASPECT_RATIO = "16:9";
-export const ASPECT_RATIO_OPTIONS = ["16:9", "9:16", "4:3", "1:1", "2.35:1"] as const;
+export const ASPECT_RATIO_OPTIONS = ["16:9", "9:16", "1:1", "4:3", "3:4", "2:1", "1:2", "1.66:1", "1.85:1", "2.35:1", "2.39:1"] as const;
 
 export function normalizeAspectRatio(value: string): string {
-  const normalized = value.trim().normalize("NFKC");
-  if (!normalized) throw new Error("Aspect ratio is required");
-  return normalized;
+  const ratio = parseAspectRatio(value);
+  if (!ratio) throw new Error("请输入有效的画幅比例");
+  return `${ratio.width}:${ratio.height}`;
 }
 
 const seededFields: Array<

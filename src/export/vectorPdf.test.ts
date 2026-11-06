@@ -5,7 +5,44 @@ import * as pdfExport from "./pdfExport";
 import * as download from "./download";
 import { vi } from "vitest";
 import fontkit from "@pdf-lib/fontkit";
-import type { ExportModel } from "./storyboardExport";
+import { buildExportModel, type ExportModel } from "./storyboardExport";
+import { createProject } from "../domain/storyboard";
+
+it("renders grouped overflow photos and long labeled text through every PDF continuation", async () => {
+  const project = createProject();
+  project.fields = ["shotNumber", "content", "lens", "frame", "reference"].map((id, order) => ({ ...project.fields.find(field => field.id === id)!, visible: true, order }));
+  const photos = Array.from({ length: 5 }, (_, position) => ({ path: `p${position}`, url: `photo${position}`, name: "photo.png", position }));
+  project.shots[0].values = { shotNumber: "7", content: "开场", lens: "35mm", frame: JSON.stringify(photos), reference: JSON.stringify(photos.map(photo => ({ ...photo, url: `ref-${photo.url}` }))) };
+  project.fields.push({ id: "notes", label: "备注", type: "text", visible: true, order: 5 });
+  project.shots[0].values.notes = "开始\n" + "很长的场面调度说明。".repeat(180) + "\n结束";
+  const source = buildExportModel(project);
+  const fontBytes = new Uint8Array(readFileSync("src/assets/fonts/NotoSansSC-Regular.ttf"));
+  const bytes = await pdfExport.buildVectorPdf(source, { maxColumns: 4 }, { fontBytes, loadImage: async () => new Uint8Array(readFileSync("src/assets/dapaidang-logo.png")) });
+  const pdf = await PDFDocument.load(bytes);
+  const streams = pdf.context.enumerateIndirectObjects().flatMap(([, object]) => object instanceof PDFRawStream && !object.dict.get(PDFName.of("Subtype")) ? [new TextDecoder().decode(decodePDFRawStream(object).decode())] : []);
+  const contents = streams.filter(value => value.includes("\nBT\n")).join("\n");
+  expect(pdf.getPageCount()).toBeGreaterThan(3);
+  expect((contents.match(/\bDo\n/g) ?? [])).toHaveLength(10);
+  // Encode the actual glyphs using the embedded font, then inspect visible text operators.
+  pdf.registerFontkit(fontkit);
+  const font = await pdf.embedFont(fontBytes, { subset: false });
+  const visibleGlyphs = [...contents.matchAll(/<([A-Fa-f0-9]+)> Tj/g)].map(match => match[1].toUpperCase()).join("");
+  for (const text of ["其他", "画面：", "参考：", "开始", "结束"]) expect(visibleGlyphs).toContain(font.encodeText(text).toString().slice(1, -1));
+  expect(visibleGlyphs.match(new RegExp(font.encodeText("很").toString().slice(1, -1), "g"))).toHaveLength(180);
+  expect(source.fields).toHaveLength(6);
+});
+
+it.each([
+  ["#000000", "0 0 0 rg"], ["#1E3A5F", "0.11764705882352941 0.22745098039215686 0.37254901960784315 rg"],
+  ["#7f1d1d", "0.4980392156862745 0.11372549019607843 0.11372549019607843 rg"],
+  ["#ffffff", "0.08235294117647059 0.5019607843137255 0.23921568627450981 rg"],
+])("renders an accessible PDF header color, normalizing %s", async (headerColor, operator) => {
+  const bytes = await pdfExport.buildVectorPdf(model, { headerColor } as any, { fontBytes: new Uint8Array(readFileSync("src/assets/fonts/NotoSansSC-Regular.ttf")) });
+  const pdf = await PDFDocument.load(bytes);
+  const contents = pdf.context.enumerateIndirectObjects().flatMap(([, object]) => object instanceof PDFRawStream && !object.dict.get(PDFName.of("Subtype")) ? [new TextDecoder().decode(decodePDFRawStream(object).decode())] : []).filter(value => value.includes("\nBT\n")).join("\n");
+  expect(contents.includes(operator)).toBe(true);
+  expect(contents).toContain("1 1 1 rg");
+});
 
 const model: ExportModel = {
   title: "清晰分镜测试", aspectRatio: "16:9", shotCount: 1,

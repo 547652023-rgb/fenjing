@@ -27,7 +27,7 @@ export function ProjectSettings({ project, onChange, onClose }: ProjectSettingsP
       onChange((latest) => ({ ...latest, aspectRatio }));
       onClose();
     } catch {
-      setError("请输入画幅比例");
+      setError("请输入有效的宽:高，例如16:9或9:16");
     }
   }
 

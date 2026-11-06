@@ -49,3 +49,17 @@ it("keeps a reference original through the table upload entry point", async () =
     vi.unstubAllGlobals();
   }
 });
+
+it("updates frame and reference slots when the shared project ratio changes", () => {
+  const project = createProject();
+  project.aspectRatio = "9:16";
+  project.shots[0].values.frame = JSON.stringify(["/frame.jpg"]);
+  project.shots[0].values.reference = JSON.stringify(["/reference.jpg"]);
+  const { rerender } = render(<StoryboardTable project={project} onChange={vi.fn()} />);
+  expect(screen.getByAltText("画面-1-图片1").parentElement).toHaveStyle({ aspectRatio: "9 / 16" });
+  expect(screen.getByAltText("参考-1-图片1").parentElement).toHaveStyle({ aspectRatio: "9 / 16" });
+  rerender(<StoryboardTable project={{ ...project, aspectRatio: "1:1" }} onChange={vi.fn()} />);
+  expect(screen.getByAltText("画面-1-图片1").parentElement).toHaveStyle({ aspectRatio: "1 / 1" });
+  rerender(<StoryboardTable project={{ ...project, aspectRatio: "旧项目无效比例" }} onChange={vi.fn()} />);
+  expect(screen.getByAltText("画面-1-图片1").parentElement).toHaveStyle({ aspectRatio: "16 / 9" });
+});

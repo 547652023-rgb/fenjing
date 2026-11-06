@@ -2520,3 +2520,22 @@ button.storyboard-review__frame { position: relative; cursor: zoom-in; }
   font-size: 0.75rem;
 }
 .image-cell__upload small { padding: 0.15rem 0.25rem; text-align: center; }
+
+
+.storyboard-display-settings { position: relative; color: #553e31; }
+.storyboard-display-settings > summary { cursor: pointer; padding: 0.45rem 0.65rem; font-size: 0.85rem; }
+.storyboard-display-settings > summary:focus-visible { outline: 2px solid #286044; outline-offset: 2px; }
+.storyboard-display-settings__panel { position: fixed; z-index: 25; top: 0; left: 0; max-height: calc(100dvh - 1rem); overflow-y: auto; display: grid; gap: 0.8rem; width: min(21rem, calc(100vw - 2rem)); padding: 1rem; border: 1px solid #b99a7c; background: #fffaf2; box-shadow: 0 0.8rem 2rem rgb(36 25 16 / 20%); }
+.storyboard-display-settings__panel label, .storyboard-display-settings__ratio { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.storyboard-display-settings__panel select { max-width: 12rem; padding: 0.4rem; color: #211a15; background: white; border: 1px solid #b99a7c; }
+.storyboard-display-settings__panel small { color: #6d5b50; line-height: 1.5; }
+.storyboard-panel .storyboard-table td input,
+.storyboard-panel .storyboard-table td select,
+.storyboard-panel .storyboard-table td textarea { font-size: var(--storyboard-cell-font-size, 14px); }
+.storyboard-panel[data-text-alignment="left"] .storyboard-table td input,
+.storyboard-panel[data-text-alignment="left"] .storyboard-table td select,
+.storyboard-panel[data-text-alignment="top-left"] .storyboard-table td input,
+.storyboard-panel[data-text-alignment="top-left"] .storyboard-table td select { text-align: left; text-align-last: left; }
+.storyboard-panel[data-text-alignment="top-left"] .storyboard-table td:not([data-field-type="image"]) { vertical-align: top; }
+.storyboard-panel[data-text-alignment="left"] .storyboard-table td:not(.image-table-cell),
+.storyboard-panel[data-text-alignment="center"] .storyboard-table td:not([data-field-type="image"]) { vertical-align: middle; }
