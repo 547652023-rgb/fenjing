@@ -41,4 +41,6 @@
 - [ ] Merge to `integration/storyboard-platform`, push, wait for Pages deployment success.
 
 ## Results
-- Branch starts at `2fcdb6b`; baseline verification pending.
+- Branch starts at `2fcdb6b`; baseline: 47 files / 350 tests passed.
+- Task 1: RED reproduced closed/lost form on failed and pending writes; GREEN: 3 files / 96 tests passed. Scene form now awaits save, retains failure input and prevents duplicate submissions.
+- Execution: independent Excel implementation delegated in parallel; source ownership is disjoint from workbench/table repairs.

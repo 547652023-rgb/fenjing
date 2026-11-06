@@ -696,18 +696,14 @@ export function ProjectWorkbench({
   }
 
   async function updateScene(scene: StoryboardProject["scenes"][number]) {
-    setProject((current) => current ? {
-      ...current,
-      scenes: current.scenes.map((candidate) => candidate.id === scene.id ? scene : candidate),
-    } : current);
     setSaveStatus("saving");
     try {
       await gateway.updateScene(projectId, scene);
-      await reload();
-      setSaveStatus("saved");
+      if (await reload()) setSaveStatus("saved");
+      return true;
     } catch {
       setSaveStatus("error");
-      await reload();
+      return false;
     }
   }
 

@@ -1080,3 +1080,53 @@ it("protects navigation while selected images are still being prepared", async (
   expect(screen.queryByText("正在准备图片…")).not.toBeInTheDocument();
   vi.unstubAllGlobals();
 });
+
+it("retains failed scene edits until a successful retry", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const scene = await gateway.createScene(project.id, { name: "原场次" });
+  vi.spyOn(gateway, "updateScene").mockRejectedValueOnce(new Error("network"));
+  const user = userEvent.setup();
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+  await screen.findByDisplayValue("广告片");
+  await user.click(screen.getByRole("button", { name: `编辑场次 ${scene.number}` }));
+  const form = screen.getByRole("form", { name: `编辑场次 ${scene.number}` });
+  fireEvent.change(within(form).getByLabelText("名称"), { target: { value: "保留的新名称" } });
+  fireEvent.change(within(form).getByLabelText("制作备注"), { target: { value: "失败也不能丢失的备注" } });
+  await user.click(within(form).getByRole("button", { name: "保存场次" }));
+  expect(await within(form).findByRole("alert")).toHaveTextContent("保存失败");
+  expect(form).toBeVisible();
+  expect(within(form).getByLabelText("名称")).toHaveValue("保留的新名称");
+  expect(within(form).getByLabelText("制作备注")).toHaveValue("失败也不能丢失的备注");
+  expect((await gateway.loadProject(project.id)).scenes[0].name).toBe("原场次");
+  await user.click(within(form).getByRole("button", { name: /重试保存场次/ }));
+  await waitFor(() => expect(form).not.toBeInTheDocument());
+  expect((await gateway.loadProject(project.id)).scenes[0]).toMatchObject({
+    name: "保留的新名称", notes: "失败也不能丢失的备注",
+  });
+});
+
+it("keeps the scene form open and prevents duplicate submissions while saving", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const scene = await gateway.createScene(project.id, { name: "开场" });
+  const updateScene = gateway.updateScene.bind(gateway);
+  let finish!: () => void;
+  const gate = new Promise<void>(resolve => { finish = resolve; });
+  const save = vi.spyOn(gateway, "updateScene").mockImplementation(async (...args) => {
+    await gate;
+    await updateScene(...args);
+  });
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+  await screen.findByDisplayValue("广告片");
+  fireEvent.click(screen.getByRole("button", { name: `编辑场次 ${scene.number}` }));
+  const form = screen.getByRole("form", { name: `编辑场次 ${scene.number}` });
+  fireEvent.change(within(form).getByLabelText("名称"), { target: { value: "保存中" } });
+  fireEvent.submit(form);
+  fireEvent.submit(form);
+  expect(save).toHaveBeenCalledTimes(1);
+  expect(form).toBeVisible();
+  expect(within(form).getByRole("button", { name: /正在保存/ })).toBeDisabled();
+  expect(within(form).getByRole("button", { name: "关闭" })).toBeDisabled();
+  await act(async () => { finish(); });
+  await waitFor(() => expect(form).not.toBeInTheDocument());
+  expect((await gateway.loadProject(project.id)).scenes[0].name).toBe("保存中");
+});

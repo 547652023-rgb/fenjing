@@ -76,7 +76,7 @@ type StoryboardTableProps = {
     options: ShotCreationOptions,
   ) => void | string[] | Promise<void | string[]>;
   onCreateScene?: () => void | Promise<void>;
-  onUpdateScene?: (scene: StoryboardProject["scenes"][number]) => void | Promise<void>;
+  onUpdateScene?: (scene: StoryboardProject["scenes"][number]) => void | boolean | Promise<void | boolean>;
   onDeleteScene?: (
     sceneId: string,
     treatment: "ungroup" | "delete-shots",
@@ -188,6 +188,9 @@ export function StoryboardTable({
   const rowMenuAnchor = useRef<HTMLButtonElement | null>(null);
   const [focusShotId, setFocusShotId] = useState<string | null>(null);
   const [sceneEditorId, setSceneEditorId] = useState<string | null>(null);
+  const [isSavingScene, setIsSavingScene] = useState(false);
+  const sceneSavePending = useRef(false);
+  const [sceneSaveError, setSceneSaveError] = useState("");
   const [rowScenePickerShotId, setRowScenePickerShotId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<ProductionStatus | null>(null);
   const [coverageFilter, setCoverageFilter] = useState<"frames" | "pending" | "completed" | null>(null);
@@ -585,7 +588,9 @@ export function StoryboardTable({
                 type="button"
                 onClick={() => {
                   const nextScene = { ...scene, collapsed: !scene.collapsed };
-                  if (onUpdateScene) void onUpdateScene(nextScene);
+                  if (onUpdateScene) void Promise.resolve(onUpdateScene(nextScene)).then(saved => {
+                    if (saved === false) setGridMessage("场次更新失败，请重试");
+                  }).catch(() => setGridMessage("场次更新失败，请重试"));
                   else onChange((current) => toggleSceneCollapsed(current, scene.id));
                 }}
               >
@@ -608,7 +613,8 @@ export function StoryboardTable({
                 aria-label={`编辑场次 ${scene.number}`}
                 className="scene-group-row__edit"
                 type="button"
-                onClick={() => setSceneEditorId(scene.id)}
+                disabled={isSavingScene}
+                onClick={() => { setSceneSaveError(""); setSceneEditorId(scene.id); }}
               >
                 编辑
               </button>
@@ -1153,8 +1159,9 @@ export function StoryboardTable({
           <form
             aria-label={`编辑场次 ${scene.number}`}
             className="scene-editor"
-            onSubmit={(event) => {
+            onSubmit={async (event) => {
               event.preventDefault();
+              if (sceneSavePending.current) return;
               const form = new FormData(event.currentTarget);
               const nextScene = {
                 ...scene,
@@ -1165,15 +1172,27 @@ export function StoryboardTable({
                 shootDate: String(form.get("shootDate") ?? ""),
                 notes: String(form.get("notes") ?? ""),
               };
-              if (onUpdateScene) void onUpdateScene(nextScene);
-              else onChange((latestProject) => ({
-                ...latestProject,
-                scenes: latestProject.scenes.map((candidate) => candidate.id === scene.id ? nextScene : candidate),
-              }));
-              setSceneEditorId(null);
+              sceneSavePending.current = true;
+              setIsSavingScene(true);
+              setSceneSaveError("");
+              try {
+                if (onUpdateScene) {
+                  if (await onUpdateScene(nextScene) === false) throw new Error("scene save failed");
+                } else onChange((latestProject) => ({
+                  ...latestProject,
+                  scenes: latestProject.scenes.map((candidate) => candidate.id === scene.id ? nextScene : candidate),
+                }));
+                setSceneEditorId(null);
+              } catch {
+                setSceneSaveError("场次保存失败，你填写的内容已保留，请重试。");
+              } finally {
+                sceneSavePending.current = false;
+                setIsSavingScene(false);
+              }
             }}
           >
-            <header><p>场次 {scene.number}</p><button type="button" onClick={() => setSceneEditorId(null)}>关闭</button></header>
+            <header><p>场次 {scene.number}</p><button type="button" disabled={isSavingScene} onClick={() => setSceneEditorId(null)}>关闭</button></header>
+            <fieldset disabled={isSavingScene}>
             <label>名称<input defaultValue={scene.name} name="name" /></label>
             <label>内外景<select defaultValue={scene.intExt} name="intExt"><option value="">未设置</option><option value="INT">INT</option><option value="EXT">EXT</option><option value="INT/EXT">INT/EXT</option></select></label>
             <label>日夜<select defaultValue={scene.dayNight} name="dayNight"><option value="">未设置</option><option value="DAY">DAY</option><option value="NIGHT">NIGHT</option></select></label>
@@ -1183,8 +1202,10 @@ export function StoryboardTable({
             <footer>
               <button type="button" onClick={() => { if (window.confirm("解除镜头归属后删除这个场次吗？")) { if (onDeleteScene) void onDeleteScene(scene.id, "ungroup"); else onChange((latest) => deleteLocalScene(latest, scene.id, "ungroup")); setSceneEditorId(null); } }}>解除并删除场次</button>
               <button type="button" onClick={() => { if (window.confirm("确定删除这个场次及其全部镜头吗？")) { if (onDeleteScene) void onDeleteScene(scene.id, "delete-shots"); else onChange((latest) => deleteLocalScene(latest, scene.id, "delete-shots")); setSceneEditorId(null); } }}>删除场次及镜头</button>
-              <button type="submit">保存场次</button>
+              <button type="submit">{isSavingScene ? "正在保存场次…" : sceneSaveError ? "重试保存场次" : "保存场次"}</button>
             </footer>
+            </fieldset>
+            {sceneSaveError ? <p role="alert">{sceneSaveError}</p> : null}
           </form>
         );
       })() : null}
