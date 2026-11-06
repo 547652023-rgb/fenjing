@@ -1080,3 +1080,164 @@ it("protects navigation while selected images are still being prepared", async (
   expect(screen.queryByText("正在准备图片…")).not.toBeInTheDocument();
   vi.unstubAllGlobals();
 });
+
+it("retains failed scene edits until a successful retry", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const scene = await gateway.createScene(project.id, { name: "原场次" });
+  vi.spyOn(gateway, "updateScene").mockRejectedValueOnce(new Error("network"));
+  const user = userEvent.setup();
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+  await screen.findByDisplayValue("广告片");
+  await user.click(screen.getByRole("button", { name: `编辑场次 ${scene.number}` }));
+  const form = screen.getByRole("form", { name: `编辑场次 ${scene.number}` });
+  fireEvent.change(within(form).getByLabelText("名称"), { target: { value: "保留的新名称" } });
+  fireEvent.change(within(form).getByLabelText("制作备注"), { target: { value: "失败也不能丢失的备注" } });
+  await user.click(within(form).getByRole("button", { name: "保存场次" }));
+  expect(await within(form).findByRole("alert")).toHaveTextContent("保存失败");
+  expect(form).toBeVisible();
+  expect(within(form).getByLabelText("名称")).toHaveValue("保留的新名称");
+  expect(within(form).getByLabelText("制作备注")).toHaveValue("失败也不能丢失的备注");
+  expect((await gateway.loadProject(project.id)).scenes[0].name).toBe("原场次");
+  await user.click(within(form).getByRole("button", { name: /重试保存场次/ }));
+  await waitFor(() => expect(form).not.toBeInTheDocument());
+  expect((await gateway.loadProject(project.id)).scenes[0]).toMatchObject({
+    name: "保留的新名称", notes: "失败也不能丢失的备注",
+  });
+});
+
+it("keeps the scene form open and prevents duplicate submissions while saving", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const scene = await gateway.createScene(project.id, { name: "开场" });
+  const updateScene = gateway.updateScene.bind(gateway);
+  let finish!: () => void;
+  const gate = new Promise<void>(resolve => { finish = resolve; });
+  const save = vi.spyOn(gateway, "updateScene").mockImplementation(async (...args) => {
+    await gate;
+    await updateScene(...args);
+  });
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+  await screen.findByDisplayValue("广告片");
+  fireEvent.click(screen.getByRole("button", { name: `编辑场次 ${scene.number}` }));
+  const form = screen.getByRole("form", { name: `编辑场次 ${scene.number}` });
+  fireEvent.change(within(form).getByLabelText("名称"), { target: { value: "保存中" } });
+  fireEvent.submit(form);
+  fireEvent.submit(form);
+  expect(save).toHaveBeenCalledTimes(1);
+  expect(form).toBeVisible();
+  expect(within(form).getByRole("button", { name: /正在保存/ })).toBeDisabled();
+  expect(within(form).getByRole("button", { name: "关闭" })).toBeDisabled();
+  const collapse = screen.getByRole("button", { name: `收起场次 ${scene.number}` });
+  expect(collapse).toBeDisabled();
+  fireEvent.click(collapse);
+  expect(save).toHaveBeenCalledTimes(1);
+  await act(async () => { finish(); });
+  await waitFor(() => expect(form).not.toBeInTheDocument());
+  expect((await gateway.loadProject(project.id)).scenes[0].name).toBe("保存中");
+});
+
+it("times out a stalled project read and ignores its late result after a successful retry", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const oldProject = await gateway.loadProject(project.id);
+  let finishOld!: (project: typeof oldProject) => void;
+  vi.spyOn(gateway, "loadProject").mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }));
+  vi.useFakeTimers();
+  try {
+    render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+    await act(() => vi.advanceTimersByTimeAsync(20_000));
+    expect(screen.getByRole("alert")).toHaveTextContent("加载超时");
+    expect(screen.getByRole("button", { name: "返回项目" })).toBeEnabled();
+    await gateway.saveProjectMeta(project.id, { title: "重试读到的新项目名" });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重试加载" })); });
+    expect(screen.getByDisplayValue("重试读到的新项目名")).toBeVisible();
+    await act(async () => { finishOld({ ...oldProject, title: "过期返回的旧项目名" }); });
+    expect(screen.getByDisplayValue("重试读到的新项目名")).toBeVisible();
+    expect(screen.queryByDisplayValue("过期返回的旧项目名")).not.toBeInTheDocument();
+  } finally { vi.useRealTimers(); }
+});
+
+it("offers retry after an immediate project read failure", async () => {
+  const { gateway, owner, project } = await setupProject();
+  vi.spyOn(gateway, "loadProject").mockRejectedValueOnce(new Error("network"));
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+  expect(await screen.findByRole("alert")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "重试加载" }));
+  expect(await screen.findByDisplayValue("广告片")).toBeVisible();
+});
+
+it("allows leaving an initial project read and prevents late normalization after unmount", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const loaded = await gateway.loadProject(project.id);
+  let finish!: (project: typeof loaded) => void;
+  vi.spyOn(gateway, "loadProject").mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const saveMeta = vi.spyOn(gateway, "saveProjectMeta");
+  const onBack = vi.fn();
+  const view = render(<ProjectWorkbench gateway={gateway} onBack={onBack} projectId={project.id} user={owner} />);
+  fireEvent.click(screen.getByRole("button", { name: "返回项目" }));
+  expect(onBack).toHaveBeenCalledOnce();
+  view.unmount();
+  await act(async () => { finish({ ...loaded, fields: loaded.fields.filter(field => field.id !== "productionStatus") }); });
+  expect(saveMeta).not.toHaveBeenCalled();
+});
+
+it("preserves local input when a realtime reload stalls and can retry saving afterwards", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const loaded = await gateway.loadProject(project.id);
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+  const input = await screen.findByLabelText(`内容-${loaded.shots[0].id}`);
+  vi.spyOn(gateway, "saveShot").mockRejectedValueOnce(new Error("network"));
+  fireEvent.change(input, { target: { value: "重新读取超时也保留" } });
+  await screen.findByRole("alert");
+  vi.spyOn(gateway, "loadProject").mockImplementationOnce(() => new Promise(() => {}));
+  vi.useFakeTimers();
+  try {
+    await act(async () => {
+      gateway.emit(project.id, { type: "structure.changed" });
+      await vi.advanceTimersByTimeAsync(20_100);
+    });
+    expect(input).toHaveValue("重新读取超时也保留");
+    expect(screen.getByRole("alert")).toHaveTextContent("无法重新获取项目");
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重试保存" })); });
+    expect(input).toHaveValue("重新读取超时也保留");
+    expect((await gateway.loadProject(project.id)).shots[0].values.content).toBe("重新读取超时也保留");
+  } finally { vi.useRealTimers(); }
+});
+
+it("completes a confirmed scene write without waiting for a separate project read", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const scene = await gateway.createScene(project.id, { name: "开场" });
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+  await screen.findByDisplayValue("广告片");
+  vi.spyOn(gateway, "loadProject").mockImplementation(() => new Promise(() => {}));
+  fireEvent.click(screen.getByRole("button", { name: `编辑场次 ${scene.number}` }));
+  const form = screen.getByRole("form", { name: `编辑场次 ${scene.number}` });
+  fireEvent.change(within(form).getByLabelText("名称"), { target: { value: "服务器已确认" } });
+  await act(async () => { fireEvent.submit(form); });
+  expect(form).not.toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent("已在线保存");
+  expect(screen.getByText(/服务器已确认/)).toBeVisible();
+});
+
+it("ignores a pre-save scene read that completes after a confirmed scene write", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const scene = await gateway.createScene(project.id, { name: "原场次名称" });
+  const oldSnapshot = await gateway.loadProject(project.id);
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+  await screen.findByDisplayValue("广告片");
+  let finishOld!: (project: typeof oldSnapshot) => void;
+  vi.spyOn(gateway, "loadProject").mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }));
+  vi.useFakeTimers();
+  try {
+    await act(async () => {
+      gateway.emit(project.id, { type: "structure.changed" });
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    fireEvent.click(screen.getByRole("button", { name: `编辑场次 ${scene.number}` }));
+    const form = screen.getByRole("form", { name: `编辑场次 ${scene.number}` });
+    fireEvent.change(within(form).getByLabelText("名称"), { target: { value: "刚确认保存的新场次" } });
+    await act(async () => { fireEvent.submit(form); });
+    expect(screen.getByText(/刚确认保存的新场次/)).toBeVisible();
+    await act(async () => { finishOld(oldSnapshot); });
+    expect(screen.getByText(/刚确认保存的新场次/)).toBeVisible();
+    expect(screen.queryByText(/原场次名称/)).not.toBeInTheDocument();
+  } finally { vi.useRealTimers(); }
+});

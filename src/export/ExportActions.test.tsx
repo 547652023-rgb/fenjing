@@ -1,9 +1,11 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { vi } from "vitest";
+import { afterEach, vi } from "vitest";
 import { createProject } from "../domain/storyboard";
 import * as download from "./download";
 import { ExportActions } from "./ExportActions";
+
+afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -256,4 +258,115 @@ it("downloads a complete direct PDF without leaving a redundant preview URL", as
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   save.mockRestore();
   createUrl.mockRestore();
+});
+
+it("holds an incomplete Excel workbook and downloads the exact generated blob only on acceptance", async () => {
+  const blob = new Blob(["incomplete workbook"]);
+  const save = vi.spyOn(download, "downloadBlob").mockImplementation(() => {});
+  const createExcel = vi.fn(async (_project, options) => {
+    options.onImageError("broken");
+    options.onImageError("broken");
+    options.onImageError("logo");
+    return blob;
+  });
+  render(<ExportActions project={createProject()} createExcel={createExcel} />);
+  fireEvent.click(screen.getByRole("button", { name: "导出文件" }));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "导出 Excel" })));
+  expect(screen.getByRole("alert")).toHaveTextContent("有 2 张图片加载失败（含 Logo），Excel 可能缺图");
+  expect(save).not.toHaveBeenCalled();
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "下载含缺图标记的 Excel" })));
+  expect(save).toHaveBeenCalledWith(blob, expect.stringContaining(".xlsx"));
+  expect(createExcel).toHaveBeenCalledOnce();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+it("retries failed Excel images and downloads the recovered workbook", async () => {
+  const recovered = new Blob(["recovered workbook"]);
+  const save = vi.spyOn(download, "downloadBlob").mockImplementation(() => {});
+  let attempt = 0;
+  const createExcel = vi.fn(async (_project, options) => {
+    if (++attempt === 1) { options.onImageError("broken"); return new Blob(["incomplete"]); }
+    return recovered;
+  });
+  render(<ExportActions project={createProject()} createExcel={createExcel} />);
+  fireEvent.click(screen.getByRole("button", { name: "导出文件" }));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "导出 Excel" })));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "重试加载 Excel 图片" })));
+  expect(save).toHaveBeenCalledWith(recovered, expect.stringContaining(".xlsx"));
+  expect(createExcel).toHaveBeenCalledTimes(2);
+});
+
+it("cancels direct Excel generation and rejects its late download", async () => {
+  const pending = deferred<Blob>();
+  const save = vi.spyOn(download, "downloadBlob").mockImplementation(() => {});
+  let signal: AbortSignal | undefined;
+  const createExcel = vi.fn((_project, options) => { signal = options.signal; return pending.promise; });
+  render(<ExportActions project={createProject()} createExcel={createExcel} />);
+  fireEvent.click(screen.getByRole("button", { name: "导出文件" }));
+  fireEvent.click(screen.getByRole("button", { name: "导出 Excel" }));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "取消生成 Excel" })));
+  expect(signal?.aborted).toBe(true);
+  expect(screen.getByRole("button", { name: "导出 Excel" })).toBeEnabled();
+  await act(async () => pending.resolve(new Blob(["late workbook"])));
+  expect(save).not.toHaveBeenCalled();
+  expect(screen.getByRole("dialog")).toBeVisible();
+});
+
+it("times out direct Excel generation, aborts its request, and allows a fresh retry", async () => {
+  vi.useFakeTimers();
+  const pending = deferred<Blob>();
+  const save = vi.spyOn(download, "downloadBlob").mockImplementation(() => {});
+  let signal: AbortSignal | undefined;
+  let attempt = 0;
+  const recovered = new Blob(["retry"]);
+  const createExcel = vi.fn((_project, options) => {
+    signal = options.signal;
+    return ++attempt === 1 ? pending.promise : Promise.resolve(recovered);
+  });
+  render(<ExportActions project={createProject()} createExcel={createExcel} />);
+  fireEvent.click(screen.getByRole("button", { name: "导出文件" }));
+  fireEvent.click(screen.getByRole("button", { name: "导出 Excel" }));
+  await act(() => vi.advanceTimersByTimeAsync(45_000));
+  expect(screen.getByRole("alert")).toHaveTextContent("Excel 导出生成超时");
+  expect(signal?.aborted).toBe(true);
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "重试导出 Excel" })));
+  expect(save).toHaveBeenCalledWith(recovered, expect.stringContaining(".xlsx"));
+  await act(async () => pending.resolve(new Blob(["late"])));
+  expect(save).toHaveBeenCalledOnce();
+});
+
+it("preserves a reviewed PDF when Excel generation is cancelled", async () => {
+  const pending = deferred<Blob>();
+  const pdf = new Blob(["pdf"]);
+  const save = vi.spyOn(download, "downloadBlob").mockImplementation(() => {});
+  render(<ExportActions project={createProject()} createPdfPreview={async () => pdf} createExcel={() => pending.promise} />);
+  fireEvent.click(screen.getByRole("button", { name: "导出文件" }));
+  fireEvent.click(screen.getByText("PDF 排版与预览"));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "生成 PDF 预览" })));
+  const previewUrl = screen.getByTitle("分镜 PDF 分页预览").getAttribute("src");
+  fireEvent.click(screen.getByRole("button", { name: "导出 Excel" }));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "取消生成 Excel" })));
+  expect(screen.getByTitle("分镜 PDF 分页预览")).toHaveAttribute("src", previewUrl);
+  await act(async () => pending.resolve(new Blob(["late"])));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "导出 PDF" })));
+  expect(save).toHaveBeenCalledWith(pdf, expect.stringContaining(".pdf"));
+});
+
+it.each(["project", "scope"] as const)("invalidates a running Excel export when its %s changes", async change => {
+  const project = createProject();
+  project.shots = [project.shots[0], { ...project.shots[0], id: "second" }];
+  const pending = deferred<Blob>();
+  const save = vi.spyOn(download, "downloadBlob").mockImplementation(() => {});
+  let signal: AbortSignal | undefined;
+  const createExcel = vi.fn((_project, options) => { signal = options.signal; return pending.promise; });
+  const { rerender } = render(<ExportActions project={project} filteredShotIds={[project.shots[0].id]} createExcel={createExcel} />);
+  fireEvent.click(screen.getByRole("button", { name: "导出文件" }));
+  if (change === "scope") fireEvent.change(screen.getByLabelText("导出范围"), { target: { value: "filtered" } });
+  fireEvent.click(screen.getByRole("button", { name: "导出 Excel" }));
+  rerender(<ExportActions project={change === "project" ? { ...project, title: "Updated project" } : project}
+    filteredShotIds={change === "scope" ? ["second"] : [project.shots[0].id]} createExcel={createExcel} />);
+  expect(signal?.aborted).toBe(true);
+  expect(screen.getByRole("button", { name: "导出 Excel" })).toBeEnabled();
+  await act(async () => pending.resolve(new Blob(["stale workbook"])));
+  expect(save).not.toHaveBeenCalled();
 });

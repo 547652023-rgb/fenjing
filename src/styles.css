@@ -1817,6 +1817,7 @@ button:disabled {
   background: #fffaf2;
   box-shadow: 0 1rem 3rem rgb(36 25 16 / 28%);
 }
+.scene-editor > fieldset { display: grid; gap: 0.65rem; min-width: 0; margin: 0; padding: 0; border: 0; }
 .scene-editor header,
 .scene-editor footer { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
 .scene-editor header { padding-bottom: 0.65rem; border-bottom: 1px solid #d7c5af; }

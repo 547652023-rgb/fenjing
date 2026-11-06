@@ -1,6 +1,7 @@
 import { afterEach, vi } from "vitest";
 import type { ExportModel } from "./storyboardExport";
-import { buildShootDayXlsxPackage, buildXlsxPackage } from "./excelExport";
+import { buildShootDayXlsxPackage, buildXlsxPackage, exportStoryboardExcel } from "./excelExport";
+import * as download from "./download";
 import { createProject } from "../domain/storyboard";
 import { buildShootDayExportModel } from "./shootDayExport";
 
@@ -13,6 +14,126 @@ function validPngBytes(): Uint8Array {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
+});
+
+it("reports each failed image URL once, including the logo, while retaining the workbook", async () => {
+  const failures: string[] = [];
+  const duplicate = { ...model, rows: [model.rows[0], model.rows[0]] };
+  const files = await buildXlsxPackage(duplicate, async () => { throw new Error("offline"); },
+    async () => ({ bytes: validPngBytes(), extension: "png" }), {}, {
+      logo: { name: "logo.png", url: "blob:logo", type: "image/png" },
+      onImageError: url => failures.push(url),
+    });
+  expect(failures).toEqual(["blob:logo", "https://example.com/first.png", "https://example.com/second.png"]);
+  expect(files.has("xl/media/logo.png")).toBe(false);
+  expect(new TextDecoder().decode(files.get("xl/worksheets/sheet1.xml"))).toContain("图片加载失败");
+});
+
+it("aborts a stalled image request at its deadline and marks the missing slot", async () => {
+  vi.useFakeTimers();
+  let fetchSignal: AbortSignal | undefined;
+  const failures: string[] = [];
+  let files: Map<string, Uint8Array> | undefined;
+  const source = { ...model, rows: [{ ...model.rows[0], cells: model.rows[0].cells.map(cell => ({ ...cell, images: cell.images.slice(0, 1) })) }] };
+  const request = buildXlsxPackage(source, undefined, async () => ({ bytes: validPngBytes(), extension: "png" }), {
+    fetch: ((_url, init) => { fetchSignal = init?.signal as AbortSignal; return new Promise(() => {}); }) as typeof fetch,
+  }, { onImageError: url => failures.push(url) }).then(value => { files = value; });
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(files?.has("xl/media/image1.png")).toBe(true);
+  expect(fetchSignal?.aborted).toBe(true);
+  expect(failures).toEqual(["https://example.com/first.png"]);
+  await request;
+});
+
+it("bounds a stalled image decoder and closes a bitmap that finishes after its deadline", async () => {
+  vi.useFakeTimers();
+  let finishDecode!: (bitmap: ImageBitmap) => void;
+  const close = vi.fn();
+  const failures: string[] = [];
+  let files: Map<string, Uint8Array> | undefined;
+  const source = { ...model, rows: [] };
+  const request = buildXlsxPackage(source, async () => ({ bytes: validPngBytes(), extension: "png" }), undefined, {
+    createImageBitmap: () => new Promise(resolve => { finishDecode = resolve; }),
+  }, { logo: { name: "大拍档logo.png", url: "blob:logo", type: "image/png" }, onImageError: url => failures.push(url) })
+    .then(value => { files = value; });
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(files?.has("xl/workbook.xml")).toBe(true);
+  expect(failures).toEqual(["blob:logo"]);
+  finishDecode({ width: 2, height: 1, close } as unknown as ImageBitmap);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(close).toHaveBeenCalledOnce();
+  await request;
+});
+
+it("cancels the active image request without turning cancellation into a missing-image workbook", async () => {
+  const controller = new AbortController();
+  let fetchSignal: AbortSignal | undefined;
+  let failure: unknown;
+  const missing = vi.fn();
+  const placeholder = vi.fn(async () => ({ bytes: validPngBytes(), extension: "png" as const }));
+  const request = buildXlsxPackage(model, undefined, placeholder, {
+    fetch: ((_url, init) => { fetchSignal = init?.signal as AbortSignal; return new Promise(() => {}); }) as typeof fetch,
+  }, { signal: controller.signal, onImageError: missing }).catch(error => { failure = error; });
+  controller.abort();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(fetchSignal?.aborted).toBe(true);
+  expect(failure).toMatchObject({ name: "AbortError" });
+  expect(missing).not.toHaveBeenCalled();
+  expect(placeholder).not.toHaveBeenCalled();
+  await request;
+});
+
+it("stops the whole workbook after its overall deadline even when individual images keep timing out", async () => {
+  vi.useFakeTimers();
+  let failure: unknown;
+  const source = { ...model, rows: Array.from({ length: 6 }, (_, index) => ({ ...model.rows[0], shotId: String(index) })) };
+  const request = buildXlsxPackage(source, async () => new Promise(() => {}),
+    async () => ({ bytes: validPngBytes(), extension: "png" }))
+    .catch(error => { failure = error; });
+  await vi.advanceTimersByTimeAsync(45_000);
+  expect(failure).toBeInstanceOf(Error);
+  expect((failure as Error).message).toContain("Excel 导出生成超时");
+  await request;
+});
+
+it("releases a decoded bitmap when PNG encoding stalls beyond the resource deadline", async () => {
+  vi.useFakeTimers();
+  const close = vi.fn();
+  let files: Map<string, Uint8Array> | undefined;
+  const request = buildXlsxPackage({ ...model, rows: [] }, async () => ({ bytes: validPngBytes(), extension: "png" }), undefined, {
+    createImageBitmap: async () => ({ width: 2, height: 1, close }) as unknown as ImageBitmap,
+    createCanvas: () => ({ getContext: () => ({ fillRect() {}, drawImage() {} }), toBlob() {} }) as unknown as HTMLCanvasElement,
+  }, { logo: { name: "大拍档logo.png", url: "blob:logo", type: "image/png" } }).then(value => { files = value; });
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(files?.has("xl/workbook.xml")).toBe(true);
+  expect(close).toHaveBeenCalledOnce();
+  await request;
+});
+
+it("never downloads a legacy direct export whose image response body completes after cancellation", async () => {
+  const project = createProject();
+  project.shots[0].values.frame = JSON.stringify(model.rows[0].cells[2].images.slice(0, 1));
+  const controller = new AbortController();
+  const save = vi.spyOn(download, "downloadBlob").mockImplementation(() => {});
+  let finishBody!: (blob: Blob) => void;
+  let signal: AbortSignal | undefined;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    signal = init?.signal as AbortSignal;
+    return { ok: true, status: 200, headers: new Headers({ "content-type": "image/png" }),
+      blob: () => new Promise<Blob>(resolve => { finishBody = resolve; }) } as Response;
+  });
+  const request = exportStoryboardExcel(project, { signal: controller.signal });
+  const cancelled = expect(request).rejects.toMatchObject({ name: "AbortError" });
+  await Promise.resolve();
+  controller.abort();
+  await cancelled;
+  expect(signal?.aborted).toBe(true);
+  finishBody(new Blob([new Uint8Array(validPngBytes())], { type: "image/png" }));
+  await Promise.resolve();
+  expect(save).not.toHaveBeenCalled();
 });
 
 it("uses the exported column width to fit long text without inflating image rows", async () => {
@@ -291,7 +412,7 @@ it("transcodes a browser-decodable WebP upload to PNG before embedding", async (
   );
 
   expect(files.get("xl/media/image1.png")).toEqual(pngBytes);
-  expect(fetchImage).toHaveBeenCalledWith("https://example.com/frame.webp");
+  expect(fetchImage).toHaveBeenCalledWith("https://example.com/frame.webp", { signal: expect.any(AbortSignal) });
   expect(decodeImage).toHaveBeenCalledWith(webpBlob);
   expect(createCanvas).toHaveBeenCalledWith(4, 2);
   expect(drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 4, 2);

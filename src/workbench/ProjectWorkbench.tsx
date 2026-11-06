@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { withDeadline } from "../lib/requestDeadline";
 import { RowActionMenu } from "../components/RowActionMenu";
 import { FieldSettings } from "../components/FieldSettings";
 import { ProjectHeader } from "../components/ProjectHeader";
@@ -94,6 +95,7 @@ export function ProjectWorkbench({
   const [isRetrying, setIsRetrying] = useState(false);
   const [draftMessage, setDraftMessage] = useState("");
   const [error, setError] = useState("");
+  const [isLoadingProject, setIsLoadingProject] = useState(false);
   const [columnPresentation, setColumnPresentation] = useState<ColumnPresentation[] | null>(null);
   const [exportScope, setExportScope] = useState<StoryboardExportScope>();
   const [workspaceView, setWorkspaceView] = useState<"table" | "review" | "shoot-plan" | "call-sheet">("table");
@@ -115,16 +117,28 @@ export function ProjectWorkbench({
   const membersLoadedForProject = useRef<string | null>(null);
   const acknowledgementRequestVersionId = useRef<string | null>(null);
 
+  const reloadRequest = useRef<AbortController>();
   const reload = useCallback(async () => {
+    reloadRequest.current?.abort();
+    const controller = new AbortController();
+    reloadRequest.current = controller;
+    setIsLoadingProject(true);
+    setError("");
     try {
-      const [loaded, summaries] = await Promise.all([
-        gateway.loadProject(projectId),
-        gateway.listProjects(),
-      ]);
-      const normalized = ensureProductionStatusField(loaded);
-      if (normalized !== loaded) {
-        await gateway.saveProjectMeta(projectId, { fields: normalized.fields });
-      }
+      const { normalized, summaries, projectDefaultView } = await withDeadline((async () => {
+        const [loaded, summaries, projectDefaultView] = await Promise.all([
+          gateway.loadProject(projectId),
+          gateway.listProjects(),
+          gateway.getProjectDefaultView(projectId).catch(() => null),
+        ]);
+        if (controller.signal.aborted) throw new DOMException("操作已取消", "AbortError");
+        const normalized = ensureProductionStatusField(loaded);
+        if (normalized !== loaded) {
+          await gateway.saveProjectMeta(projectId, { fields: normalized.fields });
+        }
+        return { normalized, summaries, projectDefaultView };
+      })(), 20_000, "项目加载超时，请重试", controller.signal);
+      if (controller.signal.aborted || reloadRequest.current !== controller) return false;
       const recoveringDraft = !projectRef.current;
       const draft = projectRef.current && serverProject.current
         ? collectProjectDraft(serverProject.current, projectRef.current)
@@ -144,7 +158,6 @@ export function ProjectWorkbench({
       setRole(
         summaries.find((summary) => summary.id === projectId)?.role ?? "editor",
       );
-      const projectDefaultView = await gateway.getProjectDefaultView(projectId).catch(() => null);
       const personalView = readPersonalView(user.id, projectId);
       setColumnPresentation(normalizeColumnPresentation(
         normalized.fields,
@@ -155,13 +168,22 @@ export function ProjectWorkbench({
       });
       setError("");
       return true;
-    } catch {
+    } catch (failure) {
+      if (reloadRequest.current !== controller || controller.signal.aborted) return false;
       if (projectRef.current) {
         saveBlocked.current = true;
         setSaveStatus("error");
         setDraftMessage("无法重新获取项目，你的输入已保留。请检查网络和访问权限后重试。");
-      } else setError("项目加载失败或你已失去访问权限");
+      } else setError(failure instanceof Error && failure.message.includes("加载超时")
+        ? failure.message : "项目加载失败，请检查网络和访问权限后重试");
       return false;
+    } finally {
+      // Stop late reads before they can normalize metadata or publish stale state.
+      controller.abort();
+      if (reloadRequest.current === controller) {
+        reloadRequest.current = undefined;
+        setIsLoadingProject(false);
+      }
     }
   }, [draftKey, gateway, projectId, user.id]);
 
@@ -207,6 +229,8 @@ export function ProjectWorkbench({
   useEffect(() => {
     void reload();
     return () => {
+      reloadRequest.current?.abort();
+      reloadRequest.current = undefined;
       if (reloadTimer.current) clearTimeout(reloadTimer.current);
       if (deleteTimer.current) clearTimeout(deleteTimer.current);
       deleteTimer.current = null;
@@ -696,18 +720,29 @@ export function ProjectWorkbench({
   }
 
   async function updateScene(scene: StoryboardProject["scenes"][number]) {
-    setProject((current) => current ? {
-      ...current,
-      scenes: current.scenes.map((candidate) => candidate.id === scene.id ? scene : candidate),
-    } : current);
     setSaveStatus("saving");
     try {
       await gateway.updateScene(projectId, scene);
-      await reload();
-      setSaveStatus("saved");
+      // A pre-write snapshot cannot replace a newly confirmed scene.
+      reloadRequest.current?.abort();
+      reloadRequest.current = undefined;
+      setIsLoadingProject(false);
+      // The write is confirmed; a separate read must not hold the form open.
+      const current = projectRef.current;
+      if (current) {
+        const next = { ...current, scenes: current.scenes.map(candidate => candidate.id === scene.id ? scene : candidate) };
+        projectRef.current = next;
+        setProject(next);
+      }
+      if (serverProject.current) serverProject.current = {
+        ...serverProject.current,
+        scenes: serverProject.current.scenes.map(candidate => candidate.id === scene.id ? scene : candidate),
+      };
+      if (!saveBlocked.current && !activeSaves.current && !saveTimers.current.size) setSaveStatus("saved");
+      return true;
     } catch {
       setSaveStatus("error");
-      await reload();
+      return false;
     }
   }
 
@@ -890,13 +925,21 @@ export function ProjectWorkbench({
       <main className="centered-state">
         <section>
           <p role="alert">{error}</p>
+          <button type="button" disabled={isLoadingProject} onClick={() => void reload()}>重试加载</button>
           <button type="button" onClick={onBack}>返回项目</button>
         </section>
       </main>
     );
   }
   if (!project) {
-    return <main className="centered-state" role="status">正在加载项目…</main>;
+    return <main className="centered-state"><section>
+      <p role="status">正在加载项目…</p>
+      <button type="button" onClick={() => {
+        reloadRequest.current?.abort();
+        reloadRequest.current = undefined;
+        onBack();
+      }}>返回项目</button>
+    </section></main>;
   }
 
   const callSheetDeliveryLabel = workspaceView === "call-sheet" && callSheetDate && callSheetVersions[0]
