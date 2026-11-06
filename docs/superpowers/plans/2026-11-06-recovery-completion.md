@@ -36,9 +36,9 @@
 - [x] Run table/workbench tests and commit.
 
 ## Delivery
-- [x] Fresh independent whole-branch review; address meaningful findings with regression tests.
-- [x] Full test suite, production build, diff check and UI detector. Record scope of manual checks honestly.
-- [x] Merge to `integration/storyboard-platform`, push, wait for Pages deployment success.
+- [ ] Fresh independent whole-branch review; address meaningful findings with regression tests.
+- [ ] Full test suite, production build, diff check and UI detector. Record scope of manual checks honestly.
+- [ ] Merge to `integration/storyboard-platform`, push, wait for Pages deployment success.
 
 ## Results
 - Branch starts at `2fcdb6b`; baseline: 47 files / 350 tests passed.
@@ -48,3 +48,5 @@
 - Task 3: RED reproduced no timeout/retry/back and stalled reload retaining the old notice. GREEN: 2 files / 50 tests passed. Reads now have a 20-second deadline and invalidation; retry succeeds and late/unmounted results do not replace state or initiate normalization.
 
 - Task 4: RED reproduced loss of hidden selection on an unrelated visible-row edit. GREEN: 2 files / 90 tests passed; hidden selections remain in batch/export scope and remote-deleted shots are pruned.
+
+- Task 1 follow-up: RED reproduced confirmed write still held open by a stalled reload; GREEN: 3 files / 102 tests passed. Apply the confirmed scene directly to both local and server snapshots instead of waiting for a separate read.

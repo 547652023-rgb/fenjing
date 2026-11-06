@@ -1197,3 +1197,18 @@ it("preserves local input when a realtime reload stalls and can retry saving aft
     expect((await gateway.loadProject(project.id)).shots[0].values.content).toBe("重新读取超时也保留");
   } finally { vi.useRealTimers(); }
 });
+
+it("completes a confirmed scene write without waiting for a separate project read", async () => {
+  const { gateway, owner, project } = await setupProject();
+  const scene = await gateway.createScene(project.id, { name: "开场" });
+  render(<ProjectWorkbench gateway={gateway} onBack={vi.fn()} projectId={project.id} user={owner} />);
+  await screen.findByDisplayValue("广告片");
+  vi.spyOn(gateway, "loadProject").mockImplementation(() => new Promise(() => {}));
+  fireEvent.click(screen.getByRole("button", { name: `编辑场次 ${scene.number}` }));
+  const form = screen.getByRole("form", { name: `编辑场次 ${scene.number}` });
+  fireEvent.change(within(form).getByLabelText("名称"), { target: { value: "服务器已确认" } });
+  await act(async () => { fireEvent.submit(form); });
+  expect(form).not.toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent("已在线保存");
+  expect(screen.getByText(/服务器已确认/)).toBeVisible();
+});

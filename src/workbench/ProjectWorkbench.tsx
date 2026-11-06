@@ -723,7 +723,18 @@ export function ProjectWorkbench({
     setSaveStatus("saving");
     try {
       await gateway.updateScene(projectId, scene);
-      if (await reload()) setSaveStatus("saved");
+      // The write is confirmed; a separate read must not hold the form open.
+      const current = projectRef.current;
+      if (current) {
+        const next = { ...current, scenes: current.scenes.map(candidate => candidate.id === scene.id ? scene : candidate) };
+        projectRef.current = next;
+        setProject(next);
+      }
+      if (serverProject.current) serverProject.current = {
+        ...serverProject.current,
+        scenes: serverProject.current.scenes.map(candidate => candidate.id === scene.id ? scene : candidate),
+      };
+      if (!saveBlocked.current && !activeSaves.current && !saveTimers.current.size) setSaveStatus("saved");
       return true;
     } catch {
       setSaveStatus("error");
